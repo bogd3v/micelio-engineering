@@ -2,7 +2,7 @@
   "name": "@micelio/prettier-config",
   "version": "0.1.0",
   "description": "The Prettier configuration of the Micelio repositories.",
-  "license": "AGPL-3.0-only",
+  "license": "MIT-0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/bogd3v/micelio-engineering.git",
@@ -20,7 +20,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=22.12"

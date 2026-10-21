@@ -1,3 +1,3 @@
-import micelio from '@micelio/eslint-config';
+import micelio from '@micelio/eslint-config'
 
-export default micelio;
+export default micelio

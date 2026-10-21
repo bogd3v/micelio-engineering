@@ -1,8 +1,8 @@
 /** The longest slug `slugify` returns, in characters. */
-export const MAX_SLUG_LENGTH = 60;
+export const MAX_SLUG_LENGTH = 60
 
 /** Loads the title stored for a slug, or `undefined` when there is none. */
-export type TitleLoader = (slug: string) => Promise<string | undefined>;
+export type TitleLoader = (slug: string) => Promise<string | undefined>
 
 /**
  * Turns a title into a URL slug.
@@ -25,7 +25,7 @@ export function slugify(title: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, MAX_SLUG_LENGTH);
+    .slice(0, MAX_SLUG_LENGTH)
 }
 
 /**
@@ -38,8 +38,8 @@ export function slugify(title: string): string {
  */
 export async function findTitle(load: TitleLoader, slug: string): Promise<string | null> {
   try {
-    return (await load(slug)) ?? null;
+    return (await load(slug)) ?? null
   } catch (error) {
-    throw new Error(`title lookup failed for "${slug}"`, { cause: error });
+    throw new Error(`title lookup failed for "${slug}"`, { cause: error })
   }
 }

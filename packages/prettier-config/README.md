@@ -12,4 +12,4 @@ engineering standard: one formatter configuration per repository, checked in CI)
 }
 ```
 
-Semicolons, single quotes, ES5 trailing commas, 100 columns, two spaces.
+No semicolons, single quotes, ES5 trailing commas, 100 columns, two spaces.

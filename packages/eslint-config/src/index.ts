@@ -1,13 +1,12 @@
-import { defineConfig } from 'eslint/config';
-import type { Linter } from 'eslint';
-import eslintConfigPrettier from 'eslint-config-prettier';
-import jsdoc from 'eslint-plugin-jsdoc';
-import tsdoc from 'eslint-plugin-tsdoc';
-import tseslint from 'typescript-eslint';
+import { defineConfig } from 'eslint/config'
+import type { Linter } from 'eslint'
+import eslintConfigPrettier from 'eslint-config-prettier'
+import jsdoc from 'eslint-plugin-jsdoc'
+import tsdoc from 'eslint-plugin-tsdoc'
+import tseslint from 'typescript-eslint'
 
 /** Message shown when code chains a promise instead of awaiting it. */
-const PROMISE_CHAIN_MESSAGE =
-  'No promise chains: use await with try/catch (AGENTS.md, Async code).';
+const PROMISE_CHAIN_MESSAGE = 'No promise chains: use await with try/catch (AGENTS.md, Async code).'
 
 /**
  * The `no-restricted-syntax` entry that bans `.then()`, `.catch()` and `.finally()` chains.
@@ -21,25 +20,19 @@ export const promiseChainRestriction = {
   selector:
     "CallExpression[callee.type='MemberExpression'][callee.property.name=/^(then|catch|finally)$/]",
   message: PROMISE_CHAIN_MESSAGE,
-} as const;
+} as const
 
 /** Files that never need a doc comment: declarations, build output and tests. */
-const UNDOCUMENTED_FILES = [
-  '**/*.d.ts',
-  'dist/**',
-  'test/**',
-  'tests/**',
-  'e2e/**',
-  '**/*.test.ts',
-];
+const UNDOCUMENTED_FILES = ['**/*.d.ts', 'dist/**', 'test/**', 'tests/**', 'e2e/**', '**/*.test.ts']
 
 /**
  * The ESLint flat config shared by every Micelio repository (standard, sections 4 and 15).
  *
  * @remarks
  * It extends `typescript-eslint`'s recommended rules, turns off the rules Prettier owns,
- * bans promise chains and, in `.ts` files, requires valid TSDoc (`tsdoc/syntax`) and a doc
- * comment on every public export (`jsdoc/require-jsdoc`). Spread it in the repository's
+ * bans promise chains and `console.log` (outside `scripts/`) and, in `.ts` files, requires
+ * typed module boundaries, valid TSDoc (`tsdoc/syntax`) and a doc comment on every public export
+ * (`jsdoc/require-jsdoc`). Spread it in the repository's
  * `eslint.config.js` and add the repository's own entries after it.
  *
  * @example
@@ -64,13 +57,21 @@ const config: Linter.Config[] = defineConfig(
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       'no-restricted-syntax': ['error', promiseChainRestriction],
+      'no-console': ['error', { allow: ['warn', 'error'] }],
     },
+  },
+  {
+    // Scripts talk to the terminal (standard, section 4, "Errors and logging")
+    files: ['scripts/**', '.claude/skills/**/scripts/**'],
+    rules: { 'no-console': 'off' },
   },
   {
     files: ['**/*.ts'],
     ignores: UNDOCUMENTED_FILES,
     plugins: { tsdoc, jsdoc },
     rules: {
+      // Exported functions declare their parameter and return types (standard, section 4)
+      '@typescript-eslint/explicit-module-boundary-types': 'error',
       'tsdoc/syntax': 'error',
       'jsdoc/require-jsdoc': [
         'error',
@@ -87,6 +88,6 @@ const config: Linter.Config[] = defineConfig(
       ],
     },
   }
-);
+)
 
-export default config;
+export default config

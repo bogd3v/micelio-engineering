@@ -2,7 +2,7 @@
   "name": "@micelio/eslint-config",
   "version": "0.1.0",
   "description": "The ESLint flat config of the Micelio repositories, and the licence allowlist behind lint:licenses.",
-  "license": "AGPL-3.0-only",
+  "license": "MIT-0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/bogd3v/micelio-engineering.git",
@@ -22,7 +22,8 @@
   "files": [
     "dist",
     "licenses.json",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=22.12"

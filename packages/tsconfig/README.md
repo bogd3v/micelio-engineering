@@ -11,6 +11,7 @@ engineering standard): `strict`, and the language level of the Node major in
 }
 ```
 
-A repository adds only what is its own (`include`, `outDir`, `types`, a different
-`module` when a framework needs it). The Node major moves with a MAJOR of this
+A repository adds only what is its own (`include`, `outDir`, a different
+`module` when a framework needs it). `@types/node` is a peer dependency and the base loads it (`"types": ["node"]`); a browser-only
+project sets its own `types`. The Node major moves with a MAJOR of this
 package once the standard raises it.

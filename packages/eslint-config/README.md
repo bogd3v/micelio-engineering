@@ -5,13 +5,14 @@ engineering standard) and the licence allowlist that `npm run lint:licenses` rea
 
 ```js
 // eslint.config.js
-import micelio from '@micelio/eslint-config';
+import micelio from '@micelio/eslint-config'
 
-export default [...micelio, { ignores: ['generated/**'] }];
+export default [...micelio, { ignores: ['generated/**'] }]
 ```
 
 It extends `typescript-eslint`'s recommended rules and `eslint-config-prettier`, bans
-promise chains, and in `.ts` files requires valid TSDoc (`tsdoc/syntax`) and a doc
+promise chains and `console.log` (except in `scripts/`), and in `.ts` files requires
+typed module boundaries (`explicit-module-boundary-types`), valid TSDoc (`tsdoc/syntax`) and a doc
 comment on every public export (`jsdoc/require-jsdoc`). `eslint` and `typescript` are
 peer dependencies. A flat-config override of `no-restricted-syntax` replaces the option
 list, so a repository that adds selectors spreads `promiseChainRestriction` back in.
