@@ -1,0 +1,76 @@
+name: Release
+
+# Publishes one shared configuration package to npm (standard, sections 7 and 10).
+# The tag names the package and its version: eslint-config-v0.1.0, tsconfig-v0.1.0,
+# prettier-config-v0.1.0. The version in the package's package.json must match the tag.
+
+on:
+  push:
+    tags:
+      - 'eslint-config-v*'
+      - 'tsconfig-v*'
+      - 'prettier-config-v*'
+
+permissions: {}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # the GitHub release
+      id-token: write # the signed build provenance of npm publish --provenance
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node from .nvmrc
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Read the package and version from the tag
+        id: tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          package="${TAG%-v*}"
+          version="${TAG##*-v}"
+          declared=$(npm pkg get version -w "@micelio/${package}" | jq -r 'to_entries[0].value')
+          if [ "$declared" != "$version" ]; then
+            echo "Tag ${TAG} says ${version} but packages/${package}/package.json says ${declared}" >&2
+            exit 1
+          fi
+          echo "package=${package}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Install
+        run: npm ci
+
+      - name: Check the packages and the fixture
+        run: |
+          npm run test
+          npm run typecheck
+          npm run lint
+          npm run format:check
+
+      - name: Publish with provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          PACKAGE: ${{ steps.tag.outputs.package }}
+        run: npm publish -w "@micelio/${PACKAGE}" --provenance --access public
+
+      - name: Write the software bill of materials
+        env:
+          PACKAGE: ${{ steps.tag.outputs.package }}
+        run: npm sbom --sbom-format spdx -w "@micelio/${PACKAGE}" > "sbom-${PACKAGE}.spdx.json"
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          PACKAGE: ${{ steps.tag.outputs.package }}
+        run: gh release create "$TAG" "sbom-${PACKAGE}.spdx.json" --title "$TAG" --generate-notes --verify-tag

@@ -1,0 +1,35 @@
+{
+  "name": "@micelio/prettier-config",
+  "version": "0.1.0",
+  "description": "The Prettier configuration of the Micelio repositories.",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bogd3v/micelio-engineering.git",
+    "directory": "packages/prettier-config"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "peerDependencies": {
+    "prettier": "^3.9.10"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

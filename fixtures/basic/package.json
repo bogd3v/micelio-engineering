@@ -1,0 +1,18 @@
+{
+  "name": "@micelio/fixture-basic",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@micelio/eslint-config": "^0.1.0",
+    "@micelio/prettier-config": "^0.1.0",
+    "@micelio/tsconfig": "^0.1.0"
+  },
+  "prettier": "@micelio/prettier-config"
+}
