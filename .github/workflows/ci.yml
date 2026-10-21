@@ -1,0 +1,58 @@
+name: CI
+
+# Runs the reusable workflows of this repository on itself, so a change to one is tried before a
+# repository calls it (the local `uses: ./` is replaced by the repository and a commit SHA there).
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    if: ${{ github.event_name != 'schedule' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/check.yml
+    with:
+      # This repository has no lint:licenses or lint:standard script yet (#5), no REUSE metadata,
+      # and its build is a check of its own, so it stays in.
+      licenses: false
+
+  dco:
+    if: ${{ github.event_name == 'pull_request' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/dco.yml
+
+  scorecard:
+    if: ${{ github.event_name != 'pull_request' }}
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+      id-token: write
+    uses: ./.github/workflows/scorecard.yml
+
+  # A dry run: prints the notes the fixture's fixed plan would publish and changes nothing.
+  release:
+    if: ${{ github.event_name != 'schedule' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    permissions:
+      contents: write
+      packages: read
+      actions: read
+      pull-requests: read
+    uses: ./.github/workflows/release.yml
+    with:
+      dry-run: true
+      version-script: fixtures/basic/scripts/version.mjs
+      check-package-version: false
+      sbom: false
+      compatibility: |
+        - Node: 22

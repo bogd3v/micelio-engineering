@@ -1,0 +1,64 @@
+name: Scorecard
+
+# The OpenSSF Scorecard of the repository (section 10 of the standard). The caller grants the
+# permissions below and runs it on push to the default branch, on a schedule and by hand:
+#
+#   on:
+#     schedule:
+#       - cron: '23 4 * * 1'
+#     push:
+#       branches: [main]
+#   permissions: {}
+#   jobs:
+#     scorecard:
+#       permissions:
+#         contents: read
+#         actions: read
+#         security-events: write
+#         id-token: write
+#       uses: bogd3v/micelio-engineering/.github/workflows/scorecard.yml@<commit SHA> # <tag>
+
+on:
+  workflow_call:
+    inputs:
+      publish-results:
+        description: Publish the result to the OpenSSF API (only for public repositories)
+        type: boolean
+        default: true
+
+# Nothing by default; the job asks for exactly what Scorecard needs.
+permissions: {}
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Scorecard
+        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: ${{ inputs.publish-results }}
+
+      - name: Keep the SARIF report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scorecard-sarif
+          path: results.sarif
+          retention-days: 14
+
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          sarif_file: results.sarif

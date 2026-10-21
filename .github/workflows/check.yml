@@ -1,0 +1,186 @@
+name: Check
+
+# The fast checks of section 15 of the standard, in the order `npm run check` runs them.
+# Call it from a repository's own workflow:
+#
+#   jobs:
+#     ci:
+#       uses: bogd3v/micelio-engineering/.github/workflows/check.yml@<commit SHA> # <tag>
+#       with:
+#         coverage: true
+#
+# typecheck, lint and test always run. The rest is an input, so skipping one is written down in
+# the caller instead of hidden by `--if-present`.
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: Directory of the project to check, relative to the repository root
+        type: string
+        default: .
+      package-manager:
+        description: npm or pnpm
+        type: string
+        default: npm
+      node-version-file:
+        description: File that holds the Node major (section 10 of the standard), relative to the repository root
+        type: string
+        default: .nvmrc
+      test-script:
+        description: Script that runs the tests; test:coverage where the repository has a coverage floor
+        type: string
+        default: test
+      format:
+        description: Run format:check
+        type: boolean
+        default: true
+      licenses:
+        description: Run lint:licenses against the allowlist
+        type: boolean
+        default: true
+      standard:
+        description: Run lint:standard (the copy of the standard matches the pinned version)
+        type: boolean
+        default: false
+      reuse:
+        description: Run reuse lint
+        type: boolean
+        default: false
+      build:
+        description: Run the build in its own job
+        type: boolean
+        default: true
+      audit:
+        description: Fail on critical vulnerabilities
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  PM: ${{ inputs.package-manager }}
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Check the inputs
+        run: |
+          case "$PM" in
+            npm | pnpm) ;;
+            *) echo "::error::package-manager must be npm or pnpm, not '$PM'"; exit 1 ;;
+          esac
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Enable pnpm
+        if: ${{ inputs.package-manager == 'pnpm' }}
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: ${{ inputs.node-version-file }}
+          cache: ${{ inputs.package-manager }}
+          cache-dependency-path: ${{ inputs.working-directory }}/${{ inputs.package-manager == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json' }}
+
+      - name: Install dependencies
+        run: |
+          if [ "$PM" = pnpm ]; then pnpm install --frozen-lockfile; else npm ci; fi
+
+      - name: Audit dependencies
+        if: ${{ inputs.audit }}
+        run: $PM audit --audit-level=critical
+
+      - name: Type check
+        run: $PM run typecheck
+
+      - name: Lint
+        run: $PM run lint
+
+      - name: Format
+        if: ${{ inputs.format }}
+        run: $PM run format:check
+
+      - name: Test
+        env:
+          TEST_SCRIPT: ${{ inputs.test-script }}
+        run: $PM run "$TEST_SCRIPT"
+
+      - name: Licences
+        if: ${{ inputs.licenses }}
+        run: $PM run lint:licenses
+
+      - name: Copy of the standard
+        if: ${{ inputs.standard }}
+        run: $PM run lint:standard
+
+  # Needs no dependencies, so it runs beside the others from the start.
+  reuse:
+    name: REUSE
+    if: ${{ inputs.reuse }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Licensing metadata (REUSE)
+        run: pipx run reuse==6.2.0 lint
+
+  build:
+    name: Build
+    if: ${{ inputs.build }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Enable pnpm
+        if: ${{ inputs.package-manager == 'pnpm' }}
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: ${{ inputs.node-version-file }}
+          cache: ${{ inputs.package-manager }}
+          cache-dependency-path: ${{ inputs.working-directory }}/${{ inputs.package-manager == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json' }}
+
+      - name: Install dependencies
+        run: |
+          if [ "$PM" = pnpm ]; then pnpm install --frozen-lockfile; else npm ci; fi
+
+      - name: Build
+        run: $PM run build
+
+  # One status for a ruleset to require: it passes only when every job above did or was skipped on purpose.
+  check:
+    name: Check
+    if: always()
+    needs: [checks, reuse, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All jobs passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Job results: ${RESULTS}"
+          for result in ${RESULTS}; do
+            [ "${result}" = "success" ] || [ "${result}" = "skipped" ] || exit 1
+          done
