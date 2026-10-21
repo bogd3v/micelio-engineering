@@ -1,0 +1,8 @@
+{
+  "extends": "@micelio/tsconfig",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["packages/*/src", "packages/*/test", "scripts", "vitest.config.ts"]
+}

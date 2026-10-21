@@ -1,0 +1,24 @@
+{
+  "$comment": "Licences a production dependency may carry (ADR 0007, AGPL-3.0-only). SPDX expressions are judged by the repository's lint:licenses script: OR passes if one side is allowed, AND needs all, `X WITH exception` is judged by X. Dev-only dependencies are not distributed and only warn.",
+  "allowed": [
+    "MIT",
+    "ISC",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "0BSD",
+    "Apache-2.0",
+    "MPL-2.0",
+    "CC0-1.0",
+    "MIT-0",
+    "CC-BY-3.0",
+    "CC-BY-4.0",
+    "Unlicense",
+    "BlueOak-1.0.0",
+    "Python-2.0",
+    "Zlib",
+    "OFL-1.1",
+    "WTFPL"
+  ],
+  "allowedPrefixes": ["LGPL-", "GPL-3.0", "AGPL-3.0"],
+  "allowedGpl2": ["GPL-2.0-or-later", "GPL-2.0+"]
+}

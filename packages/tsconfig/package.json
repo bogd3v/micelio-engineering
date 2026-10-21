@@ -1,0 +1,28 @@
+{
+  "name": "@micelio/tsconfig",
+  "version": "0.1.0",
+  "description": "The base TypeScript configuration of the Micelio repositories (strict, Node 22).",
+  "license": "MIT-0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bogd3v/micelio-engineering.git",
+    "directory": "packages/tsconfig"
+  },
+  "files": [
+    "tsconfig.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "peerDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.9.3"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

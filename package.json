@@ -1,0 +1,33 @@
+{
+  "name": "micelio-engineering",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "workspaces": [
+    "packages/*",
+    "fixtures/*"
+  ],
+  "scripts": {
+    "build": "tsc -b packages/eslint-config packages/prettier-config",
+    "typecheck": "npm run build && tsc -p tsconfig.json --noEmit && npm run typecheck -w @micelio/fixture-basic",
+    "lint": "npm run build && eslint . && npm run lint -w @micelio/fixture-basic",
+    "format:check": "prettier --check . && npm run format:check -w @micelio/fixture-basic",
+    "test": "npm run build && vitest run",
+    "verify:isolated": "node scripts/verify-isolated.mjs"
+  },
+  "devDependencies": {
+    "@micelio/eslint-config": "0.1.0",
+    "@micelio/prettier-config": "0.1.0",
+    "@micelio/tsconfig": "0.1.0",
+    "@types/node": "^22.20.5",
+    "eslint": "^10.12.0",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.3"
+  },
+  "prettier": "@micelio/prettier-config"
+}
