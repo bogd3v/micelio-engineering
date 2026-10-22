@@ -12,6 +12,8 @@ The rules shared by every Micelio repository live in [`docs/engineering-standard
 npm ci
 npm run check            # typecheck, lint, format:check, test, lint:licenses and lint:standard
 npm run build            # compiles the packages (typecheck, lint and test run it first)
+npm run template -- <dir> # creates a repository from template/ (docs/template.md)
+npm run verify:template  # creates one, installs the packed packages and runs its checks (needs the registry)
 npm run verify:isolated  # installs the three packed packages in an empty project and runs the fixture's checks (needs the registry)
 ```
 
@@ -20,6 +22,7 @@ npm run verify:isolated  # installs the three packed packages in an empty projec
 - `packages/` — `@micelio/eslint-config`, `@micelio/tsconfig`, `@micelio/prettier-config`. Each has its own version and is published by `.github/workflows/publish-packages.yml` from a tag `<package>-vX.Y.Z`.
 - `fixtures/basic/` — a project that uses only the three packages; their tests run against it.
 - `.github/workflows/` — the reusable workflows (`check`, `dco`, `scorecard`, `release`), `standard-sync` and this repository's own `ci.yml` (`docs/workflows.md`).
+- `template/` — the files of section 14 of the standard, with `{{placeholders}}`; `scripts/template.mjs` copies it and `scripts/template-checklist.json` maps each box of the section to a file or an organisation setting.
 - `docs/` — the standard, how the workflows are used, and Micelio's `contributing.md`, `governance.md`, `trademarks.md` and `adr-template.md`. The other repositories link to them from a short `CONTRIBUTING.md` of their own (section 1 of the standard).
 - `REUSE.toml`, `LICENSES/` — licensing metadata; the repository is MIT-0 and `reuse lint` runs in CI.
 
