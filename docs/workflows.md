@@ -25,6 +25,8 @@ jobs:
 
 The repository keeps what is its own: a script that prints the plan as JSON (`tag`, `version`, `previous`, `bump`, `prerelease`, `breaking`; `--rc` for a candidate) and any check that is not generic. `compatibility` is required to publish, because every release states the other repository's line and the minimum Node and PostgreSQL (section 7); `breaking-changes` and `upgrade-notes` are required when the plan reports a breaking pull request, and come first in the notes. Images are retagged from the commit's short SHA, so their digest and build provenance are kept. A candidate (`vX.Y.Z-rc.N`) never moves `X.Y` or `latest`, and npm candidates publish under `next`.
 
+`standard-sync.yml` is this repository's own, not a reusable one: it opens the pull requests that keep the copies of the standard in step (`docs/standard-sync.md`). `dco.yml` skips the commits of the Micelio bot, like Dependabot's.
+
 `.github/workflows/ci.yml` runs all four on this repository, with a dry-run release over `fixtures/basic`. `publish-packages.yml` is what publishes the packages of this repository: one tag per package.
 
 ## Required check names

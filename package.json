@@ -17,6 +17,8 @@
     "lint": "npm run build && eslint . && npm run lint -w @micelio/fixture-basic",
     "format:check": "prettier --check . && npm run format:check -w @micelio/fixture-basic",
     "lint:licenses": "node scripts/check-licenses.mjs",
+    "lint:standard": "npm run build && node packages/eslint-config/dist/lint-standard.js",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run lint:licenses && npm run lint:standard",
     "test": "npm run build && vitest run",
     "verify:isolated": "node scripts/verify-isolated.mjs"
   },

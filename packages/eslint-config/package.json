@@ -1,7 +1,7 @@
 {
   "name": "@micelio/eslint-config",
   "version": "0.1.0",
-  "description": "The ESLint flat config of the Micelio repositories, and the licence allowlist behind lint:licenses.",
+  "description": "The ESLint flat config of the Micelio repositories, the licence allowlist behind lint:licenses and lint:standard.",
   "license": "MIT-0",
   "repository": {
     "type": "git",
@@ -17,11 +17,13 @@
       "default": "./dist/index.js"
     },
     "./licenses.json": "./licenses.json",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./standard-hashes.json": "./standard-hashes.json"
   },
   "files": [
     "dist",
     "licenses.json",
+    "standard-hashes.json",
     "README.md",
     "LICENSE"
   ],
@@ -41,5 +43,11 @@
   "publishConfig": {
     "access": "public",
     "provenance": true
+  },
+  "bin": {
+    "micelio-lint-standard": "./dist/lint-standard.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5"
   }
 }

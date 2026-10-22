@@ -22,3 +22,11 @@ list, so a repository that adds selectors spreads `promiseChainRestriction` back
 `@micelio/eslint-config/licenses.json` holds `allowed`, `allowedPrefixes` and
 `allowedGpl2`: the SPDX identifiers a production dependency may carry (ADR 0007). The
 repository's `lint:licenses` script reads it and evaluates SPDX expressions against it.
+
+## `lint:standard`
+
+`micelio-lint-standard` checks that `docs/engineering-standard.md` is the copy published for the
+version `AGENTS.md` pins (`` `standard: X.Y` ``), using the SHA-256 hashes in
+`@micelio/eslint-config/standard-hashes.json`. Add it as `"lint:standard": "micelio-lint-standard"`
+and to `npm run check`. A pinned version newer than the installed package knows fails with a message
+that says to upgrade the package.
