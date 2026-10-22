@@ -6,9 +6,9 @@ name: Standard sync
 # `docs(standard): sync to X.Y` pull request that replaces docs/engineering-standard.md and moves the
 # pin in AGENTS.md. A human reviews and merges it: this workflow never merges anything.
 #
-# The pull requests are made by the Micelio bot (the organisation's GitHub App, id in the variable
-# MICELIO_BOT_APP_ID and private key in the secret MICELIO_BOT_PRIVATE_KEY). The key is read only by
-# the token step and never reaches a repository or a log.
+# The pull requests are made by the Micelio bot (the organisation's GitHub App, client id in the
+# variable MICELIO_BOT_CLIENT_ID and private key in the secret MICELIO_BOT_PRIVATE_KEY). The key is
+# read only by the token step and never reaches a repository or a log.
 
 on:
   release:
@@ -98,7 +98,7 @@ jobs:
         id: token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app-id: ${{ vars.MICELIO_BOT_APP_ID }}
+          client-id: ${{ vars.MICELIO_BOT_CLIENT_ID }}
           private-key: ${{ secrets.MICELIO_BOT_PRIVATE_KEY }}
           owner: bogd3v
           repositories: |

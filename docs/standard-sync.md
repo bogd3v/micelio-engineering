@@ -16,7 +16,7 @@ For each repository in `.github/standard-sync.json` it clones the repository as 
 
 - **The bot never merges.** It has contents and pull-request write on the listed repositories and nothing else; a human reviews and merges. A repository may stay on an older version on purpose: close the pull request.
 - **The bot's commits are not signed off** (section 13: the sign-off is a person's certification), so `dco.yml` skips them like Dependabot's. A repository's own copy of the DCO workflow needs the same exemption until it calls the reusable one.
-- **The private key** is the organisation secret `MICELIO_BOT_PRIVATE_KEY` and the app id the variable `MICELIO_BOT_APP_ID`. Only the token step reads the key; it never reaches a repository or a log.
+- **The private key** is the organisation secret `MICELIO_BOT_PRIVATE_KEY` and the app's client id (not secret, `Iv…`; `gh api apps/micelio-bot --jq .client_id`) the organisation variable `MICELIO_BOT_CLIENT_ID`. `create-github-app-token` deprecated `app-id` in favour of it. Only the token step reads the key; it never reaches a repository or a log.
 - **Adding a repository** is an entry in `.github/standard-sync.json` and in the `repositories` of the token step, which a test keeps equal.
 
 ## `lint:standard`
