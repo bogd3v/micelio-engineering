@@ -1,76 +1,367 @@
 name: Release
 
-# Publishes one shared configuration package to npm (standard, sections 7 and 10).
-# The tag names the package and its version: eslint-config-v0.1.0, tsconfig-v0.1.0,
-# prettier-config-v0.1.0. The version in the package's package.json must match the tag.
+# Reusable release (section 7 of the standard). The repository's own workflow is started by the
+# maintainer and calls this one:
+#
+#   on:
+#     workflow_dispatch:
+#       inputs: { dry_run: { type: boolean, default: true }, ... }
+#   permissions: {}
+#   jobs:
+#     release:
+#       permissions:
+#         contents: write
+#         packages: write
+#         pull-requests: read
+#         actions: read
+#         id-token: write
+#       uses: bogd3v/micelio-engineering/.github/workflows/release.yml@<commit SHA> # <tag>
+#       with:
+#         dry-run: ${{ inputs.dry_run }}
+#         compatibility: |
+#           - Tested with micelio-cms release line: 0.4
+#       secrets: inherit
+#
+# It defaults to a dry run: it prints the version and the notes it would publish and changes
+# nothing. Publishing is a second job in the `environment` below, which waits for the
+# maintainer's approval. The repository keeps what is its own: a version script, and any check
+# that is not generic (a documented API version, a deployment that must have passed).
+#
+# What it publishes: the GitHub release (tag, notes), the images listed in `images` (a retag of
+# the image already built and tested for the commit, so the digest and its build provenance are
+# kept) and the workspaces listed in `npm-workspaces` (npm publish with provenance). An SBOM of
+# the dependencies is attached to the release.
 
 on:
-  push:
-    tags:
-      - 'eslint-config-v*'
-      - 'tsconfig-v*'
-      - 'prettier-config-v*'
+  workflow_call:
+    inputs:
+      dry-run:
+        description: Print the version and the notes without tagging or publishing
+        type: boolean
+        default: true
+      release-candidate:
+        description: Release a candidate (vX.Y.Z-rc.N) that moves neither X.Y nor latest
+        type: boolean
+        default: false
+      version-script:
+        description: Script that prints the plan as JSON (tag, version, previous, bump, prerelease, breaking); takes --rc
+        type: string
+        default: scripts/release/version.mjs
+      breaking-changes:
+        description: Hand-written "Breaking changes" section; required when a pull request is breaking
+        type: string
+        default: ''
+      upgrade-notes:
+        description: Hand-written "Upgrade notes" section; required when a pull request is breaking
+        type: string
+        default: ''
+      compatibility:
+        description: "Markdown bullets for Compatibility (section 7 - the other repository's line, the minimum Node and PostgreSQL); required to publish"
+        type: string
+        default: ''
+      check-package-version:
+        description: Fail unless the version in package.json is the one being released
+        type: boolean
+        default: true
+      images:
+        description: Images to retag, one per line (the commit's image is read from the short SHA tag)
+        type: string
+        default: ''
+      npm-workspaces:
+        description: npm workspaces to publish, one per line
+        type: string
+        default: ''
+      sbom:
+        description: Attach an SPDX SBOM of the dependencies to the release
+        type: boolean
+        default: true
+      release-branch:
+        description: Branch a release is cut from
+        type: string
+        default: main
+      environment:
+        description: Environment whose required reviewers approve the publish job
+        type: string
+        default: release
+      node-version-file:
+        description: File that holds the Node major
+        type: string
+        default: .nvmrc
+    secrets:
+      NPM_TOKEN:
+        description: npm token that can publish the workspaces; needed only with npm-workspaces
+        required: false
+    outputs:
+      tag:
+        description: Tag of the release
+        value: ${{ jobs.plan.outputs.tag }}
+      version:
+        description: Version of the release
+        value: ${{ jobs.plan.outputs.version }}
 
 permissions: {}
 
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
-  publish:
+  plan:
+    name: Plan
+    # A dry run may start anywhere, to be tried; publishing only from the release branch.
+    if: ${{ inputs.dry-run || github.ref == format('refs/heads/{0}', inputs.release-branch) }}
     runs-on: ubuntu-latest
+    # contents: write only because the endpoint that generates release notes asks for it; nothing
+    # is written. packages: read lets the checks inspect the images.
     permissions:
-      contents: write # the GitHub release
+      contents: write
+      packages: read
+      actions: read
+      pull-requests: read
+    outputs:
+      tag: ${{ steps.plan.outputs.tag }}
+      version: ${{ steps.plan.outputs.version }}
+      prerelease: ${{ steps.plan.outputs.prerelease }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: ${{ inputs.node-version-file }}
+
+      - name: Compute the next version
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RC: ${{ inputs.release-candidate }}
+          VERSION_SCRIPT: ${{ inputs.version-script }}
+        run: |
+          if [ "$RC" = true ]; then
+            node "$VERSION_SCRIPT" --rc > plan.json
+          else
+            node "$VERSION_SCRIPT" > plan.json
+          fi
+          cat plan.json
+          {
+            echo "tag=$(jq -r .tag plan.json)"
+            echo "version=$(jq -r .version plan.json)"
+            echo "previous=$(jq -r '.previous // empty' plan.json)"
+            echo "bump=$(jq -r '.bump // empty' plan.json)"
+            echo "prerelease=$(jq -r .prerelease plan.json)"
+            echo "breaking=$(jq -r .breaking plan.json)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Generate the release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ steps.plan.outputs.tag }}
+          PREVIOUS: ${{ steps.plan.outputs.previous }}
+          BREAKING: ${{ steps.plan.outputs.breaking }}
+          BREAKING_CHANGES: ${{ inputs.breaking-changes }}
+          UPGRADE_NOTES: ${{ inputs.upgrade-notes }}
+          COMPATIBILITY: ${{ inputs.compatibility }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          args=(-f tag_name="$TAG" -f target_commitish="$GITHUB_SHA")
+          if [ -f .github/release.yml ]; then args+=(-f configuration_file_path=.github/release.yml); fi
+          if [ -n "$PREVIOUS" ]; then args+=(-f previous_tag_name="$PREVIOUS"); fi
+          gh api -X POST "repos/$REPO/releases/generate-notes" "${args[@]}" -q .body > generated.md
+          {
+            if [ "$BREAKING" != 0 ]; then
+              echo "## Breaking changes"
+              echo
+              echo "${BREAKING_CHANGES:-_not stated_}"
+              echo
+            fi
+            echo "## Upgrade notes"
+            echo
+            echo "${UPGRADE_NOTES:-No manual steps.}"
+            echo
+            echo "## Compatibility"
+            echo
+            echo "${COMPATIBILITY:-_not stated_}"
+            echo
+            cat generated.md
+          } > release-notes.md
+          cat release-notes.md
+          {
+            echo "### Release \`$TAG\` ($([ "$DRY_RUN" = true ] && echo 'dry run' || echo 'publishing'))"
+            echo
+            cat release-notes.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up Docker Buildx
+        if: ${{ inputs.images != '' }}
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GitHub Container Registry
+        if: ${{ inputs.images != '' }}
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # Nothing is changed until every check passes. In a dry run a failed check is a warning.
+      - name: Check the release can be published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ steps.plan.outputs.tag }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          BREAKING: ${{ steps.plan.outputs.breaking }}
+          BREAKING_CHANGES: ${{ inputs.breaking-changes }}
+          UPGRADE_NOTES: ${{ inputs.upgrade-notes }}
+          COMPATIBILITY: ${{ inputs.compatibility }}
+          CHECK_PACKAGE_VERSION: ${{ inputs.check-package-version }}
+          IMAGES: ${{ inputs.images }}
+          NPM_WORKSPACES: ${{ inputs.npm-workspaces }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          failed=0
+          fail() {
+            failed=1
+            if [ "$DRY_RUN" = true ]; then echo "::warning::$1"; else echo "::error::$1"; fi
+          }
+          # package.json holds the version being released; a candidate carries the version it precedes
+          expected="${VERSION%%-rc.*}"
+          if [ -z "$COMPATIBILITY" ]; then
+            fail "compatibility is empty: every release states the other repository's line and the minimum Node and PostgreSQL (section 7)."
+          fi
+          if [ "$BREAKING" != 0 ] && { [ -z "$UPGRADE_NOTES" ] || [ -z "$BREAKING_CHANGES" ]; }; then
+            fail "$BREAKING breaking pull request(s) since the last release: set breaking-changes and upgrade-notes."
+          fi
+          if [ "$CHECK_PACKAGE_VERSION" = true ]; then
+            actual=$(node -p "require('./package.json').version")
+            [ "$actual" = "$expected" ] || fail "package.json says $actual but this release is $expected. Merge a chore(release) pull request that sets it."
+          fi
+          if gh api "repos/$REPO/git/ref/tags/$TAG" >/dev/null 2>&1; then
+            fail "The tag $TAG already exists. A published version never changes."
+          fi
+          if [ -n "$NPM_WORKSPACES" ] && [ -z "$NPM_TOKEN" ]; then
+            fail "npm-workspaces is set but the NPM_TOKEN secret is not passed."
+          fi
+          short="${GITHUB_SHA::7}"
+          while IFS= read -r image; do
+            [ -n "$image" ] || continue
+            if ! docker buildx imagetools inspect "$image:$short" >/dev/null 2>&1; then
+              fail "$image:$short does not exist. Wait for the pipeline of this commit."
+            elif docker buildx imagetools inspect "$image:$VERSION" >/dev/null 2>&1; then
+              # Left by an earlier run that stopped before the release: fine only if it is this commit's image
+              [ "$(docker buildx imagetools inspect "$image:$VERSION" --format '{{json .Manifest.Digest}}')" = "$(docker buildx imagetools inspect "$image:$short" --format '{{json .Manifest.Digest}}')" ] \
+                || fail "$image:$VERSION already exists and is not this commit's image. A published version never changes."
+            fi
+          done <<< "$IMAGES"
+          if [ "$failed" = 1 ] && [ "$DRY_RUN" != true ]; then exit 1; fi
+
+      - name: Keep the notes for the publish job
+        if: ${{ !inputs.dry-run }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: release-notes.md
+          if-no-files-found: error
+
+  publish:
+    name: Publish
+    needs: plan
+    if: ${{ !inputs.dry-run }}
+    runs-on: ubuntu-latest
+    # The maintainer approves here (Settings, Environments).
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: write
+      packages: write
       id-token: write # the signed build provenance of npm publish --provenance
     steps:
-      - name: Check out the tag
+      - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Set up Node from .nvmrc
+      - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version-file: .nvmrc
+          node-version-file: ${{ inputs.node-version-file }}
           registry-url: https://registry.npmjs.org
-          cache: npm
 
-      - name: Read the package and version from the tag
-        id: tag
+      - name: Download the notes
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+
+      - name: Set up Docker Buildx
+        if: ${{ inputs.images != '' }}
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GitHub Container Registry
+        if: ${{ inputs.images != '' }}
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # A manifest copy of the image already built and tested for this commit: nothing is rebuilt
+      - name: Tag the images
+        if: ${{ inputs.images != '' }}
         env:
-          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          PRERELEASE: ${{ needs.plan.outputs.prerelease }}
+          IMAGES: ${{ inputs.images }}
         run: |
-          package="${TAG%-v*}"
-          version="${TAG##*-v}"
-          declared=$(npm pkg get version -w "@micelio/${package}" | jq -r 'to_entries[0].value')
-          if [ "$declared" != "$version" ]; then
-            echo "Tag ${TAG} says ${version} but packages/${package}/package.json says ${declared}" >&2
-            exit 1
+          short="${GITHUB_SHA::7}"
+          tags=("$VERSION")
+          if [ "$PRERELEASE" != true ]; then
+            tags+=("${VERSION%.*}" latest)
           fi
-          echo "package=${package}" >> "$GITHUB_OUTPUT"
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          while IFS= read -r image; do
+            [ -n "$image" ] || continue
+            args=()
+            for tag in "${tags[@]}"; do args+=(--tag "$image:$tag"); done
+            docker buildx imagetools create "${args[@]}" "$image:$short"
+          done <<< "$IMAGES"
 
-      - name: Install
+      - name: Install dependencies
+        if: ${{ inputs.npm-workspaces != '' || inputs.sbom }}
         run: npm ci
 
-      - name: Check the packages and the fixture
-        run: |
-          npm run test
-          npm run typecheck
-          npm run lint
-          npm run format:check
-
-      - name: Publish with provenance
+      - name: Publish the npm workspaces with provenance
+        if: ${{ inputs.npm-workspaces != '' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          PACKAGE: ${{ steps.tag.outputs.package }}
-        run: npm publish -w "@micelio/${PACKAGE}" --provenance --access public
+          WORKSPACES: ${{ inputs.npm-workspaces }}
+          PRERELEASE: ${{ needs.plan.outputs.prerelease }}
+        run: |
+          flags=(--provenance --access public)
+          if [ "$PRERELEASE" = true ]; then flags+=(--tag next); fi
+          while IFS= read -r workspace; do
+            [ -n "$workspace" ] || continue
+            npm publish -w "$workspace" "${flags[@]}"
+          done <<< "$WORKSPACES"
 
       - name: Write the software bill of materials
-        env:
-          PACKAGE: ${{ steps.tag.outputs.package }}
-        run: npm sbom --sbom-format spdx -w "@micelio/${PACKAGE}" > "sbom-${PACKAGE}.spdx.json"
+        if: ${{ inputs.sbom }}
+        run: npm sbom --sbom-format spdx > sbom.spdx.json
 
-      - name: Create the GitHub release
+      - name: Tag main and publish the release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-          PACKAGE: ${{ steps.tag.outputs.package }}
-        run: gh release create "$TAG" "sbom-${PACKAGE}.spdx.json" --title "$TAG" --generate-notes --verify-tag
+          REPO: ${{ github.repository }}
+          TAG: ${{ needs.plan.outputs.tag }}
+          PRERELEASE: ${{ needs.plan.outputs.prerelease }}
+          SBOM: ${{ inputs.sbom }}
+        run: |
+          flags=()
+          if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi
+          assets=()
+          if [ "$SBOM" = true ]; then assets+=(sbom.spdx.json); fi
+          gh release create "$TAG" "${assets[@]}" --repo "$REPO" --target "$GITHUB_SHA" --title "$TAG" --notes-file release-notes.md "${flags[@]}"
+          echo "Released $TAG at $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
