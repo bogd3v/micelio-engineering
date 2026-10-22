@@ -42,11 +42,15 @@ jobs:
   # A dry run: prints the notes the fixture's fixed plan would publish and changes nothing.
   release:
     if: ${{ github.event_name != 'schedule' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    # A called workflow cannot ask for more than its caller grants, also in a job that is skipped:
+    # the publish job of release.yml asks for packages: write and id-token: write, so the call
+    # grants them even though a dry run never reaches it.
     permissions:
       contents: write
-      packages: read
+      packages: write
       actions: read
       pull-requests: read
+      id-token: write
     uses: ./.github/workflows/release.yml
     with:
       dry-run: true
