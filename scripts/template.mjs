@@ -102,9 +102,8 @@ export function createRepository(options) {
     throw new Error(`The standard ${standardVersion} has no hash in standard-hashes.json.`)
   }
   const root = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
-  const eslintConfig = JSON.parse(
-    readFileSync(join(ROOT, 'packages/eslint-config/package.json'), 'utf8')
-  )
+  const versionOf = (pkg) =>
+    JSON.parse(readFileSync(join(ROOT, `packages/${pkg}/package.json`), 'utf8')).version
   const values = {
     repo: name,
     title: options.title ?? titleOf(name),
@@ -112,7 +111,9 @@ export function createRepository(options) {
     description,
     standard: standardVersion,
     'engineering-ref': options.ref ?? currentRef(),
-    'micelio-version': eslintConfig.version,
+    'eslint-config-version': versionOf('eslint-config'),
+    'prettier-config-version': versionOf('prettier-config'),
+    'tsconfig-version': versionOf('tsconfig'),
     'types-node': root.devDependencies['@types/node'],
     eslint: root.devDependencies.eslint,
     prettier: root.devDependencies.prettier,

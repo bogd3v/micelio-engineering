@@ -22,9 +22,9 @@
     "check": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run lint:licenses && npm run lint:standard"
   },
   "devDependencies": {
-    "@micelio/eslint-config": "^{{micelio-version}}",
-    "@micelio/prettier-config": "^{{micelio-version}}",
-    "@micelio/tsconfig": "^{{micelio-version}}",
+    "@micelio/eslint-config": "^{{eslint-config-version}}",
+    "@micelio/prettier-config": "^{{prettier-config-version}}",
+    "@micelio/tsconfig": "^{{tsconfig-version}}",
     "@types/node": "{{types-node}}",
     "eslint": "{{eslint}}",
     "prettier": "{{prettier}}",
