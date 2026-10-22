@@ -20,7 +20,8 @@ npm run verify:isolated  # installs the three packed packages in an empty projec
 - `packages/` — `@micelio/eslint-config`, `@micelio/tsconfig`, `@micelio/prettier-config`. Each has its own version and is published by `.github/workflows/publish-packages.yml` from a tag `<package>-vX.Y.Z`.
 - `fixtures/basic/` — a project that uses only the three packages; their tests run against it.
 - `.github/workflows/` — the reusable workflows (`check`, `dco`, `scorecard`, `release`), `standard-sync` and this repository's own `ci.yml` (`docs/workflows.md`).
-- `docs/` — the standard and how the workflows are used.
+- `docs/` — the standard, how the workflows are used, and Micelio's `contributing.md`, `governance.md`, `trademarks.md` and `adr-template.md`. The other repositories link to them from a short `CONTRIBUTING.md` of their own (section 1 of the standard).
+- `REUSE.toml`, `LICENSES/` — licensing metadata; the repository is MIT-0 and `reuse lint` runs in CI.
 
 ## Rules
 
