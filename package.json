@@ -20,7 +20,9 @@
     "lint:standard": "npm run build && node packages/eslint-config/dist/lint-standard.js",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run lint:licenses && npm run lint:standard",
     "test": "npm run build && vitest run",
-    "verify:isolated": "node scripts/verify-isolated.mjs"
+    "verify:isolated": "node scripts/verify-isolated.mjs",
+    "template": "node scripts/template.mjs",
+    "verify:template": "node scripts/verify-template.mjs"
   },
   "devDependencies": {
     "@micelio/eslint-config": "0.1.0",

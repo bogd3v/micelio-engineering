@@ -1,0 +1,35 @@
+{
+  "name": "{{package}}",
+  "version": "0.1.0",
+  "description": "{{description}}",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "tsc -b --watch",
+    "build": "tsc -b",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "lint:licenses": "node scripts/check-licenses.mjs",
+    "lint:standard": "micelio-lint-standard",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run lint:licenses && npm run lint:standard"
+  },
+  "devDependencies": {
+    "@micelio/eslint-config": "^{{micelio-version}}",
+    "@micelio/prettier-config": "^{{micelio-version}}",
+    "@micelio/tsconfig": "^{{micelio-version}}",
+    "@types/node": "{{types-node}}",
+    "eslint": "{{eslint}}",
+    "prettier": "{{prettier}}",
+    "typescript": "{{typescript}}",
+    "vitest": "{{vitest}}"
+  },
+  "prettier": "@micelio/prettier-config"
+}

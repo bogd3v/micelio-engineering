@@ -8,3 +8,13 @@ SPDX-PackageDownloadLocation = "https://github.com/bogd3v/micelio-engineering"
 path = "**"
 SPDX-FileCopyrightText = "2026 Alejandro Ramirez Garcia and the Micelio contributors"
 SPDX-License-Identifier = "MIT-0"
+
+# template/ is the source of other repositories' files, among them a REUSE.toml and a license text
+# that say AGPL-3.0-only. Here they are MIT-0 like everything else, so the closest-file rule must not
+# let template/REUSE.toml speak for this repository.
+[[annotations]]
+path = "template/**"
+precedence = "override"
+SPDX-FileCopyrightText = "2026 Alejandro Ramirez Garcia and the Micelio contributors"
+SPDX-License-Identifier = "MIT-0"
+

@@ -1,0 +1,64 @@
+[
+  {
+    "box": "`LICENSE`, `REUSE.toml`, `THIRD-PARTY.md` and the licence allowlist check",
+    "files": [
+      "LICENSE",
+      "LICENSES/AGPL-3.0-only.txt",
+      "REUSE.toml",
+      "THIRD-PARTY.md",
+      "scripts/check-licenses.mjs"
+    ]
+  },
+  {
+    "box": "`README.md` and the short `CONTRIBUTING.md` that links Micelio's canonical one (section 1); `SECURITY.md` and `CODE_OF_CONDUCT.md` only when the repository has something to add to the organisation's",
+    "files": ["README.md", "CONTRIBUTING.md"],
+    "setting": "SECURITY.md and CODE_OF_CONDUCT.md are served to every repository from bogd3v/.github (#2)"
+  },
+  {
+    "box": "`AGENTS.md` with the pinned version of this standard, `CLAUDE.md`, `.claude/TEAM.md` and the copy of this standard",
+    "files": ["AGENTS.md", "CLAUDE.md", ".claude/TEAM.md", "docs/engineering-standard.md"]
+  },
+  {
+    "box": "`.editorconfig`, `.nvmrc` and `.env.example`",
+    "files": [".editorconfig", ".nvmrc", ".env.example"]
+  },
+  {
+    "box": "A `version` in `package.json`, the shared configuration packages, and the release workflow of section 7",
+    "files": [
+      "package.json",
+      "eslint.config.js",
+      "tsconfig.json",
+      ".github/workflows/release.yml",
+      "scripts/release/version.mjs"
+    ]
+  },
+  {
+    "box": "The scripts `dev`, `build`, `typecheck`, `lint`, `lint:fix`, `lint:standard`, `test` and `check`",
+    "files": ["package.json"]
+  },
+  {
+    "box": "CI with the required checks of section 15 called from the reusable workflows of `micelio-engineering`, the DCO check, Dependabot and the Scorecard workflow",
+    "files": [".github/workflows/ci.yml", ".github/dependabot.yml"]
+  },
+  {
+    "box": "The pull request template, the issue templates, the title-to-label workflow and the release notes configuration",
+    "files": [
+      ".github/pull_request_template.md",
+      ".github/ISSUE_TEMPLATE/bug.yml",
+      ".github/ISSUE_TEMPLATE/config.yml",
+      ".github/ISSUE_TEMPLATE/epic.md",
+      ".github/ISSUE_TEMPLATE/proposal.yml",
+      ".github/ISSUE_TEMPLATE/task.md",
+      ".github/workflows/pr-labels.yml",
+      ".github/release.yml"
+    ]
+  },
+  {
+    "box": "`main` protected by the organisation rulesets: changes arrive by pull request, required checks pass, no force push",
+    "setting": "The organisation rulesets of bogd3v/.github (#2), requiring the checks `check / Check` and `dco / Signed-off-by`"
+  },
+  {
+    "box": "The Micelio bot installed on the repository (section 16)",
+    "setting": "The Micelio bot GitHub App installed on the organisation's repositories (#2), and the repository added to .github/standard-sync.json of micelio-engineering"
+  }
+]
