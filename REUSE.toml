@@ -1,0 +1,10 @@
+version = 1
+SPDX-PackageName = "Micelio engineering"
+SPDX-PackageDownloadLocation = "https://github.com/bogd3v/micelio-engineering"
+
+# The shared tooling, workflows and documents are MIT-0, like the packages (packages/*/LICENSE).
+# Later annotations win over earlier ones.
+[[annotations]]
+path = "**"
+SPDX-FileCopyrightText = "2026 Alejandro Ramirez Garcia and the Micelio contributors"
+SPDX-License-Identifier = "MIT-0"
