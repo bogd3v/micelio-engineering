@@ -21,9 +21,8 @@ jobs:
       contents: read
     uses: ./.github/workflows/check.yml
     with:
-      # This repository has no lint:licenses or lint:standard script yet (#5), no REUSE metadata,
-      # and its build is a check of its own, so it stays in.
-      licenses: false
+      # lint:licenses runs; there is no lint:standard script yet (#5) and no REUSE metadata.
+      licenses: true
 
   dco:
     if: ${{ github.event_name == 'pull_request' }}

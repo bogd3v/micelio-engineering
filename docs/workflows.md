@@ -19,7 +19,7 @@ jobs:
 
 ## `check.yml`
 
-`typecheck`, `lint` and the test script always run. Everything else is an input, so a skipped check is written down in the caller: `format`, `licenses`, `standard`, `reuse`, `build` and `audit`. `test-script` names the script (`test:coverage` where there is a coverage floor), `working-directory` points at a project below the root, and `package-manager` is `npm` or `pnpm`. The Node version comes from `.nvmrc`. Sharding or repository-specific jobs (end to end, contract, performance) stay in the repository's own workflow.
+`typecheck`, `lint` and the test script always run. Everything else is an input, so a skipped check is written down in the caller: `format`, `licenses`, `standard`, `reuse`, `build` and `audit`. `test-script` names the script (`test:coverage` where there is a coverage floor), `lint:licenses` is each repository's script over `@micelio/eslint-config/licenses.json` (this repository's is `scripts/check-licenses.mjs`), `working-directory` points at a project below the root, and `package-manager` is `npm` or `pnpm`. The Node version comes from `.nvmrc`. Sharding or repository-specific jobs (end to end, contract, performance) stay in the repository's own workflow.
 
 ## `release.yml`
 
