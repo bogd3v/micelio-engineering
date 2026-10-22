@@ -22,7 +22,7 @@ npm run template -- ../micelio-example --description "One sentence about what it
 
 The script only creates a new directory: it refuses one that has files, and it never runs `git`. It adds two files that live once in this repository and are not copied into `template/`: `docs/engineering-standard.md` (pinned in `AGENTS.md` to the version it declares) and `scripts/check-licenses.mjs`. The `package-lock.json` it writes is what `npm ci` and the reusable `check.yml` need.
 
-Then, by hand: `git init`, a first commit signed off with `git commit -s`, create the repository on GitHub and push. The section 14 boxes that are organisation settings (below) are done in `bogd3v/.github` (#2); a repository starts the `Release` environment (Settings → Environments → `release`, with required reviewers) when it first publishes.
+Then, by hand: `git init`, a first commit signed off with `git commit -s`, create the repository on GitHub and push. The section 14 boxes that are organisation settings (below) are done in `bogd3v/.github` (#2); `scorecard` publishes its result to the OpenSSF API, so it runs only in a public repository (in a private one it fails with "Resource not accessible by integration"); every Micelio repository is public. A repository starts the `Release` environment (Settings → Environments → `release`, with required reviewers) when it first publishes.
 
 ## What it contains
 
