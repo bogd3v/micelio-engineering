@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { standardVersion } from '../src/standard.js'
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url))
 const WORKFLOW = readFileSync(`${ROOT}.github/workflows/standard-sync.yml`, 'utf8')
@@ -11,6 +12,8 @@ const SCRIPT = readFileSync(`${ROOT}scripts/standard-sync.sh`, 'utf8')
 const TARGETS = JSON.parse(readFileSync(`${ROOT}.github/standard-sync.json`, 'utf8')) as {
   repositories: string[]
 }
+/** The version of the canonical copy, which the sync carries. */
+const CURRENT = standardVersion(readFileSync(`${ROOT}docs/engineering-standard.md`, 'utf8')) ?? ''
 
 /** Runs `git` in `cwd` and answers its trimmed output. */
 function git(cwd: string, ...args: string[]): string {
@@ -79,7 +82,7 @@ function world(pin: string, existingPr = ''): World {
     STUB_LOG: log,
     STUB_EXISTING_PR: existingPr,
     GH_TOKEN: 'not-a-real-token',
-    VERSION: '1.4',
+    VERSION: CURRENT,
     APP_SLUG: 'micelio-bot',
     SOURCE: 'https://example.test/micelio-engineering',
   }
@@ -100,11 +103,11 @@ describe('standard-sync.sh', () => {
     const w = world('1.3')
     const result = sync(w, true)
     expect(result.status).toBe(0)
-    expect(result.output).toContain("Dry run: would open 'docs(standard): sync to 1.4'")
+    expect(result.output).toContain(`Dry run: would open 'docs(standard): sync to ${CURRENT}'`)
     expect(readFileSync(w.log, 'utf8')).not.toContain('gh pr ')
     for (const repository of TARGETS.repositories) {
       const remote = join(w.remotes, `${repository.split('/')[1]}.git`)
-      expect(git(remote, 'branch', '--list')).not.toContain('docs/standard-sync-1.4')
+      expect(git(remote, 'branch', '--list')).not.toContain(`docs/standard-sync-${CURRENT}`)
     }
   })
 
@@ -115,14 +118,14 @@ describe('standard-sync.sh', () => {
     const log = readFileSync(w.log, 'utf8')
     for (const repository of TARGETS.repositories) {
       const remote = join(w.remotes, `${repository.split('/')[1]}.git`)
-      expect(git(remote, 'log', '-1', '--format=%an <%ae>', 'docs/standard-sync-1.4')).toBe(
+      expect(git(remote, 'log', '-1', '--format=%an <%ae>', `docs/standard-sync-${CURRENT}`)).toBe(
         'micelio-bot[bot] <4242+micelio-bot[bot]@users.noreply.github.com>'
       )
-      expect(git(remote, 'log', '-1', '--format=%s', 'docs/standard-sync-1.4')).toBe(
-        'docs(standard): sync to 1.4'
+      expect(git(remote, 'log', '-1', '--format=%s', `docs/standard-sync-${CURRENT}`)).toBe(
+        `docs(standard): sync to ${CURRENT}`
       )
       expect(log).toContain(
-        `pr create --repo ${repository} --base main --head docs/standard-sync-1.4`
+        `pr create --repo ${repository} --base main --head docs/standard-sync-${CURRENT}`
       )
     }
     expect(log).not.toMatch(/gh pr (merge|review)/)
@@ -137,7 +140,7 @@ describe('standard-sync.sh', () => {
   })
 
   it('skips a repository that is already on the version', () => {
-    const w = world('1.4')
+    const w = world(CURRENT)
     const source = readFileSync(`${ROOT}docs/engineering-standard.md`, 'utf8')
     for (const repository of TARGETS.repositories) {
       const dir = join(w.remotes, `${repository.split('/')[1]}.git`)
@@ -151,7 +154,7 @@ describe('standard-sync.sh', () => {
     }
     const result = sync(w, false)
     expect(result.status).toBe(0)
-    expect(result.output).toContain('is already on standard 1.4')
+    expect(result.output).toContain(`is already on standard ${CURRENT}`)
     expect(readFileSync(w.log, 'utf8')).not.toContain('gh pr ')
   })
 

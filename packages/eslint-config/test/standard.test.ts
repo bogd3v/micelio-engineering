@@ -17,6 +17,8 @@ import {
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url))
 const LINT_BIN = `${ROOT}packages/eslint-config/dist/lint-standard.js`
 const APPLY = `${ROOT}scripts/apply-standard.mjs`
+/** The version of the canonical copy, so the tests that use the real file follow its bumps. */
+const CURRENT = standardVersion(readFileSync(join(ROOT, STANDARD_PATH), 'utf8')) ?? ''
 
 /** The sentence both repositories' AGENTS.md carry, where the pin lives. */
 const AGENTS = (version: string): string =>
@@ -113,14 +115,14 @@ describe('the canonical copy of this repository', () => {
 
 describe('micelio-lint-standard', () => {
   it('exits 0 on a matching copy and 1 with the pinned version when it was edited', () => {
-    const dir = repo('1.4', readFileSync(join(ROOT, STANDARD_PATH), 'utf8'))
-    writeFileSync(join(dir, 'AGENTS.md'), AGENTS('1.4'))
+    const dir = repo(CURRENT, readFileSync(join(ROOT, STANDARD_PATH), 'utf8'))
+    writeFileSync(join(dir, 'AGENTS.md'), AGENTS(CURRENT))
     expect(spawnSync('node', [LINT_BIN, dir], { encoding: 'utf8' }).status).toBe(0)
     const edited = readFileSync(join(dir, STANDARD_PATH), 'utf8').replace('Micelio', 'Micelia')
     writeFileSync(join(dir, STANDARD_PATH), edited)
     const result = spawnSync('node', [LINT_BIN, dir], { encoding: 'utf8' })
     expect(result.status).toBe(1)
-    expect(result.stderr).toContain('standard 1.4')
+    expect(result.stderr).toContain(`standard ${CURRENT}`)
   })
 })
 
@@ -131,7 +133,7 @@ describe('apply-standard', () => {
     const dir = repo('1.3', 'older')
     const result = spawnSync('node', [APPLY, dir, source], { encoding: 'utf8' })
     expect(result.stdout.trim()).toBe('changed')
-    expect(readPin(readFileSync(join(dir, 'AGENTS.md'), 'utf8'))).toBe('1.4')
+    expect(readPin(readFileSync(join(dir, 'AGENTS.md'), 'utf8'))).toBe(CURRENT)
     expect(readFileSync(join(dir, STANDARD_PATH), 'utf8')).toBe(readFileSync(source, 'utf8'))
   })
 
@@ -139,7 +141,7 @@ describe('apply-standard', () => {
     const dir = mkdtempSync(join(tmpdir(), 'micelio-standard-'))
     mkdirSync(join(dir, 'docs'))
     cpSync(source, join(dir, STANDARD_PATH))
-    writeFileSync(join(dir, 'AGENTS.md'), AGENTS('1.4'))
+    writeFileSync(join(dir, 'AGENTS.md'), AGENTS(CURRENT))
     expect(spawnSync('node', [APPLY, dir, source], { encoding: 'utf8' }).stdout.trim()).toBe(
       'unchanged'
     )
