@@ -29,8 +29,8 @@ name: Release
 #
 # What it publishes: the GitHub release (tag, notes), the images listed in `images` (a retag of
 # the image already built and tested for the commit, so the digest and its build provenance are
-# kept) and the workspaces listed in `npm-workspaces` (npm publish with provenance). An SBOM of
-# the dependencies is attached to the release.
+# kept), the package at the root with `npm-root` and the workspaces listed in `npm-workspaces`
+# (npm publish with provenance). An SBOM of the dependencies is attached to the release.
 
 on:
   workflow_call:
@@ -67,6 +67,10 @@ on:
         description: Images to retag, one per line (the commit's image is read from the short SHA tag)
         type: string
         default: ''
+      npm-root:
+        description: Publish the package at the root of the repository, for one that is not a workspace
+        type: boolean
+        default: false
       npm-workspaces:
         description: npm workspaces to publish, one per line
         type: string
@@ -89,7 +93,7 @@ on:
         default: .nvmrc
     secrets:
       NPM_TOKEN:
-        description: npm token that can publish the workspaces; needed only with npm-workspaces
+        description: npm token that can publish the packages; needed only with npm-root or npm-workspaces
         required: false
     outputs:
       tag:
@@ -221,6 +225,7 @@ jobs:
           COMPATIBILITY: ${{ inputs.compatibility }}
           CHECK_PACKAGE_VERSION: ${{ inputs.check-package-version }}
           IMAGES: ${{ inputs.images }}
+          NPM_ROOT: ${{ inputs.npm-root }}
           NPM_WORKSPACES: ${{ inputs.npm-workspaces }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           DRY_RUN: ${{ inputs.dry-run }}
@@ -245,9 +250,21 @@ jobs:
           if gh api "repos/$REPO/git/ref/tags/$TAG" >/dev/null 2>&1; then
             fail "The tag $TAG already exists. A published version never changes."
           fi
-          if [ -n "$NPM_WORKSPACES" ] && [ -z "$NPM_TOKEN" ]; then
-            fail "npm-workspaces is set but the NPM_TOKEN secret is not passed."
+          if { [ "$NPM_ROOT" = true ] || [ -n "$NPM_WORKSPACES" ]; } && [ -z "$NPM_TOKEN" ]; then
+            fail "npm-root or npm-workspaces is set but the NPM_TOKEN secret is not passed."
           fi
+          if [ "$NPM_ROOT" = true ]; then
+            root=$(node -p "const p = require('./package.json'); p.private ? '' : p.name")
+            if [ -n "$root" ]; then
+              echo "npm: would publish $root" | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              fail "npm-root is set but the package at the root is private."
+            fi
+          fi
+          while IFS= read -r workspace; do
+            [ -n "$workspace" ] || continue
+            echo "npm: would publish the workspace $workspace" | tee -a "$GITHUB_STEP_SUMMARY"
+          done <<< "$NPM_WORKSPACES"
           short="${GITHUB_SHA::7}"
           while IFS= read -r image; do
             [ -n "$image" ] || continue
@@ -330,18 +347,20 @@ jobs:
           done <<< "$IMAGES"
 
       - name: Install dependencies
-        if: ${{ inputs.npm-workspaces != '' || inputs.sbom }}
+        if: ${{ inputs.npm-root || inputs.npm-workspaces != '' || inputs.sbom }}
         run: npm ci
 
-      - name: Publish the npm workspaces with provenance
-        if: ${{ inputs.npm-workspaces != '' }}
+      - name: Publish the npm packages with provenance
+        if: ${{ inputs.npm-root || inputs.npm-workspaces != '' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          ROOT: ${{ inputs.npm-root }}
           WORKSPACES: ${{ inputs.npm-workspaces }}
           PRERELEASE: ${{ needs.plan.outputs.prerelease }}
         run: |
           flags=(--provenance --access public)
           if [ "$PRERELEASE" = true ]; then flags+=(--tag next); fi
+          if [ "$ROOT" = true ]; then npm publish "${flags[@]}"; fi
           while IFS= read -r workspace; do
             [ -n "$workspace" ] || continue
             npm publish -w "$workspace" "${flags[@]}"
