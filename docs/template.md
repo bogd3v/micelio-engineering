@@ -22,6 +22,8 @@ npm run template -- ../micelio-example --description "One sentence about what it
 
 The script only creates a new directory: it refuses one that has files, and it never runs `git`. It adds two files that live once in this repository and are not copied into `template/`: `docs/engineering-standard.md` (pinned in `AGENTS.md` to the version it declares) and `scripts/check-licenses.mjs`. The `package-lock.json` it writes is what `npm ci` and the reusable `check.yml` need.
 
+The labels come with the first pull request: `pr-labels.yml` creates every label of `.github/labels.json` that the repository lacks, then adds the one of the title's prefix. `labels.json` is the set the title-to-label workflow, the release notes (`release.yml`) and the issue templates use; `test/template.test.ts` fails when one of them uses a label it does not define. A label that already exists is left as it is, colour and description included. A repository created before this file can copy `.github/labels.json` and `pr-labels.yml` from the template; nothing else changes for it.
+
 Then, by hand: `git init`, a first commit signed off with `git commit -s`, create the repository on GitHub and push. The section 14 boxes that are organisation settings (below) are done in `bogd3v/.github` (#2); `scorecard` publishes its result to the OpenSSF API, so it runs only in a public repository (in a private one it fails with "Resource not accessible by integration"); every Micelio repository is public. A repository starts the `Release` environment (Settings → Environments → `release`, with required reviewers) when it first publishes.
 
 ## What it contains
@@ -37,7 +39,7 @@ Each box of section 14 is ticked by a file or an organisation setting. `scripts/
 | `version`, the configuration packages and the release workflow  | `package.json`, `eslint.config.js`, `tsconfig.json`, `release.yml`, `scripts/release/version.mjs`      |
 | The scripts `dev` … `check`                                     | `package.json`                                                                                         |
 | CI, DCO, Dependabot and the Scorecard                           | `ci.yml` (calls `check`, `dco` and `scorecard`), `dependabot.yml`                                      |
-| Pull request and issue templates, title-to-label, release notes | `pull_request_template.md`, `ISSUE_TEMPLATE/`, `pr-labels.yml`, `release.yml`                          |
+| Pull request and issue templates, title-to-label, release notes | `pull_request_template.md`, `ISSUE_TEMPLATE/`, `pr-labels.yml`, `release.yml`, `labels.json`           |
 | `main` protected by rulesets                                    | organisation rulesets (#2), requiring `check / Check` and `dco / Signed-off-by`                        |
 | The Micelio bot on the repository                               | the GitHub App installed on the organisation (#2), and the repository added to `standard-sync.json`    |
 

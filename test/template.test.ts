@@ -133,6 +133,41 @@ describe('the repository template', () => {
     for (const match of called) expect(match?.[2]).toBe(REF)
   })
 
+  it('defines every label its workflows and issue templates use', () => {
+    const read = (path: string) => readFileSync(join(project, path), 'utf8')
+    const defined = JSON.parse(read('.github/labels.json')) as {
+      name: string
+      color: string
+      description: string
+    }[]
+    const names = defined.map((label) => label.name)
+    expect(new Set(names).size).toBe(names.length)
+    for (const label of defined) {
+      expect(label.color).toMatch(/^[0-9a-f]{6}$/)
+      expect(label.description.length).toBeGreaterThan(0)
+    }
+
+    const workflow = read('.github/workflows/pr-labels.yml')
+    const added = Array.from(
+      workflow.matchAll(/labels=(?:"\$\{labels:\+\$labels,\})?([a-z/-]+)"?/g),
+      (match) => match[1] as string
+    )
+    const notes = Array.from(
+      read('.github/release.yml').matchAll(/^\s+- (?!title:)([^'*\s]+)$/gm),
+      (match) => (match[1] as string).trim()
+    )
+    const issues = created
+      .filter((path) => path.startsWith('.github/ISSUE_TEMPLATE/') && !path.endsWith('config.yml'))
+      .flatMap((path) => {
+        const line = /^labels: (.+)$/m.exec(read(path))?.[1] ?? ''
+        return Array.from(line.matchAll(/[^\s'",[\]]+/g), (match) => match[0])
+      })
+    expect(added).toEqual(expect.arrayContaining(['enhancement', 'code-quality', 'breaking']))
+    expect(notes).toEqual(expect.arrayContaining(['ignore-for-release', 'breaking', 'seo']))
+    expect(issues).toEqual(expect.arrayContaining(['bug', 'épica']))
+    for (const label of [...added, ...notes, ...issues]) expect(names).toContain(label)
+  })
+
   it('keeps one copy of the licence check and of the standard: the ones of this repository', () => {
     expect(readFileSync(join(project, 'scripts/check-licenses.mjs'), 'utf8')).toBe(
       readFileSync(join(ROOT, 'scripts/check-licenses.mjs'), 'utf8')
