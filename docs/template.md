@@ -36,6 +36,7 @@ Each box of section 14 is ticked by a file or an organisation setting. `scripts/
 | README and the short `CONTRIBUTING.md`                          | `README.md`, `CONTRIBUTING.md`; `SECURITY.md` and `CODE_OF_CONDUCT.md` come from `bogd3v/.github` (#2)                     |
 | `AGENTS.md`, `CLAUDE.md`, `.claude/TEAM.md` and the standard    | the files of the same names                                                                                                |
 | The five factory role prompts (part of the box above)           | `.claude/agents/planner.md`, `master.md`, `worker.md`, `reviewer.md`, `verifier.md`, described in [factory.md](factory.md) |
+| The `ship-pr` skill (gate 5)                                    | `.claude/skills/ship-pr/SKILL.md`                                                                                          |
 | `.editorconfig`, `.nvmrc`, `.env.example`                       | the files of the same names                                                                                                |
 | `version`, the configuration packages and the release workflow  | `package.json`, `eslint.config.js`, `tsconfig.json`, `release.yml`, `scripts/release/version.mjs`                          |
 | The scripts `dev` … `check`                                     | `package.json`                                                                                                             |

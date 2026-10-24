@@ -1,10 +1,10 @@
 import { spawnSync } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { standardVersion } from '../src/standard.js'
+import { loadFileHashes, standardVersion } from '../src/standard.js'
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url))
 const WORKFLOW = readFileSync(`${ROOT}.github/workflows/standard-sync.yml`, 'utf8')
@@ -111,6 +111,19 @@ describe('standard-sync.sh', () => {
     }
   })
 
+  it('lists the synced files of every repository in a dry run', () => {
+    const w = world('1.3')
+    const result = sync(w, true)
+    for (const repository of TARGETS.repositories) {
+      expect(result.output).toContain(`::group::${repository}`)
+    }
+    for (const path of Object.keys(loadFileHashes())) {
+      expect(result.output.split(path).length - 1, path).toBeGreaterThanOrEqual(
+        TARGETS.repositories.length
+      )
+    }
+  })
+
   it('pushes a branch as the bot and opens one pull request per repository', () => {
     const w = world('1.3')
     const result = sync(w, false)
@@ -149,7 +162,12 @@ describe('standard-sync.sh', () => {
       git(work, 'config', 'user.name', 'Seed')
       git(work, 'config', 'user.email', 'seed@example.test')
       writeFileSync(join(work, 'docs/engineering-standard.md'), source)
-      git(work, 'commit', '-qam', 'current')
+      for (const path of Object.keys(loadFileHashes())) {
+        mkdirSync(dirname(join(work, path)), { recursive: true })
+        cpSync(join(ROOT, 'template', path), join(work, path))
+      }
+      git(work, 'add', '-A')
+      git(work, 'commit', '-qm', 'current')
       git(work, 'push', '-q', 'origin', 'main')
     }
     const result = sync(w, false)

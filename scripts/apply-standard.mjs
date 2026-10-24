@@ -1,5 +1,8 @@
-// Copies the canonical standard into a repository and moves the pin in its AGENTS.md to the
-// standard's version. Used by standard-sync.yml; prints `changed` or `unchanged`.
+// Copies the canonical standard into a repository, moves the pin in its AGENTS.md to the standard's
+// version, and copies the files of `.github/standard-sync.json` ("files": the agent prompts, the
+// skills, the pull request template) from `template/` to the same path. A listed path that does not
+// exist yet (a skill that has not landed) is skipped. Used by standard-sync.yml; prints `changed`
+// or `unchanged`, and one `synced <path>` line per file written, on stderr.
 //
 //   node scripts/apply-standard.mjs <repository directory> [standard file]
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -11,6 +14,7 @@ import {
   standardVersion,
   STANDARD_PATH,
 } from '../packages/eslint-config/dist/standard.js'
+import { ROOT, syncedFiles } from './synced-files.mjs'
 
 const [target, source = fileURLToPath(new URL(`../${STANDARD_PATH}`, import.meta.url))] =
   process.argv.slice(2)
@@ -43,4 +47,15 @@ if (copyChanged) {
 const pinChanged = nextAgents !== agents
 if (pinChanged) writeFileSync(agentsPath, nextAgents)
 
-console.log(copyChanged || pinChanged ? 'changed' : 'unchanged')
+let filesChanged = false
+for (const path of syncedFiles()) {
+  const from = join(ROOT, 'template', path)
+  const to = join(target, path)
+  if (existsSync(to) && hashOf(readFileSync(to)) === hashOf(readFileSync(from))) continue
+  mkdirSync(dirname(to), { recursive: true })
+  copyFileSync(from, to)
+  filesChanged = true
+  console.error(`synced ${path}`)
+}
+
+console.log(copyChanged || pinChanged || filesChanged ? 'changed' : 'unchanged')

@@ -1,13 +1,15 @@
 import { spawnSync } from 'node:child_process'
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { syncedFiles } from '../../../scripts/synced-files.mjs'
 import {
   STANDARD_PATH,
   hashOf,
   lintStandard,
+  loadFileHashes,
   loadHashes,
   readPin,
   setPin,
@@ -113,6 +115,55 @@ describe('the canonical copy of this repository', () => {
   })
 })
 
+describe('the synced files', () => {
+  it('are the ones whose hashes are published, byte for byte', () => {
+    const published = loadFileHashes()
+    expect(Object.keys(published).length).toBeGreaterThan(0)
+    for (const [path, hash] of Object.entries(published)) {
+      expect(
+        hashOf(readFileSync(join(ROOT, 'template', path))),
+        `template/${path} changed: run node scripts/synced-hashes.mjs`
+      ).toBe(hash)
+    }
+    for (const path of ['.claude/agents/worker.md', '.github/pull_request_template.md']) {
+      expect(published, path).toHaveProperty([path])
+    }
+  })
+
+  it('have exactly one hash each: no file under a listed path is left without one', () => {
+    expect(Object.keys(loadFileHashes()).sort()).toEqual(syncedFiles().sort())
+  })
+
+  it('refuse a listed path that is empty, absolute or leaves template/', () => {
+    for (const bad of ['', '.', '/etc', '../micelio', 'a/../b', './a'])
+      expect(() => syncedFiles([bad]), bad).toThrow('must be a path inside template/')
+  })
+
+  it('keeps versions and files apart in the hashes file', () => {
+    expect(Object.keys(loadHashes()).every((key) => /^\d+\.\d+$/.test(key))).toBe(true)
+  })
+
+  it('fails lint:standard when a synced file the repository has was edited, on the newest version', () => {
+    const copy = readFileSync(join(ROOT, STANDARD_PATH), 'utf8')
+    const hashes = { [CURRENT]: hashOf(copy) }
+    const files = { 'a/b.md': hashOf('canonical') }
+    const dir = repo(CURRENT, copy)
+    expect(lintStandard(dir, hashes, files).ok).toBe(true) // the file is absent: not checked
+    mkdirSync(join(dir, 'a'))
+    writeFileSync(join(dir, 'a/b.md'), 'canonical')
+    expect(lintStandard(dir, hashes, files).ok).toBe(true)
+    writeFileSync(join(dir, 'a/b.md'), 'edited')
+    const result = lintStandard(dir, hashes, files)
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('a/b.md does not match')
+    expect(result.message).toContain('upgrade @micelio/eslint-config')
+    // a repository on an older version on purpose keeps the older files
+    const older = { '0.9': hashOf(copy), [CURRENT]: 'x' }
+    writeFileSync(join(dir, 'AGENTS.md'), AGENTS('0.9'))
+    expect(lintStandard(dir, older, files).ok).toBe(true)
+  })
+})
+
 describe('micelio-lint-standard', () => {
   it('exits 0 on a matching copy and 1 with the pinned version when it was edited', () => {
     const dir = repo(CURRENT, readFileSync(join(ROOT, STANDARD_PATH), 'utf8'))
@@ -142,9 +193,32 @@ describe('apply-standard', () => {
     mkdirSync(join(dir, 'docs'))
     cpSync(source, join(dir, STANDARD_PATH))
     writeFileSync(join(dir, 'AGENTS.md'), AGENTS(CURRENT))
+    for (const path of Object.keys(loadFileHashes())) {
+      mkdirSync(dirname(join(dir, path)), { recursive: true })
+      cpSync(join(ROOT, 'template', path), join(dir, path))
+    }
     expect(spawnSync('node', [APPLY, dir, source], { encoding: 'utf8' }).stdout.trim()).toBe(
       'unchanged'
     )
+  })
+
+  it('copies the synced files to the same path, skips the ones that do not exist, and then is in sync', () => {
+    const dir = repo('1.3', 'older')
+    const first = spawnSync('node', [APPLY, dir, source], { encoding: 'utf8' })
+    expect(first.stderr).toContain('synced .claude/agents/worker.md')
+    for (const path of Object.keys(loadFileHashes())) {
+      expect(readFileSync(join(dir, path), 'utf8'), path).toBe(
+        readFileSync(join(ROOT, 'template', path), 'utf8')
+      )
+    }
+    expect(existsSync(join(dir, '.claude/skills/blind-review'))).toBe(false)
+    expect(spawnSync('node', [APPLY, dir, source], { encoding: 'utf8' }).stdout.trim()).toBe(
+      'unchanged'
+    )
+    writeFileSync(join(dir, '.claude/agents/worker.md'), 'edited by hand')
+    const again = spawnSync('node', [APPLY, dir, source], { encoding: 'utf8' })
+    expect(again.stdout.trim()).toBe('changed')
+    expect(readFileSync(join(dir, '.claude/agents/worker.md'), 'utf8')).not.toBe('edited by hand')
   })
 
   it('refuses a repository whose AGENTS.md has no pin', () => {
