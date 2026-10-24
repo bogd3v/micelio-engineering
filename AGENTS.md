@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Instructions for coding agents working in this repository. It holds Micelio's shared tooling: the configuration packages, the reusable workflows and the canonical copy of the engineering standard.
+Instructions for coding agents working in this repository. It holds Micelio's shared tooling: the configuration packages, the factory's commands, the reusable workflows and the canonical copy of the engineering standard.
 
 ## Engineering standard
 
@@ -15,12 +15,13 @@ npm run build            # compiles the packages (typecheck, lint and test run i
 npm run template -- <dir> # creates a repository from template/ (docs/template.md)
 npm run verify:template  # creates one, installs the packed packages and runs its checks (needs the registry)
 npm run verify:isolated  # installs the three packed packages in an empty project and runs the fixture's checks (needs the registry)
+npm run lint-issue --workspace packages/factory-tools -- <owner/repo#n> # checks an issue against the Definition of Ready (needs gh)
 ```
 
 ## Structure
 
-- `packages/` — `@micelio/eslint-config`, `@micelio/tsconfig`, `@micelio/prettier-config`. Each has its own version and is published by `.github/workflows/publish-packages.yml` from a tag `<package>-vX.Y.Z`.
-- `fixtures/basic/` — a project that uses only the three packages; their tests run against it.
+- `packages/` — the configuration packages `@micelio/eslint-config`, `@micelio/tsconfig` and `@micelio/prettier-config`, each with its own version and published by `.github/workflows/publish-packages.yml` from a tag `<package>-vX.Y.Z`; and `@micelio/factory-tools`, the factory's commands (`lint-issue`, its rules in `packages/factory-tools/README.md`), not published yet.
+- `fixtures/basic/` — a project that uses only the three configuration packages; their tests run against it.
 - `.github/workflows/` — the reusable workflows (`check`, `dco`, `scorecard`, `release`), `standard-sync` and this repository's own `ci.yml` (`docs/workflows.md`).
 - `template/` — the files of section 14 of the standard, with `{{placeholders}}`, and the prompts of the five factory roles in `template/.claude/agents/` (`docs/factory.md`); `scripts/template.mjs` copies it and `scripts/template-checklist.json` maps each box of the section to a file or an organisation setting.
 - `docs/` — the standard, the factory (`factory.md`: the pipeline, its gates and roles), how the workflows are used, and Micelio's `contributing.md`, `governance.md`, `trademarks.md` and `adr-template.md`. The other repositories link to them from a short `CONTRIBUTING.md` of their own (section 1 of the standard).
