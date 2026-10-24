@@ -22,12 +22,13 @@ npm run verify:isolated  # installs the three packed packages in an empty projec
 - `packages/` — `@micelio/eslint-config`, `@micelio/tsconfig`, `@micelio/prettier-config`. Each has its own version and is published by `.github/workflows/publish-packages.yml` from a tag `<package>-vX.Y.Z`.
 - `fixtures/basic/` — a project that uses only the three packages; their tests run against it.
 - `.github/workflows/` — the reusable workflows (`check`, `dco`, `scorecard`, `release`), `standard-sync` and this repository's own `ci.yml` (`docs/workflows.md`).
-- `template/` — the files of section 14 of the standard, with `{{placeholders}}`; `scripts/template.mjs` copies it and `scripts/template-checklist.json` maps each box of the section to a file or an organisation setting.
-- `docs/` — the standard, how the workflows are used, and Micelio's `contributing.md`, `governance.md`, `trademarks.md` and `adr-template.md`. The other repositories link to them from a short `CONTRIBUTING.md` of their own (section 1 of the standard).
+- `template/` — the files of section 14 of the standard, with `{{placeholders}}`, and the prompts of the five factory roles in `template/.claude/agents/` (`docs/factory.md`); `scripts/template.mjs` copies it and `scripts/template-checklist.json` maps each box of the section to a file or an organisation setting.
+- `docs/` — the standard, the factory (`factory.md`: the pipeline, its gates and roles), how the workflows are used, and Micelio's `contributing.md`, `governance.md`, `trademarks.md` and `adr-template.md`. The other repositories link to them from a short `CONTRIBUTING.md` of their own (section 1 of the standard).
 - `REUSE.toml`, `LICENSES/` — licensing metadata; the repository is MIT-0 and `reuse lint` runs in CI.
 
 ## Rules
 
 - Hard limits: `.claude/TEAM.md` is not here yet; until it is, read `micelio`'s. Never push, merge, tag, release or deploy without the human's approval, and never read secrets.
+- Work moves through the gates of [`docs/factory.md`](docs/factory.md).
 - Before 1.0.0 a breaking change raises `y` and everything else raises `z` (section 7). The bump is made by a `chore(release)` pull request before the tag.
 - Published versions never change. A bad release is fixed by the next patch.

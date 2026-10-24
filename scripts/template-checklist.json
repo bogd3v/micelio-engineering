@@ -16,7 +16,17 @@
   },
   {
     "box": "`AGENTS.md` with the pinned version of this standard, `CLAUDE.md`, `.claude/TEAM.md` and the copy of this standard",
-    "files": ["AGENTS.md", "CLAUDE.md", ".claude/TEAM.md", "docs/engineering-standard.md"]
+    "files": [
+      "AGENTS.md",
+      "CLAUDE.md",
+      ".claude/TEAM.md",
+      ".claude/agents/planner.md",
+      ".claude/agents/master.md",
+      ".claude/agents/worker.md",
+      ".claude/agents/reviewer.md",
+      ".claude/agents/verifier.md",
+      "docs/engineering-standard.md"
+    ]
   },
   {
     "box": "`.editorconfig`, `.nvmrc` and `.env.example`",

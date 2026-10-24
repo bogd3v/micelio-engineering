@@ -30,18 +30,19 @@ Then, by hand: `git init`, a first commit signed off with `git commit -s`, creat
 
 Each box of section 14 is ticked by a file or an organisation setting. `scripts/template-checklist.json` lists them, and `test/template.test.ts` fails when the list and section 14 differ, when a file it names is not created, or when a box has neither.
 
-| Box                                                             | Ticked by                                                                                              |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Licence, REUSE, third-party list and the allowlist check        | `LICENSE`, `LICENSES/AGPL-3.0-only.txt`, `REUSE.toml`, `THIRD-PARTY.md`, `scripts/check-licenses.mjs`  |
-| README and the short `CONTRIBUTING.md`                          | `README.md`, `CONTRIBUTING.md`; `SECURITY.md` and `CODE_OF_CONDUCT.md` come from `bogd3v/.github` (#2) |
-| `AGENTS.md`, `CLAUDE.md`, `.claude/TEAM.md` and the standard    | the files of the same names                                                                            |
-| `.editorconfig`, `.nvmrc`, `.env.example`                       | the files of the same names                                                                            |
-| `version`, the configuration packages and the release workflow  | `package.json`, `eslint.config.js`, `tsconfig.json`, `release.yml`, `scripts/release/version.mjs`      |
-| The scripts `dev` … `check`                                     | `package.json`                                                                                         |
-| CI, DCO, Dependabot and the Scorecard                           | `ci.yml` (calls `check`, `dco` and `scorecard`), `dependabot.yml`                                      |
-| Pull request and issue templates, title-to-label, release notes | `pull_request_template.md`, `ISSUE_TEMPLATE/`, `pr-labels.yml`, `release.yml`, `labels.json`           |
-| `main` protected by rulesets                                    | organisation rulesets (#2), requiring `check / Check` and `dco / Signed-off-by`                        |
-| The Micelio bot on the repository                               | the GitHub App installed on the organisation (#2), and the repository added to `standard-sync.json`    |
+| Box                                                             | Ticked by                                                                                                                  |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Licence, REUSE, third-party list and the allowlist check        | `LICENSE`, `LICENSES/AGPL-3.0-only.txt`, `REUSE.toml`, `THIRD-PARTY.md`, `scripts/check-licenses.mjs`                      |
+| README and the short `CONTRIBUTING.md`                          | `README.md`, `CONTRIBUTING.md`; `SECURITY.md` and `CODE_OF_CONDUCT.md` come from `bogd3v/.github` (#2)                     |
+| `AGENTS.md`, `CLAUDE.md`, `.claude/TEAM.md` and the standard    | the files of the same names                                                                                                |
+| The five factory role prompts (part of the box above)           | `.claude/agents/planner.md`, `master.md`, `worker.md`, `reviewer.md`, `verifier.md`, described in [factory.md](factory.md) |
+| `.editorconfig`, `.nvmrc`, `.env.example`                       | the files of the same names                                                                                                |
+| `version`, the configuration packages and the release workflow  | `package.json`, `eslint.config.js`, `tsconfig.json`, `release.yml`, `scripts/release/version.mjs`                          |
+| The scripts `dev` … `check`                                     | `package.json`                                                                                                             |
+| CI, DCO, Dependabot and the Scorecard                           | `ci.yml` (calls `check`, `dco` and `scorecard`), `dependabot.yml`                                                          |
+| Pull request and issue templates, title-to-label, release notes | `pull_request_template.md`, `ISSUE_TEMPLATE/`, `pr-labels.yml`, `release.yml`, `labels.json`                               |
+| `main` protected by rulesets                                    | organisation rulesets (#2), requiring `check / Check` and `dco / Signed-off-by`                                            |
+| The Micelio bot on the repository                               | the GitHub App installed on the organisation (#2), and the repository added to `standard-sync.json`                        |
 
 The plugin-only boxes of section 14 (the Strapi SDK scaffold, the clean-Strapi suite, the supported core line, TSDoc-generated hooks) are not here: the first plugin repository adds them.
 
