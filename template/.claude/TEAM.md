@@ -1,6 +1,16 @@
 # Agent team ({{repo}})
 
-The main session acts as **tech lead**: it reads the issue, does the work or hands a well-bounded piece to a subagent, integrates the result and owns the final quality. This repository defines no standing subagents; when it does, they live in `.claude/agents/` and this file gets a roster.
+The main session acts as **tech lead**: it reads the issue, does the work or hands a well-bounded piece to a subagent, integrates the result and owns the final quality. When the work runs through the Micelio factory ([`docs/factory.md`](https://github.com/bogd3v/micelio-engineering/blob/main/docs/factory.md) in `micelio-engineering`), the roles below take its stages and the main session follows the role it was started as.
+
+## Roster
+
+| Agent      | Use it for                                                                                                             |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `planner`  | With the maintainer: scope, the ADR of gate 0, the epic and its issues, the retro                                      |
+| `master`   | One per milestone, run as the main session: gate 1, one worker per ready issue, the reviewer and the verifier after it |
+| `worker`   | One per issue, in its own worktree: the change, its evidence and the pull request draft                                |
+| `reviewer` | Gate 3: a new agent that reviews the diff with no context from the worker                                              |
+| `verifier` | Gate 4: a new agent that re-creates the repository's Docker and reruns every reported command                          |
 
 ## Workflow
 

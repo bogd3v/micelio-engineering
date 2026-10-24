@@ -50,6 +50,23 @@ function filesOf(directory: string, prefix = ''): string[] {
   })
 }
 
+/**
+ * What is wrong with one line of an agent prompt's frontmatter, or `undefined` when YAML reads it as
+ * the string it means: a double-quoted value, or a plain one with no `: `, no ` #` and no indicator
+ * character first. A strict subset, so the check needs no YAML parser.
+ */
+function frontmatterProblem(line: string): string | undefined {
+  const value = /^[a-z]+: (.+)$/.exec(line)?.[1]
+  if (value === undefined) return `not a "key: value" line: ${line}`
+  if (value.startsWith('"')) {
+    return /^"(?:[^"\\]|\\.)*"$/.test(value) ? undefined : `unterminated quote: ${line}`
+  }
+  if (/^[-?:,[\]{}#&*!|>'%@`]/.test(value) || value.includes(': ') || value.includes(' #')) {
+    return `needs quotes: ${line}`
+  }
+  return undefined
+}
+
 describe('the repository template', () => {
   let project: string
   let created: string[]
@@ -179,6 +196,20 @@ describe('the repository template', () => {
   it('keeps CONTRIBUTING.md short, as section 1 asks', () => {
     const lines = readFileSync(join(project, 'CONTRIBUTING.md'), 'utf8').trimEnd().split('\n')
     expect(lines.length).toBeLessThan(40)
+  })
+
+  it('gives every agent prompt a frontmatter that YAML reads as its name, description and tools', () => {
+    const directory = join(ROOT, 'template/.claude/agents')
+    for (const file of readdirSync(directory)) {
+      const frontmatter = readFileSync(join(directory, file), 'utf8').split(/^---$/m)[1] ?? ''
+      const lines = frontmatter.trim().split('\n')
+      expect(
+        lines.map((line) => line.split(':')[0]),
+        file
+      ).toEqual(['name', 'description', 'tools'])
+      expect(lines[0], file).toBe(`name: ${file.replace(/\.md$/, '')}`)
+      expect(lines.map(frontmatterProblem).filter(Boolean), file).toEqual([])
+    }
   })
 
   it('only creates a new repository, and rejects names and descriptions it cannot use', () => {
