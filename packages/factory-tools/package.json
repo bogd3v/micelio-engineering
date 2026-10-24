@@ -1,0 +1,45 @@
+{
+  "name": "@micelio/factory-tools",
+  "version": "0.1.0",
+  "description": "The commands of the Micelio software factory: lint-issue checks an issue against the Definition of Ready.",
+  "license": "MIT-0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bogd3v/micelio-engineering.git",
+    "directory": "packages/factory-tools"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "factory-tools": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b && tsc -p tsconfig.test.json --noEmit",
+    "lint": "tsc -b ../eslint-config && eslint .",
+    "format:check": "tsc -b ../prettier-config && prettier --check src test/*.ts package.json tsconfig*.json README.md",
+    "test": "tsc -b && vitest run",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test",
+    "lint-issue": "tsc -b && node dist/cli.js lint-issue"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
