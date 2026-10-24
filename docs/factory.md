@@ -91,9 +91,9 @@ A gate is a list evaluated by a machine, the maintainer, or an agent other than 
 
 **Evaluated by:** the reviewer's findings, decided by the master. The reviewer is a new agent that starts with no context from the worker. Nothing is committed before gate 5, so it reads the worktree against its merge base with `origin/main`, untracked files included.
 
-**Passes when:** there are zero Blocking findings, and every Important one is either fixed (the next round no longer raises it) or justified by the worker in the draft's "Answers to review", a section the verifier never reads; the master decides which. The reviewer checks in the order of section 11: correctness and edge cases; contracts and the version bump; security and permissions; tests that would fail without the change; documents the change made false; scope. It also checks the draft's "Instructions that were wrong or missing": every wrong `AGENTS.md` or skill it names is corrected on the branch, and a wrong standard or issue is reported to the master, as the draft says (section 13).
+**Passes when:** there are zero Blocking findings, and every Important one is either fixed (the next round no longer raises it) or justified by the worker in the draft's "Answers to review", a section the verifier never reads; the master decides which. The reviewer checks in the order of section 11: correctness and edge cases; contracts and the version bump; security and permissions; tests that would fail without the change; documents the change made false; scope. It also checks the draft's "Instructions that were wrong or missing": every wrong `AGENTS.md` or skill of the repository it names is corrected on the branch, and a wrong standard, synced file (the `files` of `.github/standard-sync.json`) or issue is reported to the master, as the draft says (section 13).
 
-**Fails when:** a Blocking finding remains, an Important one is neither fixed nor justified, or a wrong `AGENTS.md` or skill the draft names is not corrected on the branch.
+**Fails when:** a Blocking finding remains, an Important one is neither fixed nor justified, or a wrong `AGENTS.md` or skill of the repository (not a synced file) that the draft names is not corrected on the branch.
 
 ### Gate 4 · Verification
 
@@ -107,11 +107,11 @@ A gate is a list evaluated by a machine, the maintainer, or an agent other than 
 
 ### Gate 5 · Delivery
 
-**When:** after gate 4. This gate exists already: the `ship-pr` skill, which moves here with #37.
+**When:** after gate 4. This gate exists already: the `ship-pr` skill (`template/.claude/skills/ship-pr/`).
 
 **Evaluated by:** the maintainer.
 
-**Passes when:** the maintainer has done the review level below and has read the whole diff (section 11); has tested on Docker whatever an operator or an editor sees; has confirmed the `git commit -s` commands the worker gave; and the worker has pushed and opened the pull request only after that confirmation. The approval carries a line `time: <minutes>m diff|report`.
+**Passes when:** the maintainer has done the review level below and has read the whole diff (section 11); has tested on Docker whatever an operator or an editor sees; has run only the `git commit -s -F <message file>` the worker prepared; and the worker has pushed and opened the pull request only after that confirmation. The approval carries a line `time: <minutes>m diff|report`; when the maintainer's own account opened the pull request GitHub allows no approval, and the line goes in a review comment (`gh pr review <n> --comment -b "time: 10m diff"`). If the branch was rebased the push uses `--force-with-lease=<branch>:<sha>`.
 
 **Fails when:** the maintainer finds a problem (it goes back to the worker and into the correction log), or the work was committed without the maintainer's sign-off or pushed without the confirmation.
 
@@ -149,7 +149,7 @@ The factory only gets faster if every correction made once stops being needed. P
 - **Correction log.** Every time the maintainer, the reviewer or the verifier sends work back, the master adds one line to `docs/factory-log.md` in `micelio-engineering` (from #38): date, issue, what was corrected, category (lint, test, skill, standard, badly written issue) and destination.
 - **Retro per milestone.** When a milestone closes, the planner reads the log and, for each correction seen twice, proposes a check (an ESLint rule in `@micelio/eslint-config`, a contract test, a line in `lint-issue`), a new or corrected skill, or a line in the standard. Each proposal is a `chore(factory)` or `docs(standard)` issue. The retro ends when every line of the log has a destination and a date.
 - **A procedure done twice** becomes a skill in the same milestone, with the commands that were run.
-- **Instructions stay true.** A worker that finds `AGENTS.md` or a skill wrong corrects it in its pull request (section 13), and the reviewer checks it did. A wrong standard is reported to the master, who passes it to the maintainer to open a `docs(standard)` issue in `micelio-engineering` (section 16): outside that repository the standard is a synced copy.
+- **Instructions stay true.** A worker that finds `AGENTS.md` or a skill of its own repository wrong corrects it in its pull request (section 13), and the reviewer checks it did. A wrong standard is reported to the master, who passes it to the maintainer to open a `docs(standard)` issue in `micelio-engineering` (section 16): outside that repository the standard is a synced copy. The same goes for the other synced files (the files listed in `.github/standard-sync.json`: the five role prompts, the skills and the pull request template; see `docs/standard-sync.md`): they are fixed in `micelio-engineering` and, from any other repository, reported to the master, because a fix on the branch fails `lint:standard` and the next sync puts the file back.
 - **Nothing lives only in a chat.** What the planner and the maintainer decide goes into an ADR or a document of the repository before the epic is created. A worker never depends on a conversation it was not part of.
 
 ## Knowledge
@@ -175,18 +175,18 @@ Every kind of learning has one destination, and the destination decides who read
 
 Taken from GitHub by a script in this repository (#38) that the master runs when an issue closes. Without them nobody knows whether the process improves or only produces faster.
 
-| Metric                                                      | Source                                  | Tells                                      |
-| ----------------------------------------------------------- | --------------------------------------- | ------------------------------------------ |
-| Issues sent back at gate 1                                  | The comments of `lint-issue`            | The quality of planning                    |
-| Worker and reviewer rounds per issue                        | The master's comments                   | The quality of the work and of the issue   |
-| Blocking findings per pull request, by category             | The reviewer's report                   | What should become a check                 |
-| Verifier discrepancies                                      | The verifier's report                   | Whether workers report real evidence       |
-| Maintainer corrections per pull request                     | The maintainer's comments               | What the agents do not see yet             |
-| Changed lines per pull request                              | GitHub                                  | The 400-line limit of section 11           |
-| Red CI checks after the pull request opens                  | GitHub Actions                          | Whether gate 2 works                       |
-| Defects after merge, per release line                       | `fix` issues that cite the pull request | The one measure of real quality            |
-| Maintainer minutes per pull request, diff or report         | The `time:` line of the approval        | Whether the bottleneck really shrinks      |
-| Learnings turned into a check, skill or rule, per milestone | The destination column of the log       | Whether the factory learns or only records |
+| Metric                                                      | Source                                                                  | Tells                                      |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------ |
+| Issues sent back at gate 1                                  | The comments of `lint-issue`                                            | The quality of planning                    |
+| Worker and reviewer rounds per issue                        | The master's comments                                                   | The quality of the work and of the issue   |
+| Blocking findings per pull request, by category             | The reviewer's report                                                   | What should become a check                 |
+| Verifier discrepancies                                      | The verifier's report                                                   | Whether workers report real evidence       |
+| Maintainer corrections per pull request                     | The maintainer's comments                                               | What the agents do not see yet             |
+| Changed lines per pull request                              | GitHub                                                                  | The 400-line limit of section 11           |
+| Red CI checks after the pull request opens                  | GitHub Actions                                                          | Whether gate 2 works                       |
+| Defects after merge, per release line                       | `fix` issues that cite the pull request                                 | The one measure of real quality            |
+| Maintainer minutes per pull request, diff or report         | The `time:` line of the approval, or of the maintainer's review comment | Whether the bottleneck really shrinks      |
+| Learnings turned into a check, skill or rule, per milestone | The destination column of the log                                       | Whether the factory learns or only records |
 
 The pilot's target: under two maintainer corrections per pull request, and zero verifier discrepancies over the last five issues of the milestone.
 
@@ -194,14 +194,14 @@ The pilot's target: under two maintainer corrections per pull request, and zero 
 
 Everything shared lives in this repository; each repository imports it and adds only its own.
 
-| Piece                                                                                    | Path in `micelio-engineering`                                 | Issue    |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------- |
-| The process                                                                              | `docs/factory.md` (this document)                             | #35      |
-| The role prompts                                                                         | `template/.claude/agents/`                                    | #35      |
-| The Herdr master prompt, and the `blind-review` and `verify-pr` skills for gates 3 and 4 | `.claude/skills/` and the Herdr prompt                        | #39      |
-| The pull request template's learning section, `ship-pr` for gate 5, syncing the prompts  | `.github/pull_request_template.md`, `.claude/skills/ship-pr/` | #37      |
-| Gate 1                                                                                   | `lint-issue`, then the `issue-ready` workflow                 | #36, #40 |
-| The correction log and the metrics                                                       | `docs/factory-log.md` and a metrics script                    | #38      |
-| The retro                                                                                | The `factory-retro` skill                                     | #41      |
+| Piece                                                                                              | Path in `micelio-engineering`                                                   | Issue    |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | -------- |
+| The process                                                                                        | `docs/factory.md` (this document)                                               | #35      |
+| The role prompts                                                                                   | `template/.claude/agents/`                                                      | #35      |
+| The Herdr master prompt, and the `blind-review` and `verify-pr` skills for gates 3 and 4           | `.claude/skills/` and the Herdr prompt                                          | #39      |
+| The pull request template's learning section, `ship-pr` for gate 5, syncing the prompts and skills | `template/.github/pull_request_template.md`, `template/.claude/skills/ship-pr/` | #37      |
+| Gate 1                                                                                             | `lint-issue`, then the `issue-ready` workflow                                   | #36, #40 |
+| The correction log and the metrics                                                                 | `docs/factory-log.md` and a metrics script                                      | #38      |
+| The retro                                                                                          | The `factory-retro` skill                                                       | #41      |
 
 The factory follows the standard itself: every script has tests, every skill is written like the others, and a change to the factory is a `chore(factory)` issue in this repository.

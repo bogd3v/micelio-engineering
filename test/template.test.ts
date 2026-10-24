@@ -212,6 +212,25 @@ describe('the repository template', () => {
     }
   })
 
+  it('asks the pull request for the learning, the commands, their output and the Docker', () => {
+    const template = readFileSync(join(project, '.github/pull_request_template.md'), 'utf8')
+    expect(template.match(/Instructions that were wrong or missing/g)).toHaveLength(1)
+    const tests = template.slice(template.indexOf('## Tests'), template.indexOf('## Instructions'))
+    expect(tests).toMatch(/command/)
+    expect(tests).toMatch(/real output/)
+    expect(tests).toMatch(/Docker/)
+  })
+
+  it('ships ship-pr with the Docker-by-risk rule, the maintainer-run commit and the time line', () => {
+    const skill = readFileSync(join(project, '.claude/skills/ship-pr/SKILL.md'), 'utf8')
+    expect(skill).toMatch(/^name: ship-pr$/m)
+    expect(skill).toContain('## Docker by risk')
+    expect(skill).toContain('git commit -s -F <message file>')
+    expect(skill).toContain('--force-with-lease=<branch>:<sha>')
+    expect(skill).toContain('time: <minutes>m diff|report')
+    expect(skill).toContain('gh pr review <n> --comment -b "time: 10m diff"')
+  })
+
   it('only creates a new repository, and rejects names and descriptions it cannot use', () => {
     const occupied = join(mkdtempSync(join(tmpdir(), 'template-test-')), 'taken')
     mkdirSync(occupied)

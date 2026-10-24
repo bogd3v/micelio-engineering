@@ -25,6 +25,7 @@
       ".claude/agents/worker.md",
       ".claude/agents/reviewer.md",
       ".claude/agents/verifier.md",
+      ".claude/skills/ship-pr/SKILL.md",
       "docs/engineering-standard.md"
     ]
   },

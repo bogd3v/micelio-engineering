@@ -1,3 +1,10 @@
 {
-  "repositories": ["bogd3v/micelio", "bogd3v/micelio-cms", "bogd3v/micelio-plugin-core"]
+  "repositories": ["bogd3v/micelio", "bogd3v/micelio-cms", "bogd3v/micelio-plugin-core"],
+  "files": [
+    ".claude/agents",
+    ".claude/skills/ship-pr",
+    ".claude/skills/blind-review",
+    ".claude/skills/verify-pr",
+    ".github/pull_request_template.md"
+  ]
 }

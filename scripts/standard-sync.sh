@@ -28,19 +28,19 @@ for repo in $(jq -r '.repositories[]' "$root/.github/standard-sync.json"); do
     echo "$repo is already on standard ${VERSION}."
     echo "::endgroup::"; continue
   fi
-  git -C "$dir" --no-pager diff --stat
+  git -C "$dir" status --short --untracked-files=all
   if [ "$DRY_RUN" = true ]; then
     echo "Dry run: would open '$title' in $repo."
     echo "::endgroup::"; continue
   fi
   base=$(gh repo view "$repo" --json defaultBranchRef --jq .defaultBranchRef.name)
   git -C "$dir" switch --quiet -c "$branch"
-  git -C "$dir" add docs/engineering-standard.md AGENTS.md
-  git -C "$dir" commit --quiet -m "$title" -m "Replaces docs/engineering-standard.md and moves the pin in AGENTS.md to ${VERSION}, from ${SOURCE}."
+  git -C "$dir" add -A
+  git -C "$dir" commit --quiet -m "$title" -m "Replaces docs/engineering-standard.md, moves the pin in AGENTS.md to ${VERSION} and copies the agent prompts, skills and pull request template listed in standard-sync.json, from ${SOURCE}."
   git -C "$dir" push --quiet --force origin "$branch"
-  body="Replaces the local copy of the engineering standard with version ${VERSION} and moves the pin in \`AGENTS.md\`, from ${SOURCE}.
+  body="Replaces the local copy of the engineering standard with version ${VERSION}, moves the pin in \`AGENTS.md\` and copies the factory's agent prompts, skills and pull request template (the \`files\` of \`.github/standard-sync.json\`), from ${SOURCE}.
 
-Review it like any other change and merge it by hand: the Micelio bot never merges. If \`npm run lint:standard\` says the version is unknown, upgrade \`@micelio/eslint-config\` to the release that publishes its hash. A repository may stay on an older version on purpose: close this pull request."
+Review it like any other change and merge it by hand: the Micelio bot never merges. If \`npm run lint:standard\` says the version is unknown, or that a synced file does not match, upgrade \`@micelio/eslint-config\` to the release that publishes the new hashes in this same pull request. A repository may stay on an older version on purpose: close this pull request."
   existing=$(gh pr list --repo "$repo" --head "$branch" --state open --json number --jq '.[0].number // empty')
   if [ -n "$existing" ]; then
     gh pr edit "$existing" --repo "$repo" --title "$title" --body "$body"

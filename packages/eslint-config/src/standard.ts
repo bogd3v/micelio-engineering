@@ -8,6 +8,9 @@ export const STANDARD_PATH = 'docs/engineering-standard.md'
 /** The SHA-256 of each released version of the standard, by `major.minor`. */
 export type StandardHashes = Record<string, string>
 
+/** The SHA-256 of each synced file (agent prompts, skills, pull request template), by path in the repository. */
+export type FileHashes = Record<string, string>
+
 /** What `lintStandard` found. */
 export interface StandardResult {
   /** True when the local copy is the one published for the pinned version. */
@@ -50,10 +53,39 @@ export function standardVersion(standard: string): string | null {
   return HEADER.exec(standard)?.[1] ?? null
 }
 
-/** Loads the hashes bundled in this package. */
-export function loadHashes(): StandardHashes {
+/** Reads `standard-hashes.json`, bundled in this package. */
+function readHashesFile(): Record<string, unknown> {
   const file = new URL('../standard-hashes.json', import.meta.url)
-  return JSON.parse(readFileSync(file, 'utf8')) as StandardHashes
+  return JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>
+}
+
+/** Loads the hash of each released version of the standard bundled in this package. */
+export function loadHashes(): StandardHashes {
+  const hashes: StandardHashes = {}
+  for (const [key, value] of Object.entries(readHashesFile())) {
+    if (typeof value === 'string') hashes[key] = value
+  }
+  return hashes
+}
+
+/** Loads the hash of each file the sync carries next to the standard, by path in the repository. */
+export function loadFileHashes(): FileHashes {
+  const files: FileHashes = {}
+  for (const [path, value] of Object.entries(readHashesFile().files ?? {})) {
+    if (typeof value === 'string') files[path] = value
+  }
+  return files
+}
+
+/** The newest version in `hashes`, compared as numbers. */
+function latestVersion(hashes: StandardHashes): string | null {
+  const order = (version: string): number[] => version.split('.').map(Number)
+  const [latest] = Object.keys(hashes).sort((a, b) => {
+    const [ax = 0, ay = 0] = order(a)
+    const [bx = 0, by = 0] = order(b)
+    return bx - ax || by - ay
+  })
+  return latest ?? null
 }
 
 /**
@@ -62,9 +94,18 @@ export function loadHashes(): StandardHashes {
  * the pinned one is checked, not the latest.
  *
  * @param root - The repository root.
+ * It also checks the synced files the repository has (`.claude/agents/*.md`, the skills, the pull
+ * request template) against `fileHashes`, but only when the pin is the newest version this package
+ * knows: a repository that stays on an older version on purpose keeps the older files too.
+ *
  * @param hashes - The published hashes; the ones bundled in this package by default.
+ * @param fileHashes - The published hashes of the synced files; the bundled ones by default.
  */
-export function lintStandard(root: string, hashes: StandardHashes = loadHashes()): StandardResult {
+export function lintStandard(
+  root: string,
+  hashes: StandardHashes = loadHashes(),
+  fileHashes: FileHashes = loadFileHashes()
+): StandardResult {
   const agentsPath = join(root, 'AGENTS.md')
   if (!existsSync(agentsPath)) {
     return {
@@ -96,6 +137,21 @@ export function lintStandard(root: string, hashes: StandardHashes = loadHashes()
     return {
       ok: false,
       message: `${STANDARD_PATH} does not match standard ${pin}, the version AGENTS.md pins (sha256 ${actual}, published ${expected}). Restore it, or sync it from bogd3v/micelio-engineering.`,
+    }
+  }
+  const stale =
+    pin === latestVersion(hashes)
+      ? Object.entries(fileHashes)
+          .filter(([path, hash]) => {
+            const file = join(root, path)
+            return existsSync(file) && hashOf(readFileSync(file)) !== hash
+          })
+          .map(([path]) => path)
+      : []
+  if (stale.length > 0) {
+    return {
+      ok: false,
+      message: `${stale.join(', ')} ${stale.length === 1 ? 'does' : 'do'} not match the published copy of standard ${pin}. Restore ${stale.length === 1 ? 'it' : 'them'} if edited by hand, or, in a sync pull request, upgrade @micelio/eslint-config to the release that publishes the new hashes.`,
     }
   }
   return { ok: true, message: `Standard ${pin}: ${STANDARD_PATH} matches the published copy.` }

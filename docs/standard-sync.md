@@ -8,17 +8,35 @@ The engineering standard has one canonical copy, `docs/engineering-standard.md` 
 2. Merge it, raise `@micelio/eslint-config` in a `chore(release)` pull request and publish it (`eslint-config-vX.Y.Z`, `publish-packages.yml`), so that the new hash is on npm.
 3. Create a GitHub release of this repository, by hand or with the bot, whose notes contain a line `Standard: X.Y`. Publishing it starts `standard-sync.yml`.
 
-`standard-sync.yml` can also be started by hand (Actions, Standard sync) with a version and `dry-run`, which lists what would change without opening anything.
+`standard-sync.yml` can also be started by hand (Actions, Standard sync) with a version and `dry-run`, which lists what would change, the new files included, without opening anything. A repository whose files differ from the canonical ones is synced even when it is already on the version: a release whose notes say `Standard: X.Y` for the current version carries a change to these files.
+
+## The files that travel with the standard
+
+Next to the standard, the sync carries the files of the factory that every repository must hold identically. They live under `template/` in this repository, and the list is data, `files` in `.github/standard-sync.json`: `.claude/agents` (the five role prompts), `.claude/skills/ship-pr`, `.claude/skills/blind-review`, `.claude/skills/verify-pr` and `.github/pull_request_template.md`. Each goes to the same path in the target repository, without `template/`. A listed path that does not exist yet (the last two skills arrive with #39) is skipped, not an error, so adding a skill is a line of data.
+
+**Order of the first rollout.** The check only applies once a repository installs the `@micelio/eslint-config` that holds the file hashes, and a repository that does not have the canonical files then fails `npm run check` on a Dependabot minor update. So the order is:
+
+1. The files are adopted in `micelio`, `micelio-cms` and `micelio-plugin-core` (the adoption issues, and the first sync pull request, checked with a `dry-run` first).
+2. Only then the MINOR of `@micelio/eslint-config` is published (`chore(release)`), and its notes name the files a consumer must hold.
+
+`micelio` has its own, more specific `ship-pr`, and the first sync replaces it with the generic one. Its fate is settled in bogd3v/micelio#739 before that first sync.
+
+**Every later change.** The file hashes are keyed by path, not by version, so a change to a synced file moves no pin. It is released as a new `@micelio/eslint-config` first, a PATCH in a `chore(release)` pull request (section 7; the MINOR was the one that added the check), and the sync pull request is merged together with the upgrade of that package in the same pull request: the package alone fails `lint:standard` on the old files, and the sync alone fails it against the old hashes. When a Dependabot update of `@micelio/eslint-config` fails `lint:standard` because the synced files are older than its hashes, it is closed: the next sync pull request carries the upgrade and the files together. Dependabot is not told to ignore the package, so a release that changes only rules still arrives through it (section 10). A re-run of the sync overwrites the branch `docs/standard-sync-X.Y`, so the upgrade commit is added again after it.
+
+The hashes are on bytes: the synced files must stay LF, so a checkout with `core.autocrlf` would fail `lint:standard`. A file that is removed or renamed in the canonical list stays behind in the repositories and is no longer checked; delete it there by hand in the next sync pull request.
+
+Their SHA-256 hashes are in the `files` key of `packages/eslint-config/standard-hashes.json`, next to the versions of the standard. After changing one of them run `node scripts/synced-hashes.mjs` (after `npm run build`) and commit the hashes with it; the tests fail when a file and its hash disagree. The adoption pull request of a repository copies the files by hand once, identical to the canonical ones; the next sync replaces them, and a copy edited by hand is put back.
 
 ## What the workflow does
 
-For each repository in `.github/standard-sync.json` it clones the repository as the Micelio bot, replaces `docs/engineering-standard.md`, moves the pin in `AGENTS.md` (the `` `standard: X.Y` `` token and the sentence "follows standard version X.Y") and opens or updates the pull request `docs(standard): sync to X.Y` from the branch `docs/standard-sync-X.Y`. A repository that is already on the version is skipped, and one whose `AGENTS.md` has no pin is reported and fails the run without stopping the others.
+For each repository in `.github/standard-sync.json` it clones the repository as the Micelio bot, replaces `docs/engineering-standard.md`, copies the files above, moves the pin in `AGENTS.md` (the `` `standard: X.Y` `` token and the sentence "follows standard version X.Y") and opens or updates the pull request `docs(standard): sync to X.Y` from the branch `docs/standard-sync-X.Y`. A repository with nothing to change is skipped, and one whose `AGENTS.md` has no pin is reported and fails the run without stopping the others.
 
 - **The bot never merges.** It has contents and pull-request write on the listed repositories and nothing else; a human reviews and merges. A repository may stay on an older version on purpose: close the pull request.
 - **The bot's commits are not signed off** (section 13: the sign-off is a person's certification), so `dco.yml` skips them like Dependabot's. A repository's own copy of the DCO workflow needs the same exemption until it calls the reusable one.
 - **The private key** is the organisation secret `MICELIO_BOT_PRIVATE_KEY` and the app's client id (not secret, `Iv…`; `gh api apps/micelio-bot --jq .client_id`) the organisation variable `MICELIO_BOT_CLIENT_ID`. `create-github-app-token` deprecated `app-id` in favour of it. Only the token step reads the key; it never reaches a repository or a log.
+- **The bot's permissions do not grow**: contents and pull-request write on the listed repositories, nothing else; the files are ordinary commits in the same pull request.
 - **Adding a repository** is an entry in `.github/standard-sync.json` and in the `repositories` of the token step, which a test keeps equal.
 
 ## `lint:standard`
 
-`@micelio/eslint-config` ships the command `micelio-lint-standard`; a repository's script is `"lint:standard": "micelio-lint-standard"`, and it belongs in `npm run check`. It reads the pin from `AGENTS.md` and compares the SHA-256 of `docs/engineering-standard.md` with the one published for that version in `standard-hashes.json`. The pinned version is checked, not the latest. A version newer than the installed package knows fails with a message that says to upgrade the package: the pull request of a sync to a new version needs that upgrade too.
+`@micelio/eslint-config` ships the command `micelio-lint-standard`; a repository's script is `"lint:standard": "micelio-lint-standard"`, and it belongs in `npm run check`. It reads the pin from `AGENTS.md` and compares the SHA-256 of `docs/engineering-standard.md` with the one published for that version in `standard-hashes.json`. It also compares each synced file the repository has (agent prompts, skills, pull request template) with the hash in `files`, but only when the pin is the newest version the installed package knows: a repository that stays on an older version on purpose keeps the older files too. A file the repository does not have is not an error. The pinned version is checked, not the latest. A version newer than the installed package knows fails with a message that says to upgrade the package: the pull request of a sync to a new version needs that upgrade too.

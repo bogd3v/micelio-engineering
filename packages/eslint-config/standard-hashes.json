@@ -1,4 +1,13 @@
 {
   "1.4": "0f1202bbd02a83f216313b84be4744d66ccbee60bc01b39bfc7f67cefd30e139",
-  "1.5": "c3ee8aa9a13945e073dedeecbb7ba3a9587ec0ef6878e426eb4be7a0398d93a1"
+  "1.5": "c3ee8aa9a13945e073dedeecbb7ba3a9587ec0ef6878e426eb4be7a0398d93a1",
+  "files": {
+    ".claude/agents/master.md": "3cb20cb4a3f1b82851cab06c9e13a96e04bbe138274766abcf949346a985ea8a",
+    ".claude/agents/planner.md": "e3587c5a382e0e8240bbab67b681b59aede6fb398fa57df1b9c46c820f2e6885",
+    ".claude/agents/reviewer.md": "0fbc7ac0a830857f804035efef9cc920765b17851ec57f9ef7f194d6938a15ba",
+    ".claude/agents/verifier.md": "9e995423eb290f7018dbeb5b321eb86145487fc06452bb67cdd11e007869a061",
+    ".claude/agents/worker.md": "1ebee6f46bfdcb4f260a8b458df4da76d7b2e84c3dd576a67903e7beaccf1b32",
+    ".claude/skills/ship-pr/SKILL.md": "a751d5653ea0158d2a2c2d97f18a6076de0807c4d6fa7546d88f748a8ce32842",
+    ".github/pull_request_template.md": "7460f7e9808bcb2c825d5bd871a21453e0e42cbb798d3901987f84c7993e03ab"
+  }
 }
