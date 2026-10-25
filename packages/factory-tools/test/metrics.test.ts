@@ -208,10 +208,32 @@ describe('factory log', () => {
       'factory-log | yesterday | #1 | bad date | docs',
       'factory-log | 2026-10-24 | #1 | no category',
       '  factory-log | 2026-10-24 | #2 | indented | docs',
+      'factory-log | 2026-10-25 | #39 | with a destination | skill | `blind-review`',
+      'factory-log | 2026-10-25 | #39 | no destination yet | test | -',
     ].join('\n')
     expect(parseLogLines(body)).toEqual([
-      { date: '2026-10-24', issue: '#35', what: 'Gate lines', category: 'issue' },
-      { date: '2026-10-24', issue: '#43 #44', what: 'a `|` stays | in the cell', category: 'test' },
+      { date: '2026-10-24', issue: '#35', what: 'Gate lines', category: 'issue', destination: '' },
+      {
+        date: '2026-10-24',
+        issue: '#43 #44',
+        what: 'a `|` stays | in the cell',
+        category: 'test',
+        destination: '',
+      },
+      {
+        date: '2026-10-25',
+        issue: '#39',
+        what: 'with a destination',
+        category: 'skill',
+        destination: '`blind-review`',
+      },
+      {
+        date: '2026-10-25',
+        issue: '#39',
+        what: 'no destination yet',
+        category: 'test',
+        destination: '',
+      },
     ])
   })
 
@@ -243,7 +265,7 @@ describe('factory log', () => {
     const expected = comments
       .toSorted((a, b) => a.created_at.localeCompare(b.created_at))
       .flatMap((c) => parseLogLines(c.body))
-      .map((l) => [l.date, l.issue, l.what.replaceAll('|', '\\|'), l.category, ''])
+      .map((l) => [l.date, l.issue, l.what.replaceAll('|', '\\|'), l.category, l.destination])
     const rows = log
       .split('\n')
       .filter((line) => /^\| 2026/.test(line))

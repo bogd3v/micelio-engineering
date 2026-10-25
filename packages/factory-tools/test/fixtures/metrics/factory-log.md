@@ -1,7 +1,10 @@
 # The factory's correction log
 
 One row for every correction the maintainer, the reviewer or the verifier sent back, or that the
-master found at gate 1. The master appends a row at once (`docs/factory.md`, the learning loop);
+master found at gate 1. The master posts it at once as a line
+`factory-log | <date> | <issue> | <what> | <category> | <destination>` in a comment on the issue
+(`<destination>` is `-` until the retro gives one), and the `scribe` step of `herdr/master.md`
+appends the lines here in a `chore(factory)` pull request (`docs/factory.md`, the learning loop);
 the retro fills the Destination when it turns the correction into a check, a skill or a rule, and
 `factory-tools metrics` counts the rows that have one.
 
@@ -16,8 +19,9 @@ the retro fills the Destination when it turns the correction into a check, a ski
 Rows keep the order in which they were recorded. The first rows were moved here from the
 `factory-log | <date> | <issue> | <what> | <category>` comments the master had posted on the issues
 of the milestone "Micelio · Fábrica" (#34 to #45), oldest comment first and each comment's lines in
-order; a `|` inside a cell is written `\|`. Later rows are appended by hand until #39 settles how the
-master's lines reach `main`.
+order; a `|` inside a cell is written `\|`. Those comments had no destination field yet, and
+`parseLogLines` reads both forms. Later rows are appended by the `scribe`, in the order they were
+posted, with a `-` destination as an empty cell.
 
 | Date       | Issue                                          | What was corrected                                                                                                                                                                                                                                                                                                                                                      | Category | Destination |
 | ---------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------- |

@@ -127,20 +127,32 @@ export interface LogLine {
   issue: string
   what: string
   category: string
+  /** The check, skill or rule it became; empty until the retro gives one (`-` in the line). */
+  destination: string
 }
 
+/** The categories of `docs/factory-log.md`. */
+const LOG_CATEGORIES = new Set(['lint', 'test', 'skill', 'standard', 'issue', 'docs'])
+
 /**
- * Reads the lines of the form `factory-log | <date> | <issue> | <what> | <category>` out of a
- * comment. Other lines are ignored, and a `|` inside the `what` is kept.
+ * Reads the lines of the form `factory-log | <date> | <issue> | <what> | <category> | <destination>`
+ * out of a comment, where a `-` destination is empty. The older form without the destination is
+ * read too: the last field is then the category. Other lines are ignored, and a `|` inside the
+ * `what` is kept.
  */
 export function parseLogLines(body: string): LogLine[] {
   const lines: LogLine[] = []
   for (const line of body.split(/\r?\n/)) {
     if (!line.startsWith('factory-log | ')) continue
     const [, date = '', issue = '', ...rest] = line.split(' | ').map((part) => part.trim())
+    let destination = ''
+    if (rest.length > 2 && LOG_CATEGORIES.has(rest.at(-2) ?? '')) {
+      destination = rest.pop() ?? ''
+      if (destination === '-') destination = ''
+    }
     const category = rest.pop() ?? ''
     if (/^\d{4}-\d\d-\d\d$/.test(date) && rest.length > 0 && category !== '') {
-      lines.push({ date, issue, what: rest.join(' | '), category })
+      lines.push({ date, issue, what: rest.join(' | '), category, destination })
     }
   }
   return lines
