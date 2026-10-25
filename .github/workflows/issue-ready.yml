@@ -1,0 +1,158 @@
+name: Issue ready
+
+# Gate 1 of the factory (docs/factory.md) as a check on the issues of the people who work on the
+# repository (author_association OWNER, MEMBER or COLLABORATOR, and open): runs `lint-issue`, then
+# adds or removes the label `ready`, keeps one comment with the report and moves the organisation
+# project's Status to Ready (a fail moves a Ready issue back to Todo, never adds the issue). Call it from a workflow that runs on issues:
+#
+#   on:
+#     issues:
+#       types: [opened, edited]
+#   jobs:
+#     issue-ready:
+#       permissions:
+#         contents: read
+#         issues: read
+#       uses: bogd3v/micelio-engineering/.github/workflows/issue-ready.yml@<commit SHA> # <tag>
+#       with:
+#         tools-ref: <the same commit SHA>
+#       secrets:
+#         MICELIO_BOT_PRIVATE_KEY: ${{ secrets.MICELIO_BOT_PRIVATE_KEY }}
+#
+# The issue's title and body are untrusted: they are read by `lint-issue` through the API and never
+# reach a shell or an expression. The Micelio bot's token (docs/standard-sync.md) is limited to the
+# calling repository, Issues write and the organisation's Projects write; the lookups of
+# `lint-issue` use the runner's own token, which reads the calling repository and public repositories only.
+
+on:
+  workflow_call:
+    inputs:
+      tools-ref:
+        description: Commit SHA of the tools repository that holds @micelio/factory-tools (it is built from source until it is published)
+        type: string
+        required: true
+      tools-repository:
+        description: Repository that holds @micelio/factory-tools
+        type: string
+        default: bogd3v/micelio-engineering
+      project-owner:
+        description: Organisation that owns the project
+        type: string
+        default: bogd3v
+      project-number:
+        description: Number of the organisation project
+        type: number
+        default: 1
+      ready-status:
+        description: Status option of an issue that passes, found by name
+        type: string
+        default: Ready
+      not-ready-status:
+        description: Status option an issue starts in, which a pass moves to ready-status; found by name
+        type: string
+        default: Todo
+    secrets:
+      MICELIO_BOT_PRIVATE_KEY:
+        description: Private key of the Micelio bot app; the client id is the variable MICELIO_BOT_CLIENT_ID
+        required: true
+
+permissions: {}
+
+# The latest edit wins; a run that is waiting is replaced, one that is running is finished.
+concurrency:
+  group: issue-ready-${{ github.repository }}-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  issue-ready:
+    name: Issue ready
+    # Anyone can open an issue, and the label and the view start coding agents: only the people who
+    # work here are linted. An edit comes from the author or from someone with triage or more.
+    if: >-
+      github.event_name == 'issues' &&
+      github.event.issue.state == 'open' &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)
+    runs-on: ubuntu-latest
+    # lint-issue still has two quadratic regular expressions (follow-up of #36): a hostile body
+    # must not hold a runner.
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - name: Checkout the tools
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.tools-repository }}
+          ref: ${{ inputs.tools-ref }}
+          path: tools
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: tools/.nvmrc
+          cache: npm
+          cache-dependency-path: tools/package-lock.json
+
+      - name: Build the tools
+        working-directory: tools
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+
+      # Exit 0 passes and 1 fails a rule; 2 is an error and fails the job. The runner's token reads
+      # this repository and public ones only, so a "Depends on" cannot be used to probe a private repository.
+      - name: Lint the issue
+        id: lint
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          code=0
+          node tools/packages/factory-tools/dist/cli.js lint-issue "$REPOSITORY#$NUMBER" > "$RUNNER_TEMP/report.md" 2> "$RUNNER_TEMP/lint.err" || code=$?
+          # The report quotes the issue: keep the runner from reading `::commands::` in it.
+          token="$(uuidgen)"
+          echo "::stop-commands::$token"
+          cat "$RUNNER_TEMP/report.md" "$RUNNER_TEMP/lint.err"
+          echo "::$token::"
+          if [ "$code" -gt 1 ]; then
+            echo "::error::lint-issue could not read the issue (exit $code)"
+            exit 1
+          fi
+          echo "passed=$([ "$code" -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Mint a token for Micelio bot
+        id: token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.MICELIO_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.MICELIO_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: write
+          permission-organization-projects: write
+
+      - name: Label, comment and set the Status
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          REPOSITORY: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+          PASSED: ${{ steps.lint.outputs.passed }}
+          PROJECT: ${{ inputs.project-owner }}/${{ inputs.project-number }}
+          AUTHOR: ${{ steps.token.outputs.app-slug }}[bot]
+          ASSOCIATION: ${{ github.event.issue.author_association }}
+          STATE: ${{ github.event.issue.state }}
+          READY_STATUS: ${{ inputs.ready-status }}
+          NOT_READY_STATUS: ${{ inputs.not-ready-status }}
+        run: |
+          node tools/packages/factory-tools/dist/cli.js issue-ready "$REPOSITORY#$NUMBER" \
+            --passed "$PASSED" \
+            --report "$RUNNER_TEMP/report.md" \
+            --project "$PROJECT" \
+            --author "$AUTHOR" \
+            --association "$ASSOCIATION" \
+            --state "$STATE" \
+            --ready-status "$READY_STATUS" \
+            --not-ready-status "$NOT_READY_STATUS"

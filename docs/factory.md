@@ -73,7 +73,7 @@ A gate is a list evaluated by a machine, the maintainer, or an agent other than 
 
 **Passes when:** the title has a conventional prefix, with `!` when it breaks a contract; the five parts of the task template (section 12) are present and not empty; every acceptance criterion can be verified by a test or a command (section 12), apart from the fixed maintainer criterion; the issue names at least one path and one ADR or document; it has an "Out of scope" line; it has the fixed criterion "Verified by the maintainer on Docker", or on the run the repository's `AGENTS.md` names instead (see [Docker](#docker)), and a Delivery section; every issue it "Depends on" is closed.
 
-**Fails when:** any of those lines is missing. The master moves the issue back to Backlog, leaves the report as a comment and does not add the `ready` label. It never fixes the issue itself.
+**Fails when:** any of those lines is missing. The issue stays in Todo without the `ready` label, with the report as a comment (the `issue-ready` workflow, #40, does this and moves a Ready issue back to Todo; the master only reads it). It never fixes the issue itself.
 
 ### Gate 2 · Worker self-check
 

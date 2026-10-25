@@ -1,0 +1,91 @@
+{
+  "data": {
+    "organization": {
+      "projectV2": {
+        "id": "PVT_kwDOE_m_z84Bn8wb",
+        "fields": {
+          "nodes": [
+            {},
+            {},
+            {
+              "id": "PVTSSF_lADOE_m_z84Bn8wbzhmfBh0",
+              "name": "Status",
+              "options": [
+                {
+                  "id": "f75ad846",
+                  "name": "Todo"
+                },
+                {
+                  "id": "47fc9ee4",
+                  "name": "In Progress"
+                },
+                {
+                  "id": "98236657",
+                  "name": "Done"
+                }
+              ]
+            },
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {
+              "id": "PVTSSF_lADOE_m_z84Bn8wbzhnB4kw",
+              "name": "Front",
+              "options": [
+                {
+                  "id": "47d2c1cf",
+                  "name": "Themes"
+                },
+                {
+                  "id": "b66c961e",
+                  "name": "Fediverse"
+                },
+                {
+                  "id": "f6826ba9",
+                  "name": "Foundations"
+                },
+                {
+                  "id": "61f3d615",
+                  "name": "Plugin core"
+                },
+                {
+                  "id": "85c9a09f",
+                  "name": "Builder"
+                }
+              ]
+            },
+            {
+              "id": "PVTSSF_lADOE_m_z84Bn8wbzhnB4l0",
+              "name": "Release line",
+              "options": [
+                {
+                  "id": "c3ab0161",
+                  "name": "0.5"
+                },
+                {
+                  "id": "f0546171",
+                  "name": "0.6"
+                },
+                {
+                  "id": "9fa44fbc",
+                  "name": "0.7"
+                },
+                {
+                  "id": "2275076e",
+                  "name": "later"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -10,7 +10,7 @@ Read: the epic, its issues (`gh issue view <n> --comments`), the organisation pr
 
 For each issue:
 
-1. **Gate 1** — check the issue against the list in `docs/factory.md` (with `lint-issue` once it exists). If a line fails, move it back to Backlog for the planner with the report as a comment; never fix it or start it half ready.
+1. **Gate 1** — check the issue against the list in `docs/factory.md` (with `lint-issue` once it exists). If a line fails, it stays in Todo without the `ready` label, with the report as a comment (the `issue-ready` workflow does this once it runs); tell the planner, never fix it or start it half ready.
 2. **Worker** — start one worker per ready issue, in its own worktree and branch, with the issue number and the paths it needs.
 3. **Gate 2** — when the worker hands back, check that its draft has every section and the real output of its commands.
 4. **Gate 3** — start a new reviewer agent. Give it the worktree, the branch, the issue, and the path of the draft (for its "Instructions that were wrong or missing" section only); nothing else from the worker's session. You decide the gate: zero Blocking, each Important fixed or justified in the draft.

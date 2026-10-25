@@ -10,13 +10,15 @@ on:
     branches: [main]
   schedule:
     - cron: '23 4 * * 1'
+  issues:
+    types: [opened, edited]
   workflow_dispatch:
 
 permissions: {}
 
 jobs:
   check:
-    if: ${{ github.event_name != 'schedule' }}
+    if: ${{ github.event_name != 'schedule' && github.event_name != 'issues' }}
     permissions:
       contents: read
     uses: ./.github/workflows/check.yml
@@ -33,7 +35,7 @@ jobs:
     uses: ./.github/workflows/dco.yml
 
   scorecard:
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name != 'pull_request' && github.event_name != 'issues' }}
     permissions:
       contents: read
       actions: read
@@ -43,7 +45,7 @@ jobs:
 
   # A dry run: prints the notes the fixture's fixed plan would publish and changes nothing.
   release:
-    if: ${{ github.event_name != 'schedule' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ github.event_name != 'schedule' && github.event_name != 'issues' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     # A called workflow cannot ask for more than its caller grants, also in a job that is skipped:
     # the publish job of release.yml asks for packages: write and id-token: write, so the call
     # grants them even though a dry run never reaches it.
@@ -61,3 +63,16 @@ jobs:
       sbom: false
       compatibility: |
         - Node: 22
+
+  # Gate 1 on this repository's own issues. `issues` events run from the default branch, so the
+  # workflow is tried here only after it is merged.
+  issue-ready:
+    if: ${{ github.event_name == 'issues' }}
+    permissions:
+      contents: read
+      issues: read
+    uses: ./.github/workflows/issue-ready.yml
+    with:
+      tools-ref: ${{ github.sha }}
+    secrets:
+      MICELIO_BOT_PRIVATE_KEY: ${{ secrets.MICELIO_BOT_PRIVATE_KEY }}
