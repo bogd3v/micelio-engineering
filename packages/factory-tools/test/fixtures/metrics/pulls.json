@@ -1,0 +1,323 @@
+[
+  {
+    "number": 49,
+    "title": "docs(factory): ask the pull request for the learning, move ship-pr here and sync the factory files",
+    "state": "closed",
+    "merged_at": "2026-10-24T18:42:55Z",
+    "created_at": "2026-10-24T18:41:07Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "body": "Closes #37"
+  },
+  {
+    "number": 48,
+    "title": "feat(factory): lint-issue, the Definition of Ready as a script",
+    "state": "closed",
+    "merged_at": "2026-10-24T16:30:16Z",
+    "created_at": "2026-10-24T16:28:18Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "body": "Closes #36"
+  },
+  {
+    "number": 47,
+    "title": "docs(factory): write the pipeline, the gates and the five role prompts",
+    "state": "closed",
+    "merged_at": "2026-10-24T16:09:51Z",
+    "created_at": "2026-10-24T15:53:40Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "body": "Closes #35"
+  },
+  {
+    "number": 46,
+    "title": "fix(template): format labels.json so verify:template passes",
+    "state": "closed",
+    "merged_at": "2026-10-24T15:12:32Z",
+    "created_at": "2026-10-24T15:11:30Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "body": "Refs #35"
+  },
+  {
+    "number": 33,
+    "title": "ci(workflows): publish a root package from the reusable release, and sync the standard to micelio-plugin-core",
+    "state": "closed",
+    "merged_at": "2026-10-23T21:34:40Z",
+    "created_at": "2026-10-23T21:04:57Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 1,
+      "title": "Micelio · Bases por producto"
+    },
+    "body": "Refs #30"
+  },
+  {
+    "number": 32,
+    "title": "fix(template): create the labels that pr-labels.yml and the release notes use",
+    "state": "closed",
+    "merged_at": "2026-10-23T21:34:21Z",
+    "created_at": "2026-10-23T20:58:50Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 1,
+      "title": "Micelio · Bases por producto"
+    },
+    "body": "Closes #31"
+  },
+  {
+    "number": 29,
+    "title": "ci(dco): drop the author-email exemption of the bots",
+    "state": "closed",
+    "merged_at": "2026-10-23T03:24:07Z",
+    "created_at": "2026-10-23T03:10:42Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "body": "Refs #2"
+  },
+  {
+    "number": 28,
+    "title": "ci(dependabot): never propose a major version",
+    "state": "closed",
+    "merged_at": "2026-10-23T02:33:26Z",
+    "created_at": "2026-10-23T02:29:16Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "body": "Refs #2"
+  },
+  {
+    "number": 27,
+    "title": "ci: Bump actions/create-github-app-token from 3.2.0 to 3.3.0 in the actions group",
+    "state": "closed",
+    "merged_at": "2026-10-23T02:06:34Z",
+    "created_at": "2026-10-23T01:49:21Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "dependabot[bot]"
+    },
+    "milestone": null,
+    "body": ""
+  },
+  {
+    "number": 26,
+    "title": "chore(deps-dev): Bump typescript from 5.9.3 to 7.0.2",
+    "state": "closed",
+    "merged_at": null,
+    "created_at": "2026-10-23T01:48:01Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "dependabot[bot]"
+    },
+    "milestone": null,
+    "body": ""
+  },
+  {
+    "number": 25,
+    "title": "ci(dependabot): apply the template's configuration to this repository",
+    "state": "closed",
+    "merged_at": "2026-10-23T01:46:48Z",
+    "created_at": "2026-10-23T01:45:40Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "body": "Refs #2"
+  },
+  {
+    "number": 24,
+    "title": "chore(release): eslint-config 0.1.2",
+    "state": "closed",
+    "merged_at": "2026-10-23T00:39:54Z",
+    "created_at": "2026-10-23T00:38:17Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "body": "Refs #2"
+  },
+  {
+    "number": 23,
+    "title": "docs(standard): report vulnerabilities through the organisation's security policy",
+    "state": "closed",
+    "merged_at": "2026-10-23T00:31:19Z",
+    "created_at": "2026-10-23T00:30:15Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "body": "Refs #2"
+  },
+  {
+    "number": 22,
+    "title": "ci(standard-sync): mint the bot token with client-id, and note that scorecard needs a public repository",
+    "state": "closed",
+    "merged_at": "2026-10-22T23:06:14Z",
+    "created_at": "2026-10-22T23:04:55Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "body": "Refs #5\nRefs #7"
+  },
+  {
+    "number": 21,
+    "title": "chore(release): eslint-config 0.1.1, and one version per package in t…",
+    "state": "closed",
+    "merged_at": "2026-10-22T22:29:10Z",
+    "created_at": "2026-10-22T22:27:25Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "body": "Refs #7"
+  },
+  {
+    "number": 20,
+    "title": "feat(template): add the repository template that applies the section 14 checklist",
+    "state": "closed",
+    "merged_at": "2026-10-22T21:17:12Z",
+    "created_at": "2026-10-22T21:15:00Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "body": "Refs #7"
+  },
+  {
+    "number": 19,
+    "title": "docs: add Micelio's contributing, governance, trademarks, ADR template and PR template",
+    "state": "closed",
+    "merged_at": "2026-10-22T19:51:59Z",
+    "created_at": "2026-10-22T19:50:06Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "body": "Refs #6"
+  },
+  {
+    "number": 18,
+    "title": "feat(standard): sync the standard with the Micelio bot and add lint:standard",
+    "state": "closed",
+    "merged_at": "2026-10-22T19:29:28Z",
+    "created_at": "2026-10-22T19:14:50Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "body": "Refs #5"
+  },
+  {
+    "number": 17,
+    "title": "fix(workflows): grant the release call the permissions its publish job asks for",
+    "state": "closed",
+    "merged_at": "2026-10-22T17:36:04Z",
+    "created_at": "2026-10-22T17:28:01Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "body": "The CI run on `main` after #16 ended in `startup_failure`, and #16 itself ran no checks. A called workflow cannot ask for more permissions than its caller grants, also in a job that is skipped. `release.yml`'s `publish` job asks for `packages: write` and `id-token: write`; `ci.yml` granted the relea"
+  },
+  {
+    "number": 16,
+    "title": "ci(workflows): add reusable check, dco, scorecard and release workflows",
+    "state": "closed",
+    "merged_at": "2026-10-22T17:25:41Z",
+    "created_at": "2026-10-22T17:23:06Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "body": "Every repository carries its own copy of the same workflows, so a fix is a pull request per repository. Refs #4"
+  },
+  {
+    "number": 15,
+    "title": "feat(packages): add shared ESLint, TypeScript and Prettier configs",
+    "state": "closed",
+    "merged_at": "2026-10-21T16:34:07Z",
+    "created_at": "2026-10-21T16:33:33Z",
+    "base": {
+      "ref": "main"
+    },
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "body": "Refs #3"
+  }
+]

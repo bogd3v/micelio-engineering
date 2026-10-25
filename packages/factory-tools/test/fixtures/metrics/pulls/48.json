@@ -1,0 +1,15 @@
+{
+  "number": 48,
+  "additions": 1800,
+  "deletions": 4,
+  "changed_files": 42,
+  "user": {
+    "login": "ale9420"
+  },
+  "head": {
+    "sha": "3b75a9d40c547a336c764f6b31d30fdf8cda3eaa"
+  },
+  "base": {
+    "ref": "main"
+  }
+}

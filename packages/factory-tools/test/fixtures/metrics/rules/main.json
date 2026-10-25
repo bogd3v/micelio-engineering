@@ -1,0 +1,15 @@
+[
+  {
+    "type": "required_status_checks",
+    "parameters": {
+      "required_status_checks": [
+        {
+          "context": "check / Check"
+        },
+        {
+          "context": "dco / Signed-off-by"
+        }
+      ]
+    }
+  }
+]

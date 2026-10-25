@@ -1,0 +1,108 @@
+[
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T13:56:56Z",
+    "body": "**Findings from the master (Gate 1 run, 2026-10-24)** — none fixed, reported for the maintainer:"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:05:07Z",
+    "body": "Gate 1 by hand, 2026-10-24. One line per correction, to move into `docs/factory-log.md` when #38 lands.\nfactory-log | 2026-10-24 | #35 | Criterion \"a reviewer can name…\" was not checkable; prompts pointed at a `.claude/` that does not exist here | issue\nfactory-log | 2026-10-24 | #37 | Wrong path (`PULL_REQUEST_TEMPLATE.md`); criterion depended on another issue (#739); sync extension was in Requirements, not in What to build | issue\nfactory-log | 2026-10-24 | #38 | No Requirements section; criterion used an unpublished `npx` command; undeclared dependency on #36 (same workspace) | issue\nfactory-log | 2026-10-24 | #39 | Fixtures had no path; undeclared dependencies on #36 and #38 | issue\nfactory-log | 2026-10-24 | #40 | Did not say how the bot token is minted nor that the `ready` label exists nowhere | issue\nfactory-log | 2026-10-24 | #41 | Fixture and output had no path, so the criterion could not be run | issue\nfactory-log | 2026-10-24 | #43 #44 | \"Verified on the fixture run\" was meaningless for tracking issues | issue\nfactory-log | 2026-10-24 | #45 | Criterion did not name the hash file nor the release line that starts the sync | issue\nfactory-log | 2026-10-24 | #42 micelio#739 micelio-cms#355 plugin-core#63 | No Requirements section; plugin-core#63 depended on #42 without saying so | issue"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:07:52Z",
+    "body": "**Findings from `worker-35` (#35):** (1) no root `README.md` in `micelio-engineering`, although standard section 1 lists it for every repository; #35 asked for a link from it, so the link went to `AGENTS.md` instead. (2) Confirms the 1.5 → 1.6 version clash for #45 reported above."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:17:00Z",
+    "body": "**Finding from `worker-36` (#36), for the pilot (#43) and the planner:** the first `lint-issue` run on the nine issues of \"Builder, fase 1 — Vista previa\" found that 8 of the 9 have no \"Out of scope\", and bogd3v/micelio-plugin-core#41 also has no Delivery section. The reports will be in the #36 pull request (`packages/factory-tools/test/fixtures/builder-fase-1/`)."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:28:50Z",
+    "body": "**Finding from `verifier-35` (#35), outside this milestone:** `npm run verify:template` fails on `main` at `a5952e1`: `[warn] .github/labels.json` / `Code style issues found` / `Error: Command failed: npm run check`. `template/.github/labels.json` (added by #32) is not Prettier-formatted. Running `npx prettier --write template/.github/labels.json` makes `verify:template` pass, as observed in a cle"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T16:08:15Z",
+    "body": "**Progress updated by the master** (Progress section only)."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T16:08:41Z",
+    "body": "**Correction by the master:** my previous edit replaced the planner's Progress entry of 2026-10-24 instead of appending to it. It is restored; my lines now follow it. Net change against the original body:"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T16:21:08Z",
+    "body": "**Finding from `worker-37` (#37), for the adoption phase (#42, micelio#739, micelio-cms#355, plugin-core#63):** `standard-sync.yml` only starts from a release whose notes say `Standard: X.Y`. Before the new files (role prompts, `ship-pr`, PR template) can reach the other repositories, two things must happen in order:"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T16:31:40Z",
+    "body": "**Epic checkbox ticked by the master:** `F3` #36 (merged in #48)."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T18:43:45Z",
+    "body": "**Epic checkbox ticked by the master:** `F5` #37 (merged in #49)."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T00:44:56Z",
+    "body": "**Epic checkbox ticked by the master:** `F4` #40 (merged in #50; live test passed on #51)."
+  },
+  {
+    "user": {
+      "login": "micelio-bot[bot]"
+    },
+    "created_at": "2026-10-25T00:45:10Z",
+    "body": "<!-- micelio:issue-ready -->\n**lint-issue** · `bogd3v/micelio-engineering#34` · 2026-10-25 · 4 of 7 rules fail",
+    "node_id": "IC_kwDOVRXJh88AAAABfPeShQ"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T01:44:03Z",
+    "body": "**Epic checkbox ticked by the master:** `F14` #42 (merged in #52)."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T01:44:27Z",
+    "body": "**Correction by the master:** the `F14` #42 tick above was premature, because #52 is not merged yet. It is unticked again."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T01:45:23Z",
+    "body": "**Epic checkbox ticked by the master:** `F14` #42 (merged in #52, 2026-10-25)."
+  }
+]

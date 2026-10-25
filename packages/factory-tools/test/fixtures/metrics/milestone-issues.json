@@ -1,0 +1,186 @@
+[
+  {
+    "number": 45,
+    "title": "docs(standard): version 1.5, the factory gates become rules",
+    "state": "open",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 44,
+    "title": "chore(factory): first retro",
+    "state": "open",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 43,
+    "title": "chore(factory): pilot, run Builder fase 1 through every gate",
+    "state": "open",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 42,
+    "title": "chore: adopt the factory",
+    "state": "open",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 41,
+    "title": "feat(factory): the factory-retro skill",
+    "state": "open",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 40,
+    "title": "ci(factory): issue-ready, the workflow that labels or comments",
+    "state": "open",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 39,
+    "title": "feat(factory): the Herdr master prompt and the blind-review and verify-pr skills",
+    "state": "open",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 38,
+    "title": "feat(factory): factory-log.md and the metrics script",
+    "state": "open",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 37,
+    "title": "docs(factory): the pull request template asks for the learning, and ship-pr moves here",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 36,
+    "title": "feat(factory): lint-issue, the Definition of Ready as a script",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 35,
+    "title": "docs(factory): the pipeline, the gates and the five role prompts",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 34,
+    "title": "Epic: Micelio software factory",
+    "state": "open",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [
+      {
+        "name": "épica"
+      }
+    ],
+    "pull_request": null,
+    "body": ""
+  }
+]

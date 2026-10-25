@@ -1,0 +1,9 @@
+[
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T18:42:06Z",
+    "body": "**Criterion 2, the Standard sync dry run** (run by the master on `docs/factory-37`, `version=1.5`, `dry-run=true`): https://github.com/bogd3v/micelio-engineering/actions/runs/40121842994. It would open `docs(standard): sync to 1.5` in `bogd3v/micelio`, `bogd3v/micelio-cms` and `bogd3v/micelio-plugin-core`, each carrying `.claude/agents/{master,planner,reviewer,verifier,worker}.md`, `.claude/skills"
+  }
+]

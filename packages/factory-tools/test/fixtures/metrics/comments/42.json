@@ -1,0 +1,58 @@
+[
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:07:51Z",
+    "body": "**Findings from `worker-35` (#35), for this issue:**"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T00:50:05Z",
+    "body": "**Gate 1 (master): ready, started** (`worker-42`, branch `chore/factory-42`, Sonnet). `lint-issue`: all 7 rules pass; #35, #37 and #40 are closed."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T00:57:31Z",
+    "body": "**Gate 3, round 1 (reviewer-42, Opus): 0 Blocking, 2 Important.** Report posted by the master.\n## 1. Correctness\n## 2. Contracts and the version\n## 3. Security and permissions\n## 4. Tests: `test/factory-files.test.ts`\n## 5. Documentation the change made false\n## 6. Scope\n## Could not check from this bundle (for the master or the verifier)"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T01:01:42Z",
+    "body": "**Gate 4 (verifier-42, Sonnet): Green, 0 mismatches.** Report posted by the master.\n## Criteria\n## Notes (non-blocking)\n## Verdict: Green"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T01:01:44Z",
+    "body": "**Draft pull request description** (`worker-42`). Posted by the master.\n## Problem\n## What changes\n## For review\n## Tests\n## Answers to review\n## Instructions that were wrong or missing\n## Not verified\n## Progress\n## Findings for the master"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T01:01:45Z",
+    "body": "**Gate 5 (master): ready for the maintainer.** Gate 3: 0 Blocking; the 2 Important findings (the section 13 production/staging limit, and the master's role in TEAM.md) were fixed and confirmed by the verifier. Gate 4: Green, 162 tests, copies byte-identical, `verify:template` and `verify:isolated` pass. Criterion 1 was met earlier by #50 and #51. **What the maintainer checks:** the whole diff, `gi"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T01:42:11Z",
+    "body": "**Progress updated by the master** (Progress section only). Pull request: #52."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T01:47:35Z",
+    "body": "factory-log | 2026-10-25 | #42 | TEAM.md left out section 13's production/staging limit and described the master as doing the work | docs"
+  }
+]

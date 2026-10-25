@@ -1,0 +1,135 @@
+[
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T13:56:43Z",
+    "body": "**Gate 1 (by hand, master): ready — started (`worker-35`, branch `docs/factory-35`).**"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:07:50Z",
+    "body": "**Finding from `worker-35` (#35) — needs a maintainer decision:** the maintainer's review levels (\"reports otherwise\") conflict with `docs/engineering-standard.md:336` (section 11: \"the human who opens the pull request has read the whole diff\"). The draft keeps the standard's rule in `docs/factory.md:116` until #45 or an ADR changes it. Options: (a) keep that (PR complies as is), (b) an ADR in `mi"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:18:01Z",
+    "body": "factory-log | 2026-10-24 | #35 | Gate lines written as list items; the fixed `**Evaluated by:**` / `**Fails when:**` lines and greps now answer 7 (issue edited mid-flight) | issue\nfactory-log | 2026-10-24 | #35 | Role prompts moved from a root `.claude/agents/` to `template/.claude/agents/`; `docs/template.md` row added (issue edited mid-flight) | issue\nfactory-log | 2026-10-24 | #35 | Reviewer prompt passed with unresolved Important findings, against gate 3 | docs\nfactory-log | 2026-10-24 | #35 | Gate 1 required \"Verified by the maintainer on Docker\", impossible in repositories without Docker | docs\nfactory-log | 2026-10-24 | #35 | Role prompts listed only part of the section 13 hard limits | standard\nfactory-log | 2026-10-24 | #35 | Worker prompt told agents to edit the synced standard on their branch (conflicts with section 16 and `lint:standard`) | standard"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:37:33Z",
+    "body": "**Gate 3, round 1 (reviewer-35)** — report, posted by the master.\n## 1. Correctness and edge cases\n**B1. The gate lines do not match the format the issue fixes. The grep criterion answers 0, not 7.** `docs/factory.md:62`, `:64`, `:69`, `:71`, `:76`, `:78`, `:83`, `:85`, `:90`, `:92`, `:97`, `:99`, `:104`, `:106`\n**B2. The five prompts are in the wrong directory.** `.claude/agents/{planner,master,worker,reviewer,verifier}.md` (new files at the repository root)\n**B3. The `docs/template.md` row is missing.** `docs/template.md` (not in the diff)\n## 2. Contracts and version bump\n## 3. Security and permissions (standard section 13 hard limits)\n## 4. Tests that would fail without the change (acceptance criteria)\n## 5. Documentation the change made false\n## 6. Scope\n## \"Instructions that were wrong or missing\": judgment\n## Findings for the master"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:37:34Z",
+    "body": "**Gate 3, round 2 (reviewer-35-r2)** — report, posted by the master.\n## Acceptance criteria I could compute from the diff\n## 1. Correctness and edge cases\n## 2. Contracts and version bump\n## 3. Security and permissions\n## 4. Tests that would fail without the change\n## 5. Documentation the change made false\n## 6. Scope\n## `instructions-wrong.md`\n## Findings for the master"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:37:35Z",
+    "body": "**Gate 4, after round 2 (verifier-35)** — report, posted by the master.\n## How the clean copy was built\n## Tests section: reported vs observed\n**Mismatches: 0.**\n## Acceptance criteria\n## \"What I could not verify\": results\n## Blocking items and fixes\n## Findings for the master"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:37:36Z",
+    "body": "**Gate 3, round 3 (reviewer-35-r3)** — report, posted by the master.\n## Acceptance criteria I could compute from the diff\n## Blocking\n## Important\n## Suggestion\n## Judgement of `instructions-wrong.md`\n## Findings for the master"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:37:37Z",
+    "body": "factory-log | 2026-10-24 | #35 | Gate 3 required every named wrong instruction to be corrected on the branch, including the standard and the issue | docs\nfactory-log | 2026-10-24 | #35 | A blind reviewer cannot judge \"Important fixed or justified\"; the master decides gate 3 | docs\nfactory-log | 2026-10-24 | #35 | The verifier's \"clean copy\" of the worktree carried ignored files (`node_modules`, `.env`) | docs\nfactory-log | 2026-10-24 | #35 | No role owned the issue's Progress section | docs\nfactory-log | 2026-10-24 | #35 | The pipeline diagram departed from the plan (8th stage and the one loop); the worker said the export had lost it | issue\nfactory-log | 2026-10-24 | #35 | `verify:template` failed on `main` because of an unformatted `template/.github/labels.json` (#32); separate `fix(template)` PR | lint"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:37:50Z",
+    "body": "**Escalated to the maintainer (master): Gate 3 is still red after three rounds.** Under the master prompt, the factory stops here. `worker-35` is idle, with round 3 uncommitted on top of `bf5e01c`."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:06:26Z",
+    "body": "Maintainer approved a 4th round (master). B1 decision: the maintainer reads the whole diff before confirming `git commit -s`; until #45 the review levels only order the reading. `worker-35` is on round 4."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:13:36Z",
+    "body": "**Gate 3, round 4 (reviewer-35-r4): Red, 1 Blocking, 4 Important.** Report posted by the master.\n## Blocking\n## Important\n## Suggestion\n## Checks in the order of section 11\n## Judgement of `instructions-wrong.md`\n## Findings for the master"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:13:37Z",
+    "body": "factory-log | 2026-10-24 | #35 | The maintainer could sign off at gate 5 after reading only the reports, against section 11 | standard\nfactory-log | 2026-10-24 | #35 | The worker prompt allowed unsigned commits before gate 5 | docs\nfactory-log | 2026-10-24 | #35 | The verifier saw the reviewer's findings through the draft and the issue comments | docs\nfactory-log | 2026-10-24 | #35 | The doc and the master prompt disagreed on who opens a `docs(standard)` issue | docs"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:14:30Z",
+    "body": "Maintainer approved round 5 (master): fix B1 (YAML frontmatter, plus a template test that parses it) and I1–I4. Then a fresh review; on 0 Blocking, verification and gate 5. Further Important findings go to a follow-up issue instead of another round."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:20:29Z",
+    "body": "**Gate 3, round 5 (reviewer-35-r5): Pass, 0 Blocking, 0 Important.** Report posted by the master.\n## What changed since the previous round, and whether it holds\n## Findings (changed text)\n## Acceptance criteria (computed from the diff)\n## Contracts and version bump\n## Security and permissions\n## Documentation made false / scope\n## `instructions-wrong.md`\n## Follow-up (unchanged text; for the maintainer's follow-up issue)\n## Findings for the master"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:24:26Z",
+    "body": "**Gate 4 (verifier-35-r2, Sonnet): 1 mismatch, description only.** All four criteria pass on `origin/main` 35cc8e5 + the change, `verify:template` included. The draft still said exit 1 (written before #46 merged). The master rebased `docs/factory-35` onto 35cc8e5 (local only; remote still at `bf5e01c`); worker-35 is correcting the draft. Report posted by the master.\n## Commands vs draft\n## Acceptance criteria\n## \"What I could not verify\"\n## Verdict: **Red** (1 mismatch)\n## Findings for the master"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:25:40Z",
+    "body": "**Draft pull request description** (`worker-35`, after round 5 and the Gate 4 correction). Posted by the master.\n## Problem\n## What changes\n## For review\n## Tests\n## Instructions that were wrong or missing\n## What I could not verify\n## Findings for the master\n## Answers to review"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:25:41Z",
+    "body": "**Gate 5 (master): ready for the maintainer.**"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:53:51Z",
+    "body": "Pull request opened: #47 (`Closes #35`), by the master after the maintainer's sign-off."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T16:07:52Z",
+    "body": "**Progress updated by the master** (Progress section only, under the maintainer's rule of 2026-10-24)."
+  }
+]

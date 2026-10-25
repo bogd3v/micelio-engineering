@@ -1,0 +1,79 @@
+[
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T16:10:36Z",
+    "body": "**Gate 1 (master): ready, started** (`worker-37`, branch `docs/factory-37`, Sonnet). Evidence: `lint-issue` from #36's branch answers \"all 7 rules pass\". Dependency #35 is closed (#47)."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T16:25:02Z",
+    "body": "**Gate 3, round 1 (reviewer-37, Opus): 0 Blocking, 3 Important, 7 Suggestion.** Report posted by the master. The master sends the 3 Important findings back before verification.\n## 1. Correctness and edge cases\n## 2. Contracts and the version bump\n## 3. Security and permissions\n## 4. Tests that would fail without the change\n## 5. Documentation the change made false\n## 6. Scope and size\n## Suggestions\n## `instructions-wrong.md`"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T16:30:25Z",
+    "body": "**Gate 3, round 2 (reviewer-37-r2, Opus): 0 Blocking, 2 Important.** Fix 3 is correct; fixes 1 and 2 are incomplete. Report posted by the master.\n## Verdict\n## 1. Correctness and edge cases\n## 2. Contracts and the version bump\n## 3. Security and permissions\n## 4. Tests that would fail without the change\n## 5. Documentation the change made false\n## 6. Scope and size\n## `instructions-wrong.md`\n## Follow-up (new, outside the delta, not Blocking)"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T16:31:00Z",
+    "body": "factory-log | 2026-10-24 | #37 | The new hash check would turn consumers red on the eslint-config MINOR before their files are synced | docs\nfactory-log | 2026-10-24 | #37 | The PR template said a wrong skill is fixed on the branch, which is false for synced files | docs\nfactory-log | 2026-10-24 | #37 | The hash completeness test passed when a file under a listed folder had no hash | test"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T16:36:37Z",
+    "body": "**Gate 3, round 3 (reviewer-37-r3, Opus): Pass, 0 Blocking, 2 Important (small doc edits in new text).** The maintainer approved a short round 4 for I1 and I2, then verification. Report posted by the master.\n## Verdict\n## 1. Correctness and edge cases\n## 2. Contracts and the version bump\n## 3. Security and permissions\n## 4. Tests that would fail without the change\n## 5. Documentation the change made false\n## 6. Scope\n## `instructions-wrong.md`\n## Follow-up (new findings in unchanged text, not Blocking)"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T18:13:16Z",
+    "body": "**Gate 3, round 4 (reviewer-37-r4, Opus): 0 Blocking, 2 Important. Maintainer decision: no Dependabot ignore; a lone eslint-config update that fails is closed and the next sync PR carries the upgrade.** Report posted by the master.\n## What changed\n## Rebase: nothing dropped\n## Requested checks\n## Findings\n## Instructions that were wrong or missing\n## Scope and size\n## Follow-up (outside the delta)"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T18:20:16Z",
+    "body": "**Gate 4 (verifier-37, Sonnet): Green, 0 mismatches.** Report posted by the master."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T18:20:18Z",
+    "body": "**Draft pull request description** (`worker-37`). Posted by the master.\n## Problem\n## What changes\n## For review\n## Tests\n## Instructions that were wrong or missing\n## Not verified\n## Text for the issue's Progress section\n## Findings for the master\n## Answers to review\n## Follow-up"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T18:20:20Z",
+    "body": "**Gate 5 (master): ready for the maintainer.** Gate 3 passed in round 4, with the maintainer's Dependabot decision applied. Gate 4: Green, 0 mismatches, 125 tests, `verify:template` and `verify:isolated` pass. The branch is on `main` `34eecbd`. **What the maintainer checks:** the whole diff (`git -C ../wt-37 diff 34eecbd`, 22 files, +411/−55). After the push, the master dispatches the Standard syn"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T18:42:15Z",
+    "body": "**Progress updated by the master** (Progress section only). Pull request: #49."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T18:45:41Z",
+    "body": "factory-log | 2026-10-24 | #37 | The Dependabot ignore for eslint-config was not synced and blocked rule-only releases; replaced by close-and-sync | docs"
+  }
+]

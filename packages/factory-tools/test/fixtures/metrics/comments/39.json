@@ -1,0 +1,51 @@
+[
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:24:00Z",
+    "body": "**Findings from `reviewer-35-r2` (#35), for the Herdr master prompt:**"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:29:48Z",
+    "body": "**Process finding from the master (#35), for the Herdr master prompt:** the maintainer typed into a worker's pane directly (\"commit and push\"). The worker obeyed, and `bf5e01c` was committed and pushed before Gate 4. The maintainer has since confirmed this was a mistake, and the content was verified unchanged. Two lessons for this issue. (1) Claude Code shows suggested next prompts in an idle work"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:17:43Z",
+    "body": "**Finding from the master, for the Herdr master prompt: token budget.** These numbers were measured from the session transcripts of #35 and #36 on 2026-10-24."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:49:33Z",
+    "body": "**Maintainer decision (2026-10-24): a fixed model per role.** Recorded by the master."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T16:07:53Z",
+    "body": "**Maintainer decision (2026-10-24), for the master prompt:** the master may edit issue bodies in its own milestone, but only the text under `### Progress` and the epic's checkboxes. It never touches the title, criteria or scope. The edit is scripted to replace only that section, and the master posts the before/after diff as a comment. This replaces 'never edit an issue's body'. `template/.claude/a"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T16:43:14Z",
+    "body": "**Finding from `worker-40` (#40), for the prompts:** `docs/factory.md` gate 1 and `template/.claude/agents/master.md` send a failing issue 'back to Backlog', but the project's columns are Todo, Ready (being added), In Progress and Done; there is no Backlog. One wording is needed: 'Todo, without the `ready` label' is what #40's workflow implements."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T18:14:53Z",
+    "body": "**Findings from `worker-38` (#38), for the master prompt and the reviewer/verifier skills:** `metrics` parses the master's gate comments by their first line (`**Gate 3, round N (…)**`, `**Gate 4 (…)**`, Gate 1 'ready / not ready / held') from one login, and Blocking-by-category needs a fixed finding format. Fix both formats in the prompt and the `blind-review`/`verify-pr` skills (e.g. findings as "
+  }
+]

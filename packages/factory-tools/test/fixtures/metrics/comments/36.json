@@ -1,0 +1,142 @@
+[
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T13:56:44Z",
+    "body": "**Gate 1 (by hand, master): not ready — not started.**"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:02:05Z",
+    "body": "factory-log | 2026-10-24 | #36 | Gate 1 by hand: acceptance criterion 2 named no command or file; the Task template was not cited; the first criterion depended on an unpublished package. Body refined by the planner: fixtures under `test/fixtures/` read with `--file`, the nine pilot reports saved as fixtures, `npm run lint-issue --workspace` as the pre-publish form, the template path cited. | issue"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:07:47Z",
+    "body": "**Gate 1 re-run (master): ready — started (`worker-36`, branch `feat/factory-36`).** Every criterion names a command; the cited `template/.github/ISSUE_TEMPLATE/task.md` exists; the nine targets (plugin-core#41–47, micelio#729–730) are open in \"Micelio · Builder, fase 1 — Vista previa\"."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:16:57Z",
+    "body": "**Finding from `worker-36` (#36), for this issue:** the Requirements say \"the first publish is the release workflow's, #30\", but #30 (landed in PR #33) publishes a root package of another repository and does not mention `@micelio/factory-tools`. `.github/workflows/publish-packages.yml:10-13` lists tags for the three configuration packages only, so pushing `factory-tools-v0.1.0` would publish nothi"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:23:58Z",
+    "body": "factory-log | 2026-10-24 | #36 | Body-wide rules read HTML comments and code fences: the Task template's own comment passed `citations` | test\nfactory-log | 2026-10-24 | #36 | A subheading ended its parent section, so structured parts counted as empty | test\nfactory-log | 2026-10-24 | #36 | \"Depends on\" captured the rest of the line, turning other references into dependencies | test\nfactory-log | 2026-10-24 | #36 | Headings matched only by exact name (`## Out of scope (…)` failed) | test\nfactory-log | 2026-10-24 | #36 | `depends-on` said to need the network; it has an offline fixture, and the nine pilot bodies were not saved as regression inputs | issue"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:06:45Z",
+    "body": "**Gate 3, round 1 (reviewer-36): 1 Blocking, 3 Important**: report posted by the master.\n## 1. Correctness and edge cases\n**B1. The rules that scan the whole body also read the HTML comments, so the Task template alone passes `citations`.** `packages/factory-tools/src/rules.ts:66` (`citations(issue.body)`), also `:89` (`BREAKING` on the raw body), `:133-135` (the \"Out of scope\" line scan) and `:171-174` (the \"Depends on\" line scan).\n## 2. Contracts and the version bump\n## 3. Security and permissions\n## 4. Tests\n## 5. Documentation the change made false\n## 6. Scope\n## `instructions-wrong.md`\n## Findings for the master"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:06:46Z",
+    "body": "**Gate 3, round 2 (reviewer-36-r2): 0 Blocking, 4 Important**: report posted by the master.\n## 1. Correctness and edge cases\n## 2. Contracts and the version bump\n## 3. Security and permissions\n## 4. Tests that would fail without the change\n## 5. Documentation the change made false\n## 6. Scope\n## The points in `instructions-wrong.md`\n## Findings for the master"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:06:47Z",
+    "body": "**Gate 4 (verifier-36): Green, 0 mismatches**: report posted by the master.\n## Setup\n## Tests section: reported vs observed\n## Acceptance criteria\n## Extra checks\n## \"Not verified\" items, tried\n## Verdict\n## Findings for the master"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:06:49Z",
+    "body": "**Draft pull request description** (`worker-36`, round 2): posted by the master.\n## Problem\n## What changes\n## For review\n## Tests\n## Round 2\n## Instructions that were wrong or missing\n## Not verified\n## Findings for the master"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:06:50Z",
+    "body": "**Gate 5 (master): ready for the maintainer.**"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:10:23Z",
+    "body": "Gate 5 (master): the maintainer ran the criterion 1 fixture run, OK. The maintainer decided to fix I1 (a `- BREAKING CHANGE:` bullet is a false pass of `title`) before delivery. `worker-36` is on round 3; a fresh review and verification follow."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:21:47Z",
+    "body": "**Gate 3, round 3 (reviewer-36-r3): Red, 1 Blocking, 8 Important, 10 Suggestion.** Report posted by the master. This round's brief did not yet have the 'focus on what changed' rule.\n## 1. Correctness and edge cases\n**B1. `HEADING` backtracks in cubic time: one line of the untrusted body hangs the command.** `packages/factory-tools/src/issue.ts:32` (`/^(#{1,6})\\s+(.+?)\\s*#*\\s*$/`). It runs on every body line at `src/issue.ts:97`. The lazy `.+?`, followed by two adjacent `\\s*` around `#*`, retries every split of a whitespace run at every position. Measured on `'# a' + ' '.repeat(n) + '!'`: n=1000 takes 0.24 s,\n## 2. Contracts, the version bump, metadata, licence and wiring\n## 3. Security and permissions\n## 4. Tests\n## 5. Documentation the change made false\n## 6. Scope and size\n## Suggestions\n## `instructions-wrong.md`\n## Findings for the master"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:21:48Z",
+    "body": "factory-log | 2026-10-24 | #36 | A `- BREAKING CHANGE:` bullet was a false pass of the `title` rule | test\nfactory-log | 2026-10-24 | #36 | Test names referred to review labels (B1, I1) that no future reader has | docs"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:23:31Z",
+    "body": "Maintainer approved round 4 (master): fix B1 and I1 (regexes with super-linear backtracking on untrusted bodies), with timing tests. I2–I4 (footer counted as content, \"Depends on\" stopping at `(`, `## Why?`) go to a follow-up issue; I5–I8 are already settled (MIT-0 is the repository's licence; root wiring was proven by verifier-36; `docs/factory.md` arrives with #35; the size is explained)."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:32:54Z",
+    "body": "**Gate 3, round 4 (reviewer-36-r4): Pass, 0 Blocking.** Follow-up from unchanged text: `filePaths` `[.:!?]+$` (`src/rules.ts:211`) and `ISSUE_REF` (`src/rules.ts:59`) are still quadratic (1.5–2.5 s at 65,000 characters). Report posted by the master.\n## Method\n## 1. Is each rewrite linear?\n## 2. Is the behaviour unchanged?\n## 3. Do the timing tests fail on the old regex, and is the bound sound?\n## Findings in the changed text\n## Follow-up (unchanged text; not Blocking)\n## `instructions-wrong.md`\n## Scope and size\n## Findings for the master"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:35:23Z",
+    "body": "**Gate 4 (verifier-36-r2, Sonnet): Green, 0 mismatches.** Report posted by the master.\n## Commands\n## Acceptance criteria\n## Extra checks\n## Timing tests (`linear time on a long line of an untrusted body`, limit 200 ms), three runs\n## \"Not verified\" items in the draft\n## Verdict: **Green**, 0 mismatches\n## Findings for the master"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:35:25Z",
+    "body": "**Draft pull request description** (`worker-36`, after round 4). Posted by the master.\n## Problem\n## What changes\n## For review\n## Tests\n## Instructions that were wrong or missing\n## Not verified\n## Findings for the master\n## Answers to review"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:35:26Z",
+    "body": "**Gate 5 (master): ready for the maintainer, again.**"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T15:35:27Z",
+    "body": "factory-log | 2026-10-24 | #36 | Heading, title, `clean()` and `BREAKING` regexes backtracked super-linearly on untrusted bodies (cubic for headings) | test"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T16:28:40Z",
+    "body": "**Progress updated by the master** (Progress section only). Pull request: #48."
+  }
+]
