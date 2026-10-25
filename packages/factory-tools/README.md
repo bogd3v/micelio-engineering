@@ -27,6 +27,25 @@ read.
 - `depends-on`: depends on bogd3v/micelio-plugin-core#44 is open.
 ```
 
+## `issue-ready`
+
+Turns the result of `lint-issue` into a label, a comment and a project Status; the `issue-ready`
+workflow (`docs/workflows.md`) runs it with the Micelio bot's token in `GH_TOKEN`.
+
+```bash
+factory-tools issue-ready <owner/repo#n> --passed <true|false> --report <file> \
+  --project <owner/number> --author <login> --association <author_association> --state <open|closed> \
+  [--ready-status Ready] [--not-ready-status Todo]
+```
+
+An issue that is closed, or whose author is not an `OWNER`, `MEMBER` or `COLLABORATOR`, is skipped
+(`skipped: …`, exit 0). A pass adds the issue to the project and sets Ready; a fail never adds it
+and only moves a Status that is Ready back to Todo.
+
+It prints one line per change and exits 0, or 2 with the reason (for example a Status option the
+project does not have; nothing is changed then). The logic is tested against recorded API
+responses in `test/fixtures/ready/`, with no network.
+
 ## Rules
 
 | Rule           | Passes when                                                                                                                                                                                                                                                                |
