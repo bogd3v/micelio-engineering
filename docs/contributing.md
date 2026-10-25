@@ -27,9 +27,9 @@ Every commit must be signed off, certifying the [Developer Certificate of Origin
 git commit -s -m "fix(newsletter): …"
 ```
 
-This adds a `Signed-off-by: Your Name <you@example.com>` line that must match the commit's author. The `DCO` check fails a pull request with a commit that lacks it; to fix the last commits, run `git rebase --signoff main` and force-push the branch.
+This adds a `Signed-off-by: Your Name <you@example.com>` line that must match the commit's author. The `DCO` check fails a pull request with a commit that lacks it; to fix the last commits, the human who reviewed them (the maintainer, never an agent) runs `git rebase --signoff main` and force-pushes the branch.
 
-The sign-off is a person's certification. A coding agent, or the Micelio bot, does not give it: the human who reviewed the change signs off, and the `Co-Authored-By` trailer names the tool (standard, section 13). The `DCO` check skips commits of the bot, which only syncs the standard and leaves the pull request to a human.
+The sign-off is a person's certification. A coding agent, or the Micelio bot, does not give it: the human who reviewed the change signs off, and the `Co-Authored-By` trailer names the tool (standard, section 13). In the Micelio factory the master may type the `git commit -s` for the maintainer, but only after the maintainer has written `approved, sign off #N` in the master's session, and with the maintainer's own name and email as the committer ([`factory.md`](factory.md), gate 5): the certification is still the maintainer's, and no agent signs off on its own. The `DCO` check skips commits of the bot, which only syncs the standard and leaves the pull request to a human.
 
 ## Pull requests
 

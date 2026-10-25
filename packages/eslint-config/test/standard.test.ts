@@ -202,7 +202,7 @@ describe('apply-standard', () => {
     )
   })
 
-  it('copies the synced files to the same path, skips the ones that do not exist, and then is in sync', () => {
+  it('copies the synced files to the same path, and then is in sync', () => {
     const dir = repo('1.3', 'older')
     const first = spawnSync('node', [APPLY, dir, source], { encoding: 'utf8' })
     expect(first.stderr).toContain('synced .claude/agents/worker.md')
@@ -211,7 +211,7 @@ describe('apply-standard', () => {
         readFileSync(join(ROOT, 'template', path), 'utf8')
       )
     }
-    expect(existsSync(join(dir, '.claude/skills/blind-review'))).toBe(false)
+    expect(existsSync(join(dir, '.claude/skills/blind-review/SKILL.md'))).toBe(true)
     expect(spawnSync('node', [APPLY, dir, source], { encoding: 'utf8' }).stdout.trim()).toBe(
       'unchanged'
     )
@@ -219,6 +219,13 @@ describe('apply-standard', () => {
     const again = spawnSync('node', [APPLY, dir, source], { encoding: 'utf8' })
     expect(again.stdout.trim()).toBe('changed')
     expect(readFileSync(join(dir, '.claude/agents/worker.md'), 'utf8')).not.toBe('edited by hand')
+  })
+
+  it('skips a listed path that does not exist in template/', () => {
+    const present = syncedFiles(['.claude/agents'])
+    expect(present.length).toBeGreaterThan(0)
+    expect(syncedFiles(['.claude/skills/not-landed-yet', '.claude/agents'])).toEqual(present)
+    expect(syncedFiles(['.claude/skills/not-landed-yet'])).toEqual([])
   })
 
   it('refuses a repository whose AGENTS.md has no pin', () => {

@@ -12,7 +12,7 @@ The engineering standard has one canonical copy, `docs/engineering-standard.md` 
 
 ## The files that travel with the standard
 
-Next to the standard, the sync carries the files of the factory that every repository must hold identically. They live under `template/` in this repository, and the list is data, `files` in `.github/standard-sync.json`: `.claude/agents` (the five role prompts), `.claude/skills/ship-pr`, `.claude/skills/blind-review`, `.claude/skills/verify-pr` and `.github/pull_request_template.md`. Each goes to the same path in the target repository, without `template/`. A listed path that does not exist yet (the last two skills arrive with #39) is skipped, not an error, so adding a skill is a line of data.
+Next to the standard, the sync carries the files of the factory that every repository must hold identically. They live under `template/` in this repository, and the list is data, `files` in `.github/standard-sync.json`: `.claude/agents` (the five role prompts), `.claude/skills/ship-pr`, `.claude/skills/blind-review`, `.claude/skills/verify-pr` and `.github/pull_request_template.md`. Each goes to the same path in the target repository, without `template/`. A listed path that does not exist yet is skipped, not an error, so adding a skill is a line of data.
 
 **Order of the first rollout.** The check only applies once a repository installs the `@micelio/eslint-config` that holds the file hashes, and a repository that does not have the canonical files then fails `npm run check` on a Dependabot minor update. So the order is:
 

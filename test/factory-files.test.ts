@@ -23,18 +23,12 @@ function filesAt(base: string, path: string): string[] {
     .flatMap((name) => filesAt(base, join(path, name)))
 }
 
-/** Listed in `standard-sync.json` before #39 adds them to `template/`; remove each one when its source lands. */
-const PENDING = ['.claude/skills/blind-review', '.claude/skills/verify-pr']
-
 describe("this repository's own factory files", () => {
   const template = join(ROOT, 'template')
 
   it('holds a byte-identical copy of every synced file that template/ has', () => {
-    for (const path of SYNCED.filter((p) => !PENDING.includes(p))) {
+    for (const path of SYNCED) {
       expect(filesAt(template, path).length, `${path} is missing from template/`).toBeGreaterThan(0)
-    }
-    for (const path of PENDING) {
-      expect(filesAt(template, path), `${path} landed: remove it from PENDING`).toEqual([])
     }
     expect(SYNCED).toContain('.claude/skills/ship-pr')
     expect(SYNCED).not.toContain('.claude/skills')
@@ -54,4 +48,31 @@ describe("this repository's own factory files", () => {
       expect(own, path).toEqual(source)
     }
   })
+})
+
+describe('the factory roles', () => {
+  const agents = join(ROOT, 'template/.claude/agents')
+  const skills = [
+    ...new Set([
+      ...readdirSync(join(ROOT, 'template/.claude/skills')),
+      ...readdirSync(join(ROOT, '.claude/skills')),
+    ]),
+  ]
+  const runbook = readFileSync(join(ROOT, 'herdr/master.md'), 'utf8')
+
+  it.each(readdirSync(agents).map((file) => file.replace(/\.md$/, '')))(
+    '%s has the Skill tool when its prompt or its runbook prompt names a skill',
+    (name) => {
+      const prompt = readFileSync(join(agents, `${name}.md`), 'utf8')
+      const prompted = runbook
+        .split('\n')
+        .filter((line) => line.includes(`herdr agent prompt ${name}-`))
+        .join('\n')
+      const named = skills.filter((skill) =>
+        new RegExp(`\`${skill}\`|${skill} skill`).test(`${prompt}\n${prompted}`)
+      )
+      const tools = /^tools: (.*)$/m.exec(prompt)?.[1]?.split(', ') ?? []
+      if (named.length > 0) expect(tools, named.join(', ')).toContain('Skill')
+    }
+  )
 })
