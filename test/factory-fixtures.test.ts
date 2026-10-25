@@ -36,10 +36,13 @@ function npmTest(dir: string): Run {
   return { code: result.status, output: `${result.stdout}${result.stderr}` }
 }
 
-/** The `ℹ <name> <n>` summary numbers of a `node --test` run, or of a draft's Tests section. */
+/**
+ * The summary numbers of a `node --test` run (`ℹ <name> <n>` from the spec reporter, `# <name> <n>`
+ * from TAP, the default of Node 22 when stdout is not a terminal), or of a draft's Tests section.
+ */
 function counts(text: string): Record<string, number> {
   const found: Record<string, number> = {}
-  for (const match of text.matchAll(/^ℹ (tests|pass|fail) (\d+)$/gm)) {
+  for (const match of text.matchAll(/^(?:ℹ|#) (tests|pass|fail) (\d+)$/gm)) {
     found[match[1] ?? ''] = Number(match[2])
   }
   return found
