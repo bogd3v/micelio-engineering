@@ -1,0 +1,9 @@
+[
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:12:40Z",
+    "body": "**Finding from `reviewer-35` (#35), for this issue:** standard section 13 (\"Keep the instructions true … when … this standard turns out to be wrong … correcting it is part of the task\") conflicts with section 16 (a change to the standard is a `docs(standard)` pull request to the canonical copy) and with `lint:standard` in every repository except `micelio-engineering`. A worker that follows section"
+  }
+]

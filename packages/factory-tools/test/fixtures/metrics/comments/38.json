@@ -1,0 +1,79 @@
+[
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T13:56:46Z",
+    "body": "**Gate 1 (by hand, master): not ready — not started.**"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:07:48Z",
+    "body": "**Gate 1 re-run (master): content passes; not started.** It now declares \"Depends on #36\", which is open, so the dependency rule fails until #36 merges. I start #38 then."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:23:59Z",
+    "body": "**Finding from `reviewer-35-r2` (#35), for this issue:** the correction log has no path to `main`. The master appends to `docs/factory-log.md` of `micelio-engineering` with Bash, often from another repository, but the master never commits or pushes, so the lines never land. Today they live as `factory-log |` comments on the issues, which this issue's criterion 2 moves into the file. Settle here wh"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T16:00:31Z",
+    "body": "**Finding from the master (PRs #46, #47), for this issue:** the factory's pull requests are opened from the maintainer's own account (`ale9420`), so GitHub does not let the maintainer approve them. There is no approval review to carry the `time:` line. On #46 it went in as a plain PR comment, written `time: 2 minute diff` instead of `time: 2m diff`. `metrics` should read the `time:` line from PR c"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T16:32:12Z",
+    "body": "**Gate 1 (master): ready, started** (`worker-38`, branch `feat/factory-38`, Sonnet). `lint-issue` on this issue answers all 7 rules pass, and its dependency #36 is closed (#48)."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T18:15:59Z",
+    "body": "**Maintainer decisions (2026-10-24), recorded by the master:** (1) criterion 1 is proved with `--milestone \"Micelio · Fábrica\"`, this repository's milestone, which has real gate data; Builder fase 1 lives in other repositories and has none yet. (2) No version bump in this PR: `@micelio/factory-tools` stays `0.1.0`, and the bump to `0.2.0` comes in a `chore(release)` PR (`AGENTS.md`)."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T18:44:20Z",
+    "body": "**Gate 3, round 1 (reviewer-38, Opus): Red, 1 Blocking, 3 Important.** Report posted by the master.\n## Blocking\n## Important\n## Suggestion\n## By section 11"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T00:55:13Z",
+    "body": "**Gate 3, round 2 (reviewer-38-r2, Opus): 0 Blocking, 1 Important.** All four round-1 points fixed; conflict resolution sound; the 40 log rows match. Report posted by the master.\n## How this was reviewed\n## The four round-1 fixes\n## 1. Correctness\n## 2. Contracts and the version\n## 3. Security\n## 4. Tests\n## 5. Documentation the change made false\n## 6. Scope and size\n## Follow-up (text that did not change this round, not Blocking)"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T00:55:51Z",
+    "body": "factory-log | 2026-10-25 | #38 | The default log path resolved against the workspace folder, so the live `metrics` command always exited 2 | test\nfactory-log | 2026-10-25 | #38 | Live issues included pull requests; red checks read only the head commit; the metrics table claimed the wrong sources and units | test"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T01:46:55Z",
+    "body": "**Gate 3, round 3 (reviewer-38-r3, Opus): Red, 1 Blocking, 1 Important.** The maintainer approved round 4: count Gate 1 transitions from the comment's edit history. Report posted by the master.\n## How the delta was established\n## 1. Correctness\n## 2. Contracts and the version\n## 3. Security\n## 4. Tests that would fail without the change\n## 5. Documentation\n## 6. Scope and size\n## Follow-up (new, non-blocking)"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T01:47:34Z",
+    "body": "factory-log | 2026-10-25 | #38 | The gate 1 count read the bot comment's current state, missing issues that failed and were then fixed; a fixture looked hand-written | test"
+  }
+]

@@ -1,0 +1,114 @@
+[
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:16:58Z",
+    "body": "**Finding from `worker-36` (#36), for this issue:** `template/.github/ISSUE_TEMPLATE/task.md` has no Delivery section, and line 35 says to delete \"Out of scope\" when it is empty. A task written straight from the template therefore fails `lint-issue`'s `delivery` rule, and sometimes `out-of-scope`. This will be the first thing `issue-ready` reports. Needs a planner or template decision: the templat"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T14:36:28Z",
+    "body": "**Finding from `reviewer-36-r2` (#36), a design constraint for this workflow:** `lint-issue` looks up every \"Depends on\" reference with `gh`, using the runner's token, and the report is posted publicly. If the workflow's token can read private repositories, the comment becomes a way to learn whether `org/private#n` exists and whether it is open. Keep the token scoped to the repository, or limit lo"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T16:32:11Z",
+    "body": "**Gate 1 (master): `lint-issue` passes all 7 rules, but the issue is held, not started.** Two points a script cannot see, both for the maintainer:"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T16:37:57Z",
+    "body": "**Maintainer decisions (2026-10-24), recorded by the master:** (1) the project's Status gets a **Ready** option (between Todo and In Progress); the workflow looks the option up by name, never by a hard-coded id. (2) A post-merge check is accepted: the worker proves the logic locally before the PR, and the test issue of criterion 1 runs right after merge. **Gate 1: ready, started** (`worker-40`, br"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T18:13:18Z",
+    "body": "**Gate 3, round 1 (reviewer-40, Opus): 1 Blocking, 4 Important.** Report posted by the master.\n## What I reviewed, and how\n## Blocking\n## Important\n## Suggestions\n## Checked and fine"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T18:44:22Z",
+    "body": "**Gate 3, round 2 (reviewer-40-r2, Opus): Pass, 0 Blocking, 1 Important.** Report posted by the master.\n## The four fixes of this round\n## Security (checked first)\n## Important\n## Suggestions\n## Follow-up (new findings in unchanged text or outside the delta, not Blocking)\n## Tests that would fail without the change\n## Documentation the change made false\n## Scope and size"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T18:45:40Z",
+    "body": "factory-log | 2026-10-24 | #40 | Any GitHub user could get an issue labelled ready and added to the project (prompt-injection path to workers) | test\nfactory-log | 2026-10-24 | #40 | A failing issue was added to the project as Todo; log and comment carried untrusted body text unescaped | test"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T18:50:43Z",
+    "body": "**Gate 4 (verifier-40, Sonnet): Red, 3 mismatches, all caused by `main` moving.** #49 made `template/.claude/agents/master.md` a hash-checked synced file, and #40 edits it. The master rebased the branch onto `0343db7`; worker-40 regenerates the hashes and the verifier runs again. Report posted by the master.\n## Blocking\n## Offline criteria\n## Verdict: RED"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T18:56:24Z",
+    "body": "**Gate 4 (verifier-40-r2, Sonnet): Green, 0 mismatches**, on `main` `0343db7`. Report posted by the master.\n## Commands\n## Offline criteria\n## Verdict: Green"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T18:56:26Z",
+    "body": "**Draft pull request description** (`worker-40`). Posted by the master.\n## Problem\n## What changes\n## For review\n## Tests\n## Instructions that were wrong or missing\n## Not verified\n## Progress\n## Findings for the master\n## Answers to review\n## Round 4 (rebase onto `0343db7`)"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T18:56:27Z",
+    "body": "**Gate 5 (master): ready for the maintainer.** Gate 3 passed in round 3 (the author gate, no failing issue added to the project, a Ready issue that fails goes back to Todo, untrusted text neutralised). Gate 4: Green, 160 tests, `actionlint` clean. **What the maintainer checks:** the whole diff, `git -C ../wt-40 diff 0343db7` (13 files, +1288/−15, of which about 600 are tests and fixtures). **Befor"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T00:29:56Z",
+    "body": "**Progress updated by the master** (Progress section only). Pull request: #50."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T00:41:01Z",
+    "body": "**Live test, first attempt (master):** test issue #51 was opened from the maintainer's account; run https://github.com/bogd3v/micelio-engineering/actions/runs/40147366870 skipped the job, so nothing was written (the safe failure). Cause: the maintainer's `bogd3v` membership is private, so the event's `author_association` is not MEMBER (the REST API, read as the maintainer, says MEMBER). This is re"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T00:44:25Z",
+    "body": "**Live test of #40, passed (master, 2026-10-25), on test issue #51.**"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T00:44:49Z",
+    "body": "Both criteria passed live (see the comment above); closed by the master. Follow-up: the permission check instead of `author_association` (text above)."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T00:55:52Z",
+    "body": "factory-log | 2026-10-25 | #40 | Private org members are skipped silently by the author_association gate (found in the live test on #51) | test"
+  }
+]

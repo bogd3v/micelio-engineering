@@ -364,7 +364,7 @@ describe('the command line', () => {
   it('exits 2 on a bad target, a missing file or an unknown command', async () => {
     expect((await run(['lint-issue', 'example#5'], deps())).code).toBe(2)
     expect((await run(['lint-issue', '--file', 'test/fixtures/none.md'], deps())).code).toBe(2)
-    expect((await run(['metrics'], deps())).stderr).toContain('unknown command "metrics"')
+    expect((await run(['dashboard'], deps())).stderr).toContain('unknown command "dashboard"')
   })
 
   it('runs as the built bin with the exit codes of the report', () => {

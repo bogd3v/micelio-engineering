@@ -1,0 +1,17 @@
+[
+  {
+    "user": {
+      "login": "micelio-bot[bot]"
+    },
+    "created_at": "2026-10-25T00:42:32Z",
+    "body": "<!-- micelio:issue-ready -->\n**lint-issue** · `bogd3v/micelio-engineering#51` · 2026-10-25 · all 7 rules pass",
+    "node_id": "IC_kwDOVRXJh88AAAABfPc3Jg"
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-25T00:44:28Z",
+    "body": "Live test of #40 done (results on #40). Closed and removed from the project by the master."
+  }
+]

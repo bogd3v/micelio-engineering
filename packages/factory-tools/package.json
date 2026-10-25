@@ -1,7 +1,7 @@
 {
   "name": "@micelio/factory-tools",
   "version": "0.1.0",
-  "description": "The commands of the Micelio software factory: lint-issue checks an issue against the Definition of Ready.",
+  "description": "The commands of the Micelio software factory: lint-issue checks an issue against the Definition of Ready, metrics reports a milestone.",
   "license": "MIT-0",
   "repository": {
     "type": "git",
@@ -36,7 +36,8 @@
     "format:check": "tsc -b ../prettier-config && prettier --check src test/*.ts package.json tsconfig*.json README.md",
     "test": "tsc -b && vitest run",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm run test",
-    "lint-issue": "tsc -b && node dist/cli.js lint-issue"
+    "lint-issue": "tsc -b && node dist/cli.js lint-issue",
+    "metrics": "tsc -b && node dist/cli.js metrics"
   },
   "publishConfig": {
     "access": "public",

@@ -1,0 +1,706 @@
+[
+  {
+    "number": 49,
+    "title": "docs(factory): ask the pull request for the learning, move ship-pr here and sync the factory files",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "labels": [],
+    "pull_request": {},
+    "body": ""
+  },
+  {
+    "number": 48,
+    "title": "feat(factory): lint-issue, the Definition of Ready as a script",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "labels": [],
+    "pull_request": {},
+    "body": ""
+  },
+  {
+    "number": 47,
+    "title": "docs(factory): write the pipeline, the gates and the five role prompts",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "labels": [],
+    "pull_request": {},
+    "body": ""
+  },
+  {
+    "number": 46,
+    "title": "fix(template): format labels.json so verify:template passes",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "labels": [],
+    "pull_request": {},
+    "body": "`npm run verify:template` fails on `main` (`a5952e1`): the repository it creates from `template/` runs `npm run check`, and `prettier --check` stops on `.github/labels.json` (`[warn] .github/labels.json` / `Code style issues found in the above file.` / `Error: Command failed: npm run check`). The fi\nRefs #35"
+  },
+  {
+    "number": 45,
+    "title": "docs(standard): version 1.5, the factory gates become rules",
+    "state": "open",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 44,
+    "title": "chore(factory): first retro",
+    "state": "open",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 43,
+    "title": "chore(factory): pilot, run Builder fase 1 through every gate",
+    "state": "open",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 42,
+    "title": "chore: adopt the factory",
+    "state": "open",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 41,
+    "title": "feat(factory): the factory-retro skill",
+    "state": "open",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 40,
+    "title": "ci(factory): issue-ready, the workflow that labels or comments",
+    "state": "open",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 39,
+    "title": "feat(factory): the Herdr master prompt and the blind-review and verify-pr skills",
+    "state": "open",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 38,
+    "title": "feat(factory): factory-log.md and the metrics script",
+    "state": "open",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 37,
+    "title": "docs(factory): the pull request template asks for the learning, and ship-pr moves here",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 36,
+    "title": "feat(factory): lint-issue, the Definition of Ready as a script",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 35,
+    "title": "docs(factory): the pipeline, the gates and the five role prompts",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 34,
+    "title": "Epic: Micelio software factory",
+    "state": "open",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [
+      {
+        "name": "épica"
+      }
+    ],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 33,
+    "title": "ci(workflows): publish a root package from the reusable release, and sync the standard to micelio-plugin-core",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 1,
+      "title": "Micelio · Bases por producto"
+    },
+    "labels": [],
+    "pull_request": {},
+    "body": ""
+  },
+  {
+    "number": 32,
+    "title": "fix(template): create the labels that pr-labels.yml and the release notes use",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 1,
+      "title": "Micelio · Bases por producto"
+    },
+    "labels": [],
+    "pull_request": {},
+    "body": "`template/.github/workflows/pr-labels.yml` adds a label from the conventional prefix of a pull request title, and `template/.github/release.yml` groups the release notes by label. Nothing creates those labels in a new repository: only `breaking` is created, by the workflow itself. A repository made \nCloses #31\n- **Option chosen:** of the two options in #31, this is a mix. The manifest gives a test something to check, and the workflow applies it, so no setup step is needed and nobody has to remember one. Creating labels needs no new permission: the `pull-requests: write` the workflow already holds is enoug\n- **Acceptance 2 of #31 is not verified:** a `chore:` pull request on a repository created from the template, passing with no label made by hand. It needs a throwaway repository, as #7 did. I can do it after merge if you approve creating one."
+  },
+  {
+    "number": 31,
+    "title": "fix(template): create the labels that pr-labels.yml and the release notes use",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 1,
+      "title": "Micelio · Bases por producto"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": "Found while bootstrapping bogd3v/micelio-plugin-core (#19 there).\n`template/.github/workflows/pr-labels.yml` adds a label from the conventional prefix of a pull request title, and `template/.github/release.yml` groups the release notes by label. Nothing creates those labels in a new repository: only `breaking` is created by the workflow (`gh label create breaking \n- [x] PR #32 (`fix/template-labels`), merged (4ab19cf):"
+  },
+  {
+    "number": 30,
+    "title": "ci(workflows): publish a root package from the reusable release, and sync the standard to micelio-plugin-core",
+    "state": "open",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 1,
+      "title": "Micelio · Bases por producto"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 29,
+    "title": "ci(dco): drop the author-email exemption of the bots",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "labels": [],
+    "pull_request": {},
+    "body": ""
+  },
+  {
+    "number": 28,
+    "title": "ci(dependabot): never propose a major version",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "labels": [],
+    "pull_request": {},
+    "body": ""
+  },
+  {
+    "number": 27,
+    "title": "ci: Bump actions/create-github-app-token from 3.2.0 to 3.3.0 in the actions group",
+    "state": "closed",
+    "user": {
+      "login": "dependabot[bot]"
+    },
+    "milestone": null,
+    "labels": [
+      {
+        "name": "dependencies"
+      },
+      {
+        "name": "github_actions"
+      }
+    ],
+    "pull_request": {},
+    "body": ""
+  },
+  {
+    "number": 26,
+    "title": "chore(deps-dev): Bump typescript from 5.9.3 to 7.0.2",
+    "state": "closed",
+    "user": {
+      "login": "dependabot[bot]"
+    },
+    "milestone": null,
+    "labels": [
+      {
+        "name": "dependencies"
+      },
+      {
+        "name": "javascript"
+      }
+    ],
+    "pull_request": {},
+    "body": ""
+  },
+  {
+    "number": 25,
+    "title": "ci(dependabot): apply the template's configuration to this repository",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "labels": [],
+    "pull_request": {},
+    "body": ""
+  },
+  {
+    "number": 24,
+    "title": "chore(release): eslint-config 0.1.2",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "labels": [],
+    "pull_request": {},
+    "body": ""
+  },
+  {
+    "number": 23,
+    "title": "docs(standard): report vulnerabilities through the organisation's security policy",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "labels": [],
+    "pull_request": {},
+    "body": ""
+  },
+  {
+    "number": 22,
+    "title": "ci(standard-sync): mint the bot token with client-id, and note that scorecard needs a public repository",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "labels": [],
+    "pull_request": {},
+    "body": ""
+  },
+  {
+    "number": 21,
+    "title": "chore(release): eslint-config 0.1.1, and one version per package in t…",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "labels": [],
+    "pull_request": {},
+    "body": ""
+  },
+  {
+    "number": 20,
+    "title": "feat(template): add the repository template that applies the section 14 checklist",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "labels": [],
+    "pull_request": {},
+    "body": ""
+  },
+  {
+    "number": 19,
+    "title": "docs: add Micelio's contributing, governance, trademarks, ADR template and PR template",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "labels": [],
+    "pull_request": {},
+    "body": ""
+  },
+  {
+    "number": 18,
+    "title": "feat(standard): sync the standard with the Micelio bot and add lint:standard",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "labels": [],
+    "pull_request": {},
+    "body": ""
+  },
+  {
+    "number": 17,
+    "title": "fix(workflows): grant the release call the permissions its publish job asks for",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "labels": [],
+    "pull_request": {},
+    "body": "The CI run on `main` after #16 ended in `startup_failure`, and #16 itself ran no checks. A called workflow cannot ask for more permissions than its caller grants, also in a job that is skipped. `release.yml`'s `publish` job asks for `packages: write` and `id-token: write`; `ci.yml` granted the relea\nNot verified: the CI run itself, and with it both acceptance criteria of #4 (the fixture running all four by `uses:`, and the Scorecard of this repository)."
+  },
+  {
+    "number": 16,
+    "title": "ci(workflows): add reusable check, dco, scorecard and release workflows",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "labels": [],
+    "pull_request": {},
+    "body": ""
+  },
+  {
+    "number": 15,
+    "title": "feat(packages): add shared ESLint, TypeScript and Prettier configs",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": null,
+    "labels": [],
+    "pull_request": {},
+    "body": ""
+  },
+  {
+    "number": 14,
+    "title": "chore(template): repository template that applies the section 14 checklist",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 1,
+      "title": "Micelio · Bases por producto"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 13,
+    "title": "docs: Micelio's CONTRIBUTING, GOVERNANCE, TRADEMARKS, the canonical standard and the ADR template",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 1,
+      "title": "Micelio · Bases por producto"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 12,
+    "title": "ci(standard): standard-sync, bot pull requests from the canonical copy and the hash lint",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 1,
+      "title": "Micelio · Bases por producto"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 11,
+    "title": "ci(workflows): reusable workflows check, release, dco and scorecard",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 1,
+      "title": "Micelio · Bases por producto"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 10,
+    "title": "feat(packages): @micelio/eslint-config, @micelio/tsconfig, @micelio/prettier-config and the licence allowlist",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 1,
+      "title": "Micelio · Bases por producto"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 9,
+    "title": "chore(org): bogd3v/.github with the code of conduct, the security policy, the profile and the project automation",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 1,
+      "title": "Micelio · Bases por producto"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 8,
+    "title": "Epic: Micelio, engineering foundations per product",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 1,
+      "title": "Micelio · Bases por producto"
+    },
+    "labels": [
+      {
+        "name": "épica"
+      }
+    ],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 7,
+    "title": "chore(template): repository template that applies the section 14 checklist",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 1,
+      "title": "Micelio · Bases por producto"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 6,
+    "title": "docs: Micelio's CONTRIBUTING, GOVERNANCE, TRADEMARKS, the canonical standard and the ADR template",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 1,
+      "title": "Micelio · Bases por producto"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 5,
+    "title": "ci(standard): standard-sync, bot pull requests from the canonical copy and the hash lint",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 1,
+      "title": "Micelio · Bases por producto"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 4,
+    "title": "ci(workflows): reusable workflows check, release, dco and scorecard",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 1,
+      "title": "Micelio · Bases por producto"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 3,
+    "title": "feat(packages): @micelio/eslint-config, @micelio/tsconfig, @micelio/prettier-config and the licence allowlist",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 1,
+      "title": "Micelio · Bases por producto"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 2,
+    "title": "chore(org): bogd3v/.github with the code of conduct, the security policy, the profile and the project automation",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 1,
+      "title": "Micelio · Bases por producto"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  },
+  {
+    "number": 1,
+    "title": "Epic: Micelio, engineering foundations per product",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 1,
+      "title": "Micelio · Bases por producto"
+    },
+    "labels": [
+      {
+        "name": "épica"
+      }
+    ],
+    "pull_request": null,
+    "body": ""
+  }
+]
