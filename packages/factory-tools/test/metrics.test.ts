@@ -252,7 +252,6 @@ describe('factory log', () => {
   it('has every line the issues carried, moved with an empty destination', async () => {
     const log = await readFile(`${PACKAGE}../../docs/factory-log.md`, 'utf8')
     const fixtures = await readFile(`${RECORDED}/factory-log.md`, 'utf8')
-    expect(fixtures).toBe(log)
     const comments: { body: string; created_at: string }[] = []
     for (const file of await readdir(`${RECORDED}/comments`)) {
       comments.push(...JSON.parse(await readFile(`${RECORDED}/comments/${file}`, 'utf8')))
@@ -262,17 +261,25 @@ describe('factory log', () => {
         .replace(/^\||\|$/g, '')
         .split(/(?<!\\)\|/)
         .map((cell) => cell.trim())
+    const rowsOf = (markdown: string): string[][] =>
+      markdown
+        .split('\n')
+        .filter((line) => /^\| 2026/.test(line))
+        .map(cells)
     const expected = comments
       .toSorted((a, b) => a.created_at.localeCompare(b.created_at))
       .flatMap((c) => parseLogLines(c.body))
       .map((l) => [l.date, l.issue, l.what.replaceAll('|', '\\|'), l.category, l.destination])
-    const rows = log
-      .split('\n')
-      .filter((line) => /^\| 2026/.test(line))
-      .map(cells)
+    const rows = rowsOf(log)
     expect(expected).toHaveLength(45)
-    expect(countLog(log)).toEqual({ rows: 45, converted: 0 })
-    expect(rows).toEqual(expected)
+    expect(rowsOf(fixtures)).toEqual(expected)
+    // The first 45 rows are the moved lines and stay as they were; the scribe appends the rest.
+    expect(rows.slice(0, 45)).toEqual(expected)
+    expect(countLog(log).rows).toBe(rows.length)
+    for (const [date, issue, what, category] of rows.slice(45)) {
+      const line = `factory-log | ${date} | ${issue} | ${(what ?? '').replaceAll('\\|', '|')} | ${category} | -`
+      expect(parseLogLines(line)).toHaveLength(1)
+    }
   })
 })
 
