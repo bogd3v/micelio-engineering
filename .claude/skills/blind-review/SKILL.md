@@ -13,7 +13,7 @@ A worktree, its branch, the issue number, the path of the pull request draft (fo
 
 ## Read
 
-1. The issue and its comments: `gh issue view <n> --comments`. A maintainer's decision comment overrides the body where they differ. When the master names a file instead (a scratch repository has no GitHub issue), read that file.
+1. The issue, body and comments: `gh issue view <n> --json body,comments`. A maintainer's decision comment overrides the body where they differ. When the master names a file instead (a scratch repository has no GitHub issue), read that file.
 2. The change. Nothing is committed before gate 5, so read it against the merge base with `origin/main`, untracked files included:
 
    ```bash
