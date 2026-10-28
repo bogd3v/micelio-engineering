@@ -1,4 +1,4 @@
-import { blockingByCategory, countLog, parseEvent, parseTime } from './parse.js'
+import { blockingByCategory, countLog, mergeTime, parseEvent, parseTime } from './parse.js'
 import type { TimeLine } from './parse.js'
 import { MARKER } from './ready.js'
 import type { Source } from './source.js'
@@ -48,7 +48,7 @@ export interface PullRow {
   redChecks: number
   /** `fix` issues that cite the pull request, when it was merged. */
   defects: number
-  /** The maintainer's `time:` line, or `null` when there is none. */
+  /** The maintainer's `time:` notes put together, or `null` when there is none. */
   time: TimeLine | null
 }
 
@@ -238,7 +238,10 @@ async function redChecks(
   return red.size
 }
 
-/** The last `time:` line the maintainer wrote in the pull request's comments or reviews. */
+/**
+ * The `time:` lines the maintainer wrote in the pull request's comments or reviews, put together
+ * with `mergeTime`: the latest over the earlier.
+ */
 async function timeOf(
   source: Source,
   number: number,
@@ -251,7 +254,10 @@ async function timeOf(
       text(a.created_at ?? a.submitted_at).localeCompare(text(b.created_at ?? b.submitted_at))
     )
   let time: TimeLine | null = null
-  for (const item of written) time = parseTime(text(item.body)) ?? time
+  for (const item of written) {
+    const note = parseTime(text(item.body))
+    if (note !== null) time = mergeTime(time, note)
+  }
   return time
 }
 

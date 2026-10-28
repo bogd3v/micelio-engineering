@@ -1,16 +1,23 @@
-import type { Metrics } from './metrics.js'
+import type { Metrics, PullRow } from './metrics.js'
 
 /**
  * The Markdown of a run of `metrics`: a header line, then the tables of the README; a totals row
- * ends the first two. A pull request without a `time:` line shows `—` in both minutes columns.
+ * ends the first two. A pull request without a `time:` line shows `—` in the three minutes columns;
+ * with one, a column it does not give shows `—`, except that `diff` and `report` are alternatives,
+ * so a note with one of them shows 0 in the other.
  *
  * @param date - The day of the run, `YYYY-MM-DD`.
  */
 export function renderMetrics(result: Metrics, date: string): string {
   const sum = <T>(items: T[], pick: (item: T) => number): number =>
     items.reduce((total, item) => total + pick(item), 0)
-  const minutes = (kind: 'diff' | 'report'): number =>
-    sum(result.pulls, (pull) => (pull.time?.kind === kind ? pull.time.minutes : 0))
+  const minutes = (column: 'diff' | 'report' | 'handsOn'): number =>
+    sum(result.pulls, (pull) => pull.time?.[column] ?? 0)
+  const reading = (pull: PullRow, column: 'diff' | 'report'): string | number => {
+    const { time } = pull
+    if (time === null || (time.diff === null && time.report === null)) return '—'
+    return time[column] ?? 0
+  }
 
   const issues = table(
     [
@@ -41,6 +48,7 @@ export function renderMetrics(result: Metrics, date: string): string {
       'Defects after merge',
       'Minutes, diff',
       'Minutes, report',
+      'Minutes, Docker or test',
     ],
     [
       ...result.pulls.map((p) => [
@@ -50,8 +58,9 @@ export function renderMetrics(result: Metrics, date: string): string {
         p.corrections,
         p.redChecks,
         p.defects,
-        p.time === null ? '—' : p.time.kind === 'diff' ? p.time.minutes : 0,
-        p.time === null ? '—' : p.time.kind === 'report' ? p.time.minutes : 0,
+        reading(p, 'diff'),
+        reading(p, 'report'),
+        p.time?.handsOn ?? '—',
       ]),
       [
         'Total',
@@ -62,6 +71,7 @@ export function renderMetrics(result: Metrics, date: string): string {
         sum(result.pulls, (p) => p.defects),
         minutes('diff'),
         minutes('report'),
+        minutes('handsOn'),
       ],
     ]
   )

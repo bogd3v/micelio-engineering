@@ -16,13 +16,13 @@
 | #45 | 0 | 0 | 0 | 0 |
 | Total | 5 | 19 | 9 | 4 |
 
-| Pull request | Issue | Changed lines | Maintainer corrections | Red required checks | Defects after merge | Minutes, diff | Minutes, report |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| #46 | #35 | 18 | 0 | 0 | 0 | 2 | 0 |
-| #47 | #35 | 405 | 0 | 0 | 0 | 10 | 0 |
-| #48 | #36 | 1804 | 0 | 0 | 0 | 12 | 0 |
-| #49 | #37 | 466 | 0 | 0 | 0 | 7 | 0 |
-| Total |  | 2693 | 0 | 0 | 0 | 31 | 0 |
+| Pull request | Issue | Changed lines | Maintainer corrections | Red required checks | Defects after merge | Minutes, diff | Minutes, report | Minutes, Docker or test |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| #46 | #35 | 18 | 0 | 0 | 0 | 2 | 0 | — |
+| #47 | #35 | 405 | 0 | 0 | 0 | 10 | 0 | — |
+| #48 | #36 | 1804 | 0 | 0 | 0 | 12 | 0 | — |
+| #49 | #37 | 466 | 0 | 0 | 0 | 7 | 0 | — |
+| Total |  | 2693 | 0 | 0 | 0 | 31 | 0 | 0 |
 
 | Category of the Blocking findings | Findings |
 | --- | --- |

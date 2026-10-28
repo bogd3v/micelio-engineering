@@ -5,7 +5,14 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { metrics } from '../src/metrics.js'
-import { blockingByCategory, countLog, parseEvent, parseLogLines, parseTime } from '../src/parse.js'
+import {
+  blockingByCategory,
+  countLog,
+  mergeTime,
+  parseEvent,
+  parseLogLines,
+  parseTime,
+} from '../src/parse.js'
 import { renderMetrics } from '../src/render.js'
 import { repoRoot, run } from '../src/run.js'
 import type { RunDeps } from '../src/run.js'
@@ -82,15 +89,76 @@ const pull = (number: number, extra: object = {}): object => ({
 })
 
 describe('parseTime', () => {
+  const note = (diff: number | null, report: number | null, handsOn: number | null) => ({
+    diff,
+    report,
+    handsOn,
+  })
+
   it.each([
-    ['time: 10m diff', { minutes: 10, kind: 'diff' }],
-    ['time: 2 minute diff', { minutes: 2, kind: 'diff' }],
-    ['time: 5 minutes report', { minutes: 5, kind: 'report' }],
-    ['  Time: 7 MIN Report.  ', { minutes: 7, kind: 'report' }],
-    ['LGTM\n\ntime: 3m diff\nthanks', { minutes: 3, kind: 'diff' }],
-    ['time: 3m diff\ntime: 4m report', { minutes: 4, kind: 'report' }],
+    ['time: 10m diff', note(10, null, null)],
+    ['time: 2 minute diff', note(2, null, null)],
+    ['time: 5 minutes report', note(null, 5, null)],
+    ['  Time: 7 MIN Report.  ', note(null, 7, null)],
+    ['LGTM\n\ntime: 3m diff\nthanks', note(3, null, null)],
+    ['time: 3m diff\ntime: 4m report', note(null, 4, null)],
+    // The notes of bogd3v/micelio#762, #756 and #765 and bogd3v/micelio-plugin-core#81: the diff
+    // minutes, then the Docker minutes.
+    ['time: 3m diff, 0m docker', note(3, null, 0)],
+    ['time: 6m diff, 8m docker', note(6, null, 8)],
+    ['time: 15m diff, 10m docker', note(15, null, 10)],
+    // bogd3v/micelio-cms#380, #383 and #389: a remark in parentheses after the note.
+    [
+      "time: 5m diff, 0m docker (the maintainer's Docker check waits on #382, the demo preview)",
+      note(5, null, 0),
+    ],
+    ["time: 3m diff, 0m docker (the maintainer's Docker check is still to do)", note(3, null, 0)],
+    // bogd3v/micelio-plugin-core#103: the remark goes on for lines, with links and a full stop.
+    [
+      "time: 5m diff, 12m docker (updates the earlier note). Maintainer's check on Linux Chromium with third-party cookies blocked, admin https://cms.app-z.com and site https://app-y.com through a TLS front.",
+      note(5, null, 12),
+    ],
+    // bogd3v/micelio#769: `test` is another kind of hands-on check.
+    [
+      "time: 2m diff, 2m test (the admin page's credentialed read in headed Chromium, and the three engines headless, on a host copy of the branch)",
+      note(2, null, 2),
+    ],
+    // bogd3v/micelio#764: the diff time was not stated.
+    [
+      'time: diff read not stated, 2m test (the new block headed in Chromium and the three engines headless, on a host copy of the branch)',
+      note(null, null, 2),
+    ],
+    // bogd3v/micelio-cms#374 and bogd3v/micelio-plugin-core#98: only the hands-on minutes.
+    ['time: 5m docker (diff read time not given)', note(null, null, 5)],
+    ['time: 1m docker (from v0.2.0)', note(null, null, 1)],
+    ['time: 2m docker', note(null, null, 2)],
+    // bogd3v/micelio-cms#383, #384, #386 and #389: the Docker check in its own words.
+    [
+      "time: maintainer's Docker check 4m (the demo site on http://localhost:3000/).",
+      note(null, null, 4),
+    ],
+    // bogd3v/micelio#760: a remark after a full stop.
+    [
+      'time: 2m diff. Decision: the new-tab fallback, as the amendment records.',
+      note(2, null, null),
+    ],
+    ['time: 7m diff (Docker check not reported yet)', note(7, null, null)],
+    // A later line over an earlier one: the hands-on minutes are kept when the later has none.
+    ['time: 2m diff, 3m docker\ntime: 5m diff', note(5, null, 3)],
+    ['time: 5m diff, 0m docker\ntime: 5m diff, 12m docker', note(5, null, 12)],
+    ['time: 4m docker\ntime: 2m diff', note(2, null, 4)],
   ])('reads %j', (text, expected) => {
     expect(parseTime(text)).toEqual(expected)
+  })
+
+  it('puts a later note over an earlier one, column by column', () => {
+    expect(mergeTime(null, { diff: 1, report: null, handsOn: null })).toEqual(note(1, null, null))
+    expect(mergeTime(note(7, null, null), { diff: null, report: null, handsOn: 2 })).toEqual(
+      note(7, null, 2)
+    )
+    expect(mergeTime(note(null, 5, 3), { diff: 2, report: null, handsOn: null })).toEqual(
+      note(2, null, 3)
+    )
   })
 
   it.each([
@@ -98,6 +166,9 @@ describe('parseTime', () => {
     'time: 10m',
     'time: m diff',
     'time: 10m diffs',
+    'time: 10m diff, whenever',
+    'time: diff read not stated',
+    'time: (10m diff)',
     'overtime: 10m diff',
     'time 10m diff',
     'it took time: 10m diff',
@@ -145,6 +216,36 @@ describe('parseEvent', () => {
       '**Gate 4, after round 2 (verifier-35)**\n\n**Mismatches: 3.**',
       { kind: 'verification', mismatches: 3 },
     ],
+    // The headings of the verification reports of bogd3v/micelio#759, #766 and #770 and
+    // bogd3v/micelio-plugin-core#106, as the master posted them.
+    [
+      '<details><summary><b>Gate 4 (verifier-m759)</b> · Red · `npm run perf` fails on the branch</summary>\n\n# Verification report: fix/pilot-759 (issue #759), verifier-m759\n**Mismatches: 1.**',
+      { kind: 'verification', mismatches: 1 },
+    ],
+    [
+      '<details><summary><b>Gate 4 (verifier-m766)</b> · Red · 1 mismatch</summary>',
+      { kind: 'verification', mismatches: 1 },
+    ],
+    [
+      '# Verification report: feat/pilot-766 (bogd3v/micelio#766), round 2\n## Commands\n**Mismatches: 1.**',
+      { kind: 'verification', mismatches: 1 },
+    ],
+    [
+      '# Verification report — #770, branch test/pilot-770\nGate 4.\n**Mismatches: 1.**',
+      { kind: 'verification', mismatches: 1 },
+    ],
+    [
+      '# Gate 4 report: pc106 r3 (feat/pilot-106, issue #106)\n## Commands\n**Mismatches: 1.**',
+      { kind: 'verification', mismatches: 1 },
+    ],
+    [
+      '# Verification report: m759 r4 (fix/pilot-759, issue bogd3v/micelio#759)\n**Mismatches: 0.**',
+      { kind: 'verification', mismatches: 0 },
+    ],
+    [
+      '<details><summary><b>Gate 3, round 3 (reviewer-m759-r3)</b> · Red · 0 Blocking, 3 Important, 1 Suggestion</summary>',
+      { kind: 'review', round: 3, blocking: 0 },
+    ],
   ])('reads %j', (body, expected) => {
     expect(parseEvent(body)).toEqual(expected)
   })
@@ -154,6 +255,8 @@ describe('parseEvent', () => {
     '**Gate 1 re-run (master): ready — started**',
     '**lint-issue** · `a/b#1` · 2026-10-24 · all 7 rules pass',
     '**Gate 5 (master): ready for the maintainer.**',
+    '# Blind review: bogd3v/micelio#770, round 1 (reviewer-m770)',
+    '<details><summary>Notes</summary>',
     '**Finding from `worker-36` (#36):** gate 1 held it, not started',
     'factory-log | 2026-10-24 | #35 | Gate 1 not ready | issue',
     '',
@@ -305,10 +408,10 @@ describe('metrics', () => {
     expect(row(38)?.returned).toBe(2)
     expect(row(41)?.returned).toBe(0)
     expect(result.pulls.map((p) => [p.number, p.issue, p.lines, p.time])).toEqual([
-      [46, 35, 18, { minutes: 2, kind: 'diff' }],
-      [47, 35, 405, { minutes: 10, kind: 'diff' }],
-      [48, 36, 1804, { minutes: 12, kind: 'diff' }],
-      [49, 37, 466, { minutes: 7, kind: 'diff' }],
+      [46, 35, 18, { diff: 2, report: null, handsOn: null }],
+      [47, 35, 405, { diff: 10, report: null, handsOn: null }],
+      [48, 36, 1804, { diff: 12, report: null, handsOn: null }],
+      [49, 37, 466, { diff: 7, report: null, handsOn: null }],
     ])
   })
 
@@ -351,6 +454,36 @@ describe('metrics', () => {
     )
     expect(result.issues[1]).toMatchObject({ returned: 0, rounds: 2, blocking: 2, mismatches: 1 })
     expect(result.categories).toEqual([['uncategorised', 2]])
+  })
+
+  it('counts the mismatches of the verification reports as the master posts them', async () => {
+    const result = await metrics(
+      source({
+        issues: [issue(1), issue(2), issue(3)],
+        comments: {
+          2: [
+            comment(
+              'maint',
+              '<details><summary><b>Gate 4 (verifier-m759)</b> · Red · `npm run perf` fails on the branch</summary>\n\n# Verification report: fix/pilot-759 (issue #759), verifier-m759\n**Verdict: Red.**\n**Mismatches: 1.**'
+            ),
+            comment('maint', '# Verification report: m759 r4 (fix/pilot-759)\n**Mismatches: 0.**'),
+            comment('maint', "**Master:** gate 4 failed. The verifier's one mismatch is on main."),
+          ],
+          3: [
+            comment(
+              'maint',
+              '# Gate 4 report: pc106 r3 (feat/pilot-106, issue #106)\n**Mismatches: 1.**'
+            ),
+            comment(
+              'maint',
+              '# Verification report — #770, branch test/pilot-770\n**Mismatches: 1.**'
+            ),
+          ],
+        },
+      }),
+      { milestone: 'M2', log: '' }
+    )
+    expect(result.issues.map((i) => i.mismatches)).toEqual([0, 1, 2])
   })
 
   describe('the lint-issue report of the issue-ready bot', () => {
@@ -517,14 +650,78 @@ describe('metrics', () => {
       corrections: 2,
       redChecks: 3,
       defects: 2,
-      time: { minutes: 6, kind: 'report' },
+      time: { diff: null, report: 6, handsOn: null },
     })
     expect(result.pulls[1]).toMatchObject({ issue: null, time: null, defects: 0 })
     expect(result.pulls[2]).toMatchObject({ issue: 1, defects: 0 })
     const text = renderMetrics(result, '2026-10-24')
-    expect(text).toContain('| #10 | #1 | 15 | 2 | 3 | 2 | 0 | 6 |')
-    expect(text).toContain('| #12 | — | 15 | 0 | 0 | 0 | — | — |')
-    expect(text).toContain('| Total |  | 45 | 2 | 3 | 2 | 0 | 6 |')
+    expect(text).toContain('| #10 | #1 | 15 | 2 | 3 | 2 | 0 | 6 | — |')
+    expect(text).toContain('| #12 | — | 15 | 0 | 0 | 0 | — | — | — |')
+    expect(text).toContain('| Total |  | 45 | 2 | 3 | 2 | 0 | 6 | 0 |')
+  })
+
+  it('reads the notes the maintainer writes now: diff and Docker minutes, a remark, a test, none stated, and a later note over an earlier one', async () => {
+    const note = (login: string, body: string, at: string): object => comment(login, body, at)
+    const result = await metrics(
+      source({
+        issues: [issue(1)],
+        pulls: [10, 11, 12, 13, 14].map((n) => pull(n, { body: 'Refs #1' })),
+        comments: {
+          10: [note('maint', 'time: 3m diff, 0m docker', '2026-01-01T00:00:00Z')],
+          11: [
+            note(
+              'maint',
+              'time: 2m diff, 2m test (the admin page, headed)',
+              '2026-01-01T00:00:00Z'
+            ),
+          ],
+          12: [
+            note(
+              'maint',
+              'time: diff read not stated, 2m test (a host copy)',
+              '2026-01-01T00:00:00Z'
+            ),
+          ],
+          13: [
+            note(
+              'maint',
+              'time: 5m diff, 0m docker (the Docker check waits)',
+              '2026-01-01T00:00:00Z'
+            ),
+            note(
+              'maint',
+              "time: maintainer's Docker check 4m (the demo site)",
+              '2026-01-02T00:00:00Z'
+            ),
+          ],
+        },
+        reviews: {
+          14: [
+            {
+              user: { login: 'maint' },
+              submitted_at: '2026-01-01T00:00:00Z',
+              body: 'time: 7m diff (Docker check not reported yet)',
+            },
+          ],
+        },
+      }),
+      { milestone: 'M2', log: '' }
+    )
+    expect(result.pulls.map((p) => p.time)).toEqual([
+      { diff: 3, report: null, handsOn: 0 },
+      { diff: 2, report: null, handsOn: 2 },
+      { diff: null, report: null, handsOn: 2 },
+      { diff: 5, report: null, handsOn: 4 },
+      { diff: 7, report: null, handsOn: null },
+    ])
+    const text = renderMetrics(result, '2026-10-28')
+    expect(text).toContain('| Minutes, diff | Minutes, report | Minutes, Docker or test |')
+    expect(text).toContain('| #10 | #1 | 15 | 0 | 0 | 0 | 3 | 0 | 0 |')
+    expect(text).toContain('| #11 | #1 | 15 | 0 | 0 | 0 | 2 | 0 | 2 |')
+    expect(text).toContain('| #12 | #1 | 15 | 0 | 0 | 0 | — | — | 2 |')
+    expect(text).toContain('| #13 | #1 | 15 | 0 | 0 | 0 | 5 | 0 | 4 |')
+    expect(text).toContain('| #14 | #1 | 15 | 0 | 0 | 0 | 7 | 0 | — |')
+    expect(text).toContain('| Total |  | 75 | 0 | 0 | 0 | 17 | 0 | 8 |')
   })
 
   it('splits the Blocking findings by category and keeps the uncounted ones as uncategorised', async () => {

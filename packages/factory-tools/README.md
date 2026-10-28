@@ -106,13 +106,14 @@ cannot be read. The output is four tables; a total row ends the first two.
 | Issues (one per issue) | Times returned at gate 1 | The maintainer's comments whose first line starts `Gate 1` and says `not ready`, `not started` or `held`, and `lint-issue` reports that name a failing rule, from the maintainer or from the `issue-ready` bot (below); each maintainer comment counts, so an issue held twice counts 2, and the bot's comment counts each time its edit history turns it to failing |
 |                        | Gate 3 rounds            | The highest `round N` of the comments whose first line starts `Gate 3`                                                                                                                                                                                                                                                                                               |
 |                        | Blocking findings        | Over all the rounds: the `K Blocking` of the first line; if it has none, the lines of the report that start `**B<n>.`                                                                                                                                                                                                                                                |
-|                        | Verifier mismatches      | Over the `Gate 4` comments: the `K mismatch(es)` of the first line; if it has none, the `**Mismatches: K.**` line of the report; else 0                                                                                                                                                                                                                              |
+|                        | Verifier mismatches      | Over the maintainer's verification reports: the `K mismatch(es)` of the first line; if it has none, the `**Mismatches: K.**` line of the report; else 0. A report is a comment whose first line, without its markup (`<details><summary><b>…`, `# `, `**`), starts `Gate 4` or `Verification report`                                                                 |
 | Pull requests          | Issue                    | The issue of the milestone the body closes or refers to (`Closes`, `Fixes`, `Resolves` or `Refs #n`), `—` if none                                                                                                                                                                                                                                                    |
 |                        | Changed lines            | Additions plus deletions                                                                                                                                                                                                                                                                                                                                             |
 |                        | Maintainer corrections   | Comments on the diff (`pulls/<n>/comments`) by the maintainer                                                                                                                                                                                                                                                                                                        |
 |                        | Red required checks      | Over the commits pushed after the pull request opened (committer date later than `created_at`), the checks required on its base branch (`rules/branches/<base>`) that ended `failure`, `timed_out`, `cancelled`, `action_required` or `startup_failure`; once per commit and check. If the branch requires none, every check counts                                  |
 |                        | Defects after merge      | For a merged pull request, the `fix` issues (title starts `fix`) of the repository whose body cites it as `#n` or `/pull/n`                                                                                                                                                                                                                                          |
-|                        | Minutes, diff / report   | The maintainer's `time:` line on the pull request, in its kind's column and 0 in the other; `—` in both when there is none                                                                                                                                                                                                                                           |
+|                        | Minutes, diff / report   | The maintainer's `time:` notes on the pull request, put together (see below): the minutes of the first reading in its column, 0 in the other, `—` in both when the note has none; `—` in all three when there is no note                                                                                                                                             |
+|                        | Minutes, Docker or test  | The `docker` or `test` minutes of the maintainer's `time:` notes, `—` when no note gives them                                                                                                                                                                                                                                                                        |
 | Blocking by category   | Category, Findings       | The `**B<n>.` lines of the reports, by the section 11 check (`Correctness`, `Contracts`, `Security`, `Tests`, `Documentation`, `Scope`) the `## ` heading above them starts with; any other heading is `uncategorised`; the Blocking of a first line the report does not list is `uncategorised`                                                                     |
 | Correction log         | Rows, With a destination | The rows of `docs/factory-log.md` and those whose Destination is not empty                                                                                                                                                                                                                                                                                           |
 
@@ -130,26 +131,35 @@ the marker in a comment by a person, are not read.
 
 ### The `time:` line
 
-The maintainer writes one line on each pull request, in a comment of its conversation or in a
+The maintainer writes a `time:` note on each pull request, in a comment of its conversation or in a
 review (approving or only commenting; factory pull requests are opened from the maintainer's own
-account, so there may be no approval):
+account, so there may be no approval). It lists minutes, each followed by its kind:
 
 ```text
 time: 10m diff
-time: 2 minute diff
 time: 5 minutes report
+time: 3m diff, 0m docker
+time: 2m diff, 2m test (the admin page, headed Chromium, on a host copy of the branch)
+time: diff read not stated, 2m test
+time: 5m docker (diff read time not given)
+time: maintainer's Docker check 4m (the demo site)
 ```
 
-| Part     | Accepted                                                              | Examples          |
-| -------- | --------------------------------------------------------------------- | ----------------- |
-| `time:`  | At the start of the line; case does not matter                        | `time:`, `Time:`  |
-| Number   | Whole minutes                                                         | `10`, `2`         |
-| Unit     | `m`, `min`, `mins`, `minute` or `minutes`, with or without a space    | `10m`, `2 minute` |
-| Kind     | `diff` (the maintainer read the diff first) or `report` (the reports) | `diff`, `report`  |
-| The rest | Nothing else on the line; a final full stop is allowed                | `time: 10m diff.` |
+| Part     | Accepted                                                                                                       | Examples                       |
+| -------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `time:`  | At the start of the line; case does not matter                                                                 | `time:`, `Time:`               |
+| Minutes  | Whole minutes, then the unit `m`, `min`, `mins`, `minute` or `minutes`, with or without a space                | `10m`, `2 minute`              |
+| Kind     | `diff` (the maintainer read the diff first) or `report` (the reports); `docker` or `test` (the hands-on check) | `3m diff`, `2m test`           |
+| Lists    | Clauses separated by commas; `diff read not stated` (or `not given`) gives no minutes                          | `3m diff, 0m docker`           |
+| Docker   | `maintainer's Docker check <n>m`, as the maintainer writes a check made after the note                         | `maintainer's Docker check 4m` |
+| The rest | A remark may follow, in parentheses or after a full stop; any other text in the list makes the line no note    | `time: 10m diff.`              |
 
-If there are several, the latest wins. The kinds are those of "The maintainer's review levels" of
-`docs/factory.md`.
+The `docker` and `test` minutes are one column, "Minutes, Docker or test"; a note with both adds
+them. A note that is in none of these forms is not read (`time: 10 hours diff`, `time: 10m`). If
+there are several notes, the latest wins, column by column: a later note that gives a diff or report
+time replaces the earlier one, and one that gives only the hands-on time (`time: 2m docker`) keeps
+the earlier diff or report time, and the other way round. The kinds are those of "The maintainer's
+review levels" of `docs/factory.md`.
 
 ### Recorded fixtures
 
