@@ -59,10 +59,48 @@ describe('release.yml', () => {
     expect(result.output).not.toContain('::warning::')
   })
 
-  it('refuses to publish the root package without NPM_TOKEN', () => {
+  it('lists what a dry run would publish without NPM_TOKEN', () => {
+    const result = check(PLUGIN, { NPM_ROOT: 'true', DRY_RUN: 'true' })
+    expect(result.status, result.output).toBe(0)
+    expect(result.output).toContain('npm: would publish @micelio/strapi-plugin-core')
+    expect(result.output).not.toContain('::warning::')
+  })
+
+  it('does not read NPM_TOKEN in the plan job', () => {
+    const plan = WORKFLOW.split(/\n {2}plan:\n/)[1]?.split(/\n {2}publish:\n/)[0] ?? ''
+    expect(plan).toContain('Check the release can be published')
+    expect(plan).not.toContain('NPM_TOKEN')
     const result = check(PLUGIN, { NPM_ROOT: 'true' })
-    expect(result.status).toBe(1)
-    expect(result.output).toContain('::error::npm-root or npm-workspaces is set but the NPM_TOKEN')
+    expect(result.status, result.output).toBe(0)
+    expect(result.output).not.toContain('NPM_TOKEN')
+  })
+
+  it('fails the publish job without NPM_TOKEN, in the release environment', () => {
+    const publish = WORKFLOW.split(/\n {2}publish:\n/)[1] ?? ''
+    expect(publish).toContain('environment: ${{ inputs.environment }}')
+    const name = 'Check the npm token is set'
+    // The check runs before anything is published or tagged
+    expect(publish.indexOf(`- name: ${name}`)).toBeGreaterThan(-1)
+    expect(publish.indexOf(`- name: ${name}`)).toBeLessThan(publish.indexOf('- name: Checkout'))
+    const step = publish.split(`- name: ${name}\n`)[1]?.split(/\n {6}- name: /)[0] ?? ''
+    expect(step).toContain("if: ${{ inputs.npm-root || inputs.npm-workspaces != '' }}")
+    expect(step).toContain('NPM_TOKEN: ${{ secrets.NPM_TOKEN }}')
+    const script = stepScript(name)
+    for (const [token, status] of [
+      ['', 1],
+      ['x', 0],
+    ] as const) {
+      const result = spawnSync('bash', ['-e', '-c', script], {
+        env: { PATH: process.env.PATH ?? '', NPM_TOKEN: token },
+        encoding: 'utf8',
+      })
+      expect(result.status, result.stdout + result.stderr).toBe(status)
+      if (status === 1) {
+        expect(result.stdout).toContain(
+          '::error::npm-root or npm-workspaces is set but the NPM_TOKEN secret is not passed.'
+        )
+      }
+    }
   })
 
   it('refuses to publish a private root package', () => {

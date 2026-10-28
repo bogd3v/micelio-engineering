@@ -93,7 +93,7 @@ on:
         default: .nvmrc
     secrets:
       NPM_TOKEN:
-        description: npm token that can publish the packages; needed only with npm-root or npm-workspaces
+        description: npm token that can publish the packages; needed only with npm-root or npm-workspaces. Keep it in the caller's release environment (inputs.environment); only the publish job reads it
         required: false
     outputs:
       tag:
@@ -227,7 +227,6 @@ jobs:
           IMAGES: ${{ inputs.images }}
           NPM_ROOT: ${{ inputs.npm-root }}
           NPM_WORKSPACES: ${{ inputs.npm-workspaces }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           DRY_RUN: ${{ inputs.dry-run }}
         run: |
           failed=0
@@ -249,9 +248,6 @@ jobs:
           fi
           if gh api "repos/$REPO/git/ref/tags/$TAG" >/dev/null 2>&1; then
             fail "The tag $TAG already exists. A published version never changes."
-          fi
-          if { [ "$NPM_ROOT" = true ] || [ -n "$NPM_WORKSPACES" ]; } && [ -z "$NPM_TOKEN" ]; then
-            fail "npm-root or npm-workspaces is set but the NPM_TOKEN secret is not passed."
           fi
           if [ "$NPM_ROOT" = true ]; then
             root=$(node -p "const p = require('./package.json'); p.private ? '' : p.name")
@@ -298,6 +294,17 @@ jobs:
       packages: write
       id-token: write # the signed build provenance of npm publish --provenance
     steps:
+      # Only this job runs in the environment, so only it can see an environment secret: the plan job cannot check the token
+      - name: Check the npm token is set
+        if: ${{ inputs.npm-root || inputs.npm-workspaces != '' }}
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "::error::npm-root or npm-workspaces is set but the NPM_TOKEN secret is not passed."
+            exit 1
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
