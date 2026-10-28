@@ -1,8 +1,14 @@
-/** A `time: <minutes>m diff|report` line: the maintainer's minutes on one pull request. */
+/**
+ * A `time:` note: the maintainer's minutes on one pull request. Each field is `null` when the note
+ * does not give it.
+ */
 export interface TimeLine {
-  minutes: number
-  /** What the minutes were spent on: reading the diff, or reading the reports. */
-  kind: 'diff' | 'report'
+  /** Minutes reading the diff first. */
+  diff: number | null
+  /** Minutes reading the reports first. */
+  report: number | null
+  /** Minutes of the hands-on check, on Docker or as a test (`docker` or `test` in the note). */
+  handsOn: number | null
 }
 
 /** A comment of the master that `metrics` counts, read from its first line. */
@@ -11,34 +17,73 @@ export type GateEvent =
   | { kind: 'review'; round: number | null; blocking: number | null }
   | { kind: 'verification'; mismatches: number | null }
 
-const TIME = /^\s*time:\s*(\d{1,6})\s*(?:m|mins?|minutes?)\s+(diff|report)\s*\.?\s*$/i
+const TIME = /^\s*time:\s*(.*)$/i
+const MINUTES = '(\\d{1,6})\\s*(?:m|mins?|minutes?)'
+const SPENT = new RegExp(`^${MINUTES}\\s+(diff|report|docker|test)$`, 'i')
+const CHECKED = new RegExp(`^maintainer's\\s+(?:docker|test)\\s+check\\s+${MINUTES}$`, 'i')
+const NOT_GIVEN = /^(?:diff|report)\s+(?:read\s+)?(?:time\s+)?(?:was\s+)?not\s+(?:stated|given)$/i
 
 /**
- * Finds the `time:` line of a comment or review: `time: 10m diff`, `time: 2 minute diff`,
- * `time: 5 minutes report`. The unit is `m`, `min`, `mins`, `minute` or `minutes`, the kind is
- * `diff` or `report`, case does not matter, and nothing else may be on the line.
+ * Reads one `time:` line, in the forms the maintainer writes: a comma-separated list of
+ * `<n>m diff`, `<n>m report`, `<n>m docker` and `<n>m test` (the unit is `m`, `min`, `mins`,
+ * `minute` or `minutes`), `diff read not stated` (or `not given`), and
+ * `maintainer's Docker check <n>m`. A remark may follow in parentheses or after a full stop. Any
+ * other clause, or no minutes at all, makes the line no note.
+ */
+function parseTimeLine(rest: string): TimeLine | null {
+  const note: TimeLine = { diff: null, report: null, handsOn: null }
+  let found = false
+  const [clauses = ''] = rest.split(/\s*\(|\.(?:\s|$)/, 1)
+  for (const clause of clauses.split(',').map((part) => part.trim())) {
+    if (NOT_GIVEN.test(clause)) continue
+    const spent = SPENT.exec(clause)
+    const checked = CHECKED.exec(clause)
+    const minutes = Number(spent?.[1] ?? checked?.[1])
+    if (Number.isNaN(minutes)) return null
+    const kind = (spent?.[2] ?? 'docker').toLowerCase()
+    if (kind === 'diff' || kind === 'report') note[kind] = minutes
+    else note.handsOn = (note.handsOn ?? 0) + minutes
+    found = true
+  }
+  return found ? note : null
+}
+
+/**
+ * Finds the `time:` line of a comment or review, such as `time: 10m diff`,
+ * `time: 5 minutes report`, `time: 3m diff, 0m docker`, `time: 2m diff, 2m test (the admin page)`
+ * or `time: diff read not stated, 2m test`. The line starts with `time:`, case does not matter.
  *
- * @returns The last such line of the text, or `null` when there is none.
+ * @returns The last such line of the text, or `null` when there is none. A line that gives a
+ * diff or report time replaces the earlier ones; a line without it (`time: 2m docker`) keeps the
+ * earlier diff or report time, and one that gives a hands-on time replaces the earlier one.
  */
 export function parseTime(text: string): TimeLine | null {
   let found: TimeLine | null = null
   for (const line of text.split(/\r?\n/)) {
-    const match = TIME.exec(line)
-    if (match?.[1] !== undefined && match[2] !== undefined) {
-      found = {
-        minutes: Number(match[1]),
-        kind: match[2].toLowerCase() === 'diff' ? 'diff' : 'report',
-      }
-    }
+    const rest = TIME.exec(line)?.[1]
+    const note = rest === undefined ? null : parseTimeLine(rest)
+    if (note !== null) found = mergeTime(found, note)
   }
   return found
+}
+
+/** Puts a later note over an earlier one the way `parseTime` does with the lines of a text. */
+export function mergeTime(earlier: TimeLine | null, later: TimeLine): TimeLine {
+  const reading = later.diff !== null || later.report !== null ? later : earlier
+  return {
+    diff: reading?.diff ?? null,
+    report: reading?.report ?? null,
+    handsOn: later.handsOn ?? earlier?.handsOn ?? null,
+  }
 }
 
 /**
  * Reads what a comment of the master reports from its first line, the way the master writes it:
  * `**Gate 1 …: not ready**` or `…held, not started` (the issue went back); `**Gate 3, round N …**`
  * with `K Blocking` (a review round; without `round N` its round is `null`); `**Gate 4 …**` with
- * `K mismatch(es)` (a verification); and a
+ * `K mismatch(es)` (a verification, which may also be headed `# Gate 4 report: …`,
+ * `# Verification report: …` or a `<details><summary><b>Gate 4 …` summary: the markup of the first
+ * line is not read); and a
  * `**lint-issue** · … · K of 7 rules fail` report (the issue went back). A count that is not in the
  * first line is `null` for a review, and for a verification it is read from the report's
  * `**Mismatches: K.**` line.
@@ -46,7 +91,10 @@ export function parseTime(text: string): TimeLine | null {
  * @returns `null` for any other comment.
  */
 export function parseEvent(body: string): GateEvent | null {
-  const first = (body.split(/\r?\n/, 1)[0] ?? '').replaceAll('*', '')
+  const first = (body.split(/\r?\n/, 1)[0] ?? '')
+    .replaceAll(/<[^>]*>/g, '')
+    .replaceAll('*', '')
+    .replace(/^\s*#+\s*/, '')
   const lower = first.toLowerCase()
   if (lower.startsWith('lint-issue')) {
     return /\d+ of \d+ rules fail/.test(lower) ? { kind: 'returned' } : null
@@ -62,7 +110,7 @@ export function parseEvent(body: string): GateEvent | null {
       blocking: count(lower, 'blocking'),
     }
   }
-  if (lower.startsWith('gate 4')) {
+  if (lower.startsWith('gate 4') || lower.startsWith('verification report')) {
     return { kind: 'verification', mismatches: count(lower, 'mismatch') ?? mismatchLine(body) }
   }
   return null

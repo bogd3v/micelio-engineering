@@ -17,7 +17,14 @@ export {
 export type { Gh, ReadyDeps, ReadyParams, ReadyResult } from './ready.js'
 export { metrics } from './metrics.js'
 export type { IssueRow, Metrics, MetricsOptions, PullRow } from './metrics.js'
-export { blockingByCategory, countLog, parseEvent, parseLogLines, parseTime } from './parse.js'
+export {
+  blockingByCategory,
+  countLog,
+  mergeTime,
+  parseEvent,
+  parseLogLines,
+  parseTime,
+} from './parse.js'
 export type { GateEvent, LogLine, TimeLine } from './parse.js'
 export { renderMetrics } from './render.js'
 export { fixtureSource, ghSource } from './source.js'
