@@ -7,7 +7,7 @@ name: Issue ready
 #
 #   on:
 #     issues:
-#       types: [opened, edited]
+#       types: [opened, edited, milestoned]
 #   jobs:
 #     issue-ready:
 #       permissions:
