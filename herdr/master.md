@@ -72,7 +72,7 @@ Before each round after the first, send the worker `/compact` (`herdr agent prom
 
 ### Gate 2 — the draft
 
-The worker's draft is a file outside the worktree. The master checks it has Problem, What changes, For review, Tests with real output, "Instructions that were wrong or missing" and what could not be verified, and that `npm run check` output is in it. A missing part goes back to the worker without a reviewer; that bounce is not one of the three rounds.
+The worker's draft is a file outside the worktree. The master checks it has Problem, What changes, For review, Tests with real output, "Instructions that were wrong or missing" and what could not be verified, and that `npm run check` output is in it. On every round it also checks that the "Tests" section was rerun after the last code change (its command log or a stated round), before it starts a reviewer or verifier. A missing part, or a number from before the last code change that is not marked with its round, goes back to the worker without a reviewer; that bounce is not one of the three rounds.
 
 ### The review packet
 
