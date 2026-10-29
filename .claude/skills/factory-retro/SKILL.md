@@ -64,6 +64,7 @@ The retro ends when every input row of the milestone has a terminal Destination:
 - Fill the Destination of every row a created draft covers, from any milestone (a former `single` row that joined the group too), with the issue as `#n` and the retro's date after it (`#57 2026-11-02`).
 - Fill the rows of a draft the maintainer declines with `declined` and the date. They are not counted again; a later row of the same mistake starts a new group.
 - Fill each single of the milestone with `single` and the date. A `single` row counts again at the next retro.
+- The cells are wider now, so Prettier realigns the table: run `npx prettier --write docs/factory-log.md` before `npm run check`; it changes only spaces.
 
 A row of the milestone that is still empty is listed to the maintainer as open; do not report the retro as finished.
 

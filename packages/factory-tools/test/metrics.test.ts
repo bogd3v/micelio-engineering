@@ -352,7 +352,7 @@ describe('factory log', () => {
     expect(countLog(log)).toEqual({ rows: 3, converted: 2 })
   })
 
-  it('has every line the issues carried, moved with an empty destination', async () => {
+  it('has every line the issues carried, moved with its first four cells intact and a destination that is empty or one the retro gives', async () => {
     const log = await readFile(`${PACKAGE}../../docs/factory-log.md`, 'utf8')
     const fixtures = await readFile(`${RECORDED}/factory-log.md`, 'utf8')
     const comments: { body: string; created_at: string }[] = []
@@ -376,8 +376,15 @@ describe('factory log', () => {
     const rows = rowsOf(log)
     expect(expected).toHaveLength(45)
     expect(rowsOf(fixtures)).toEqual(expected)
-    // The first 45 rows are the moved lines and stay as they were; the scribe appends the rest.
-    expect(rows.slice(0, 45)).toEqual(expected)
+    // The first 45 rows are the moved lines: Date, Issue, What and Category stay as they were; the
+    // scribe appends the rest. Their Destination is empty until the retro fills it with a form the
+    // factory-retro skill names (`#n YYYY-MM-DD`, `single YYYY-MM-DD` or `declined YYYY-MM-DD`).
+    expect(rows.slice(0, 45).map((row) => row.slice(0, 4))).toEqual(
+      expected.map((row) => row.slice(0, 4))
+    )
+    for (const row of rows.slice(0, 45)) {
+      expect(row[4]).toMatch(/^$|^(#\d+|single|declined) \d{4}-\d{2}-\d{2}$/)
+    }
     expect(countLog(log).rows).toBe(rows.length)
     for (const [date, issue, what, category] of rows.slice(45)) {
       const line = `factory-log | ${date} | ${issue} | ${(what ?? '').replaceAll('\\|', '|')} | ${category} | -`
