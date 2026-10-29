@@ -79,11 +79,11 @@ A gate is a list evaluated by a machine, the maintainer, or an agent other than 
 
 **When:** before the work goes to the reviewer.
 
-**Evaluated by:** the worker, and the master checks the draft before it starts gate 3.
+**Evaluated by:** the worker, and the master checks the draft before it starts gate 3 or gate 4, on every round.
 
-**Passes when:** `npm run check` is green in the worktree; every change of behaviour has a new test; user-facing strings are in `en` and `es`; new and changed exports have TSDoc; the documents the change made false are updated on the same branch; the acceptance criteria are proven on the repository's Docker; the pull request draft has Problem, What changes, For review, Tests with the real output of every command, a section "Instructions that were wrong or missing", and what could not be verified.
+**Passes when:** `npm run check` is green in the worktree; every change of behaviour has a new test; user-facing strings are in `en` and `es`; new and changed exports have TSDoc; the documents the change made false are updated on the same branch; the acceptance criteria are proven on the repository's Docker; the pull request draft has Problem, What changes, For review, Tests with the real output of every command, a section "Instructions that were wrong or missing", and what could not be verified; and its "Tests" section was rerun after the last code change: after every round that changes code the worker re-ran every command the draft reports and replaced each number with that run's output, or marked it as from an earlier round and named the round, and the section ends with the run of the final diff. The master checks this (the command log or a stated round) before it starts a reviewer or verifier, on every round.
 
-**Fails when:** a check is red, a line of the Done list of section 11 is unmet, the draft lacks one of those sections, or it states a result without its output.
+**Fails when:** a check is red, a line of the Done list of section 11 is unmet, the draft lacks one of those sections, it states a result without its output, or its numbers come from a run before the last code change without saying so.
 
 ### Gate 3 · Blind review
 
