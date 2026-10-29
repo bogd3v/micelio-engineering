@@ -20,7 +20,7 @@ Part of #. Depends on #.
 
 ## Requirements
 
-<!-- What must stay true: contracts that may not break (docs/engineering-standard.md, section 6), budgets, behaviour that existing sites keep. Say whether the change is breaking and what the version bump is (section 7). -->
+<!-- What must stay true: contracts that may not break (docs/engineering-standard.md, section 6), budgets, behaviour that existing sites keep. Say whether the change is breaking and what the version bump is (section 7). Before 1.0.0 only a breaking change raises `y`; a `feat` that is not breaking is a PATCH. -->
 
 -
 
