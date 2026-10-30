@@ -101,9 +101,9 @@ A gate is a list evaluated by a machine, the maintainer, or an agent other than 
 
 **Evaluated by:** the verifier, a new agent that starts with no context from the worker and has not read the reviewer's findings.
 
-**Passes when:** on the repository's Docker re-created from scratch from a clean copy of the worktree (nothing is committed before gate 5: a fresh clone at the merge base, the worktree's diff applied with `--binary` and its untracked files copied, never its ignored files), every command of the draft's Tests section gives the numbers the draft reports; every acceptance criterion is shown to hold; everything the draft says was not verified has been tried, and the outcome is written down.
+**Passes when:** on the repository's Docker re-created from scratch from a clean copy of the worktree (nothing is committed before gate 5: a fresh clone at the merge base, the worktree's diff applied with `--binary` and its untracked files copied, never its ignored files), every command of the draft's Tests section gives the numbers the draft reports (a count exactly; a figure the repository does not reproduce run to run, such as a coverage percentage, the failures of a known flaky test or the failures on `main`, is reported by the worker as the values of at least two runs and `k failed of n`, and is checked against the repository's floor and written as `variance`, not as a mismatch); every acceptance criterion is shown to hold; everything the draft says was not verified has been tried, and the outcome is written down.
 
-**Fails when:** a number differs from the reported one (always Blocking: the worker reported something that did not happen), a criterion does not hold, or a command cannot be run as written.
+**Fails when:** a count differs from the reported one, or a varying figure is below its floor or was reported as one exact value (always Blocking: the worker reported something that did not happen), a criterion does not hold, or a command cannot be run as written.
 
 ### Gate 5 · Delivery
 
