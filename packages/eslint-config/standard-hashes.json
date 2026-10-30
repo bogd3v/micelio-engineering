@@ -4,9 +4,9 @@
   "files": {
     ".claude/agents/master.md": "77669615cee12789c1faf068670be1cca5fcaf3b0fd58c8f3705b45a9d0c41f4",
     ".claude/agents/planner.md": "9443f4079346d12eb67714012c70cc1b6906f79cccb507708ad309ef271b158a",
-    ".claude/agents/reviewer.md": "958574e5b4b1745ea856c97ac7604e97d2ccd09c25338dc2aee54c82c7f751cd",
+    ".claude/agents/reviewer.md": "2590a23d5dbc0cb4e6d4e2168ece1f7571acd0edcc6523cca0d2421bf52bd54f",
     ".claude/agents/verifier.md": "2a3ea1cf3de3d3ab2b6865b63dd9c115120737bfc382658303e2a5d3ea386e28",
-    ".claude/agents/worker.md": "91b1bd34aaa25205739faa0fd66cb6795189ef9b241b1ca807ce1f3bfc3817ff",
+    ".claude/agents/worker.md": "224533a08d982a8c20a139792f43a9d2ee0d1c3584c116b179f5bb508aead3eb",
     ".claude/skills/ship-pr/SKILL.md": "c6267ca9022252dbd48a90c19940d70f7515857792b5df5d2e6a8320f2ecfb51",
     ".claude/skills/blind-review/SKILL.md": "a364df6c8fe817e568ec4acb6bda2762c92db0f5a070a758aece64ff63b09d98",
     ".claude/skills/verify-pr/SKILL.md": "e60bfd2b8d79385c1a1203154740820a3a1b99b73743015aaf72e2e97f553b1e",
