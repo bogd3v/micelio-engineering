@@ -69,7 +69,7 @@ A gate is a list evaluated by a machine, the maintainer, or an agent other than 
 
 **When:** before a worker is started.
 
-**Evaluated by:** the `issue-ready` workflow (#40), which runs `lint-issue` (#36) on the issue as `gh issue view` returns it, then the master, who takes only an issue on Ready with the `ready` label and reads it by hand against this list.
+**Evaluated by:** the `issue-ready` workflow (#40), which runs `lint-issue` (#36) on the issue as `gh issue view` returns it, then the master, who takes only an issue on Ready with the `ready` label and reads it by hand against this list. Before that, whoever creates or edits a task issue's body (the planner, or the master for its Progress text) writes it to a file (first line `# <title>`, then the body) and runs `npm run lint-issue --workspace packages/factory-tools -- --file <path>` from a checkout of `micelio-engineering` (`--repo owner/repo` when the body has a bare `#n`), and creates or edits the issue only at exit 0; the epic's checkboxes are not linted, since an epic is not a Task; `issue-ready` keeps running on the created issue.
 
 **Passes when:** the title has a conventional prefix, with `!` when it breaks a contract; the five parts of the task template (section 12) are present and not empty; every acceptance criterion can be verified by a test or a command (section 12), apart from the fixed maintainer criterion; the issue names at least one path and one ADR or document; it has an "Out of scope" line; it has the fixed criterion "Verified by the maintainer on Docker", or on the run the repository's `AGENTS.md` names instead (see [Docker](#docker)), and a Delivery section; every issue it "Depends on" is closed.
 
