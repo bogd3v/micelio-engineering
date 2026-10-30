@@ -3,7 +3,7 @@
   "1.5": "c3ee8aa9a13945e073dedeecbb7ba3a9587ec0ef6878e426eb4be7a0398d93a1",
   "files": {
     ".claude/agents/master.md": "b213824c3a2c9424d5bbe5856c5b570af2b5f5336cfa50d7612721ba65d64835",
-    ".claude/agents/planner.md": "bb79bba6cc491364253b6f895ec32a1883e89d15a25a38d189032bee8f7a4251",
+    ".claude/agents/planner.md": "b71c815c78875252c9574b74e581115c9814903bc05c11a992689d8af979f7e8",
     ".claude/agents/reviewer.md": "62b9addeab36c5166b674dd1b1cdae92c382b00a563ccbd2b652227932b7ef52",
     ".claude/agents/verifier.md": "9d42abc7329774c51f63f1079182e42720b052f1f3ef5b05019c9729aa394958",
     ".claude/agents/worker.md": "8390a223c983ec5ea7254e1f7fd1de79cfd1bb4c73936a133ddfb6ffd7f25d45",
