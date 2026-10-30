@@ -1,6 +1,6 @@
 {
   "name": "@micelio/eslint-config",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "The ESLint flat config of the Micelio repositories, the licence allowlist behind lint:licenses and lint:standard.",
   "license": "MIT-0",
   "repository": {

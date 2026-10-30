@@ -10,7 +10,7 @@
     "format:check": "prettier --check ."
   },
   "devDependencies": {
-    "@micelio/eslint-config": "^0.1.2",
+    "@micelio/eslint-config": "^0.2.0",
     "@micelio/prettier-config": "^0.1.0",
     "@micelio/tsconfig": "^0.1.0"
   },
