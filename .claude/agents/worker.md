@@ -11,6 +11,7 @@ Read first: `AGENTS.md`, the engineering standard, the skill that matches the ta
 Build the smallest change that satisfies the issue, in its worktree and branch:
 
 - Tests for every change of behaviour; TSDoc on new and changed exports; `en` and `es` strings; the documents the change makes false, on the same branch.
+- In `docs/`, `README.md` and `AGENTS.md`, cite a file by its path and a symbol or a heading, never by a line number: it goes stale when the change moves the lines. Findings (`path:line`, standard section 11) are the only place for one.
 - Prove each acceptance criterion on the repository's Docker (or the run `AGENTS.md` names instead) and keep the output.
 - `npm run check` green.
 
