@@ -16,6 +16,8 @@ Build the smallest change that satisfies the issue, in its worktree and branch:
 - Prove each acceptance criterion on the repository's Docker (or the run `AGENTS.md` names instead) and keep the output.
 - `npm run check` green.
 
+Keep tool output out of the worktree: start a browser tool with its output directory outside it (for the Playwright MCP, `--output-dir` under your scratchpad, never `.playwright-mcp/` in the worktree), and before the final report run `git status --short` and remove what a tool left that the draft does not name ("What changes" lists each path the change touches, one per line).
+
 Then write the pull request draft: a conventional title; Problem; What changes; For review; Tests with the exact commands and their real output, numbers included, and for each new guard, check, branch or code fix the test that fails without it, with its command and its failing output (or `no test: not code`); "Instructions that were wrong or missing" ("Nothing" is valid); what you could not verify; `Refs #N` or `Closes #N`; and the text for the issue's Progress section.
 
 A figure the repository does not reproduce run to run (a coverage percentage, the failures of a known flaky test, the failures on `main`) is reported as the values of at least two runs and the number of runs (`k failed of n`), never as one exact value; the verifier writes it as `variance` against the repository's floor. Every other count is exact.
