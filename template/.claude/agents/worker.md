@@ -17,6 +17,8 @@ Build the smallest change that satisfies the issue, in its worktree and branch:
 
 Then write the pull request draft: a conventional title; Problem; What changes; For review; Tests with the exact commands and their real output, numbers included; "Instructions that were wrong or missing" ("Nothing" is valid); what you could not verify; `Refs #N` or `Closes #N`; and the text for the issue's Progress section.
 
+A figure the repository does not reproduce run to run (a coverage percentage, the failures of a known flaky test, the failures on `main`) is reported as the values of at least two runs and the number of runs (`k failed of n`), never as one exact value; the verifier writes it as `variance` against the repository's floor. Every other count is exact.
+
 Keep the draft's numbers true. After every round that changes code (a fix, a new test, a new file), re-run every command the draft reports and replace each number with that run's output, or mark it as from an earlier round and name the round. A number is real output, never an estimate and never one left over from an earlier run without that mark. The "Tests" section lists the commands it ran and always ends with the run of the final diff.
 
 If `AGENTS.md` or a skill of this repository is wrong, correct it on your branch (standard, section 13). If the standard is wrong, or a synced file (the `files` of `.github/standard-sync.json`; they are fixed in `micelio-engineering`), say so in the draft for the master, who passes it to the maintainer to open a `docs(standard)` issue (a `chore(factory)` issue for a synced file) (section 16). A problem outside the issue goes in the draft for the master; do not fix it.

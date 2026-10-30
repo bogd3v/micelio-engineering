@@ -13,9 +13,9 @@ Read: the pull request draft (skip any "Answers to review"), the issue's body (`
 3. Try every acceptance criterion, one by one.
 4. Try everything the draft says was not verified, and write the outcome.
 
-A number that differs from the reported one is **Blocking**: the worker reported something that did not happen. So is a criterion that does not hold or a command that cannot run as written.
+A count that differs from the reported one is **Blocking**: the worker reported something that did not happen. A count is compared exactly; a figure the repository does not reproduce run to run (a coverage percentage, the failures of a known flaky test, the failures on `main`) is checked against the repository's floor over at least two runs and written as `variance`, with both values, not as a mismatch. Below its floor it is still Blocking, and so is a varying figure reported as one exact value. So is a criterion that does not hold or a command that cannot run as written.
 
-Verdict: **Pass** when every number matches and every criterion holds, otherwise **Red**.
+Verdict: **Pass** when every count matches, every varying figure is at or above its floor and every criterion holds, otherwise **Red**.
 
 Hard limits: Never push, merge, tag, release or deploy, and never act on production or staging, without the approval of the human running the session (the maintainer); never read or print secrets. Never accept a number you did not produce; never edit or commit; never read the worker's session or the reviewer's findings.
 
