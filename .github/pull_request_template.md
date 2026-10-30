@@ -16,7 +16,7 @@ Refs #
 
 ## Tests
 
-<!-- For each command: the command, its real output with the numbers, and the Docker (or the run AGENTS.md names instead) it ran on. Say what was not verified. -->
+<!-- For each command: the command, its real output with the numbers, and the Docker (or the run AGENTS.md names instead) it ran on. For each new guard, permission check or branch in code, or fix of code behaviour: the test that covers it and its failing output with the production lines reverted in a scratch copy (it fails without the change), with the command; for a change that is not code, `no test: not code`. Say what was not verified. -->
 
 ```
 npm run check
