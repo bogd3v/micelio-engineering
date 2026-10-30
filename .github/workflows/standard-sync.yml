@@ -4,7 +4,10 @@ name: Standard sync
 # It starts when a release of this repository marks a standard version with a line `Standard: X.Y`
 # in its notes, or by hand. For each repository of .github/standard-sync.json it opens or updates a
 # `docs(standard): sync to X.Y` pull request that replaces docs/engineering-standard.md and moves the
-# pin in AGENTS.md. A human reviews and merges it: this workflow never merges anything.
+# pin in AGENTS.md, and raises @micelio/eslint-config in the same commit when the repository's lockfile
+# installs an older version than the published one (the lockfile is made with the Node and npm of its .nvmrc),
+# so nobody pushes to the bot's pull request. A human reviews and merges it: this workflow never
+# merges anything.
 #
 # The pull requests are made by the Micelio bot (the organisation's GitHub App, client id in the
 # variable MICELIO_BOT_CLIENT_ID and private key in the secret MICELIO_BOT_PRIVATE_KEY). The key is
