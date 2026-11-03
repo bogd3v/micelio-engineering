@@ -4,7 +4,7 @@ Instructions for coding agents working in this repository. It holds Micelio's sh
 
 ## Engineering standard
 
-The rules shared by every Micelio repository live in [`docs/engineering-standard.md`](docs/engineering-standard.md). This repository follows standard version 1.5 (`standard: 1.5`; `npm run lint:standard` checks the copy against the hashes bundled in `@micelio/eslint-config`). This file adds what is specific to this repository and never relaxes the standard. This is the canonical copy: a change to the standard is a pull request here titled `docs(standard): …` (section 16), and `.github/workflows/standard-sync.yml` carries it to the other repositories (`docs/standard-sync.md`).
+The rules shared by every Micelio repository live in [`docs/engineering-standard.md`](docs/engineering-standard.md). This repository follows standard version 1.6 (`standard: 1.6`; `npm run lint:standard` checks the copy against the hashes bundled in `@micelio/eslint-config`). This file adds what is specific to this repository and never relaxes the standard. This is the canonical copy: a change to the standard is a pull request here titled `docs(standard): …` (section 16), and `.github/workflows/standard-sync.yml` carries it to the other repositories (`docs/standard-sync.md`).
 
 ## Commands
 
@@ -18,6 +18,12 @@ npm run verify:isolated  # installs the three packed packages in an empty projec
 npm run lint-issue --workspace packages/factory-tools -- <owner/repo#n> # checks an issue against the Definition of Ready (needs gh)
 npm run metrics --workspace packages/factory-tools -- --milestone "<title>" # the factory's numbers for a milestone (needs gh; --fixtures <dir> reads a recording instead)
 ```
+
+What the commands need besides Node 22: the `node:22` image has `git` but not `jq`, `gh` or `reuse`.
+`npm run check` needs `git` and `jq` (`scripts/standard-sync.sh` calls `jq`);
+`npm run verify:template` also needs `reuse` 6.2.0, the version CI pins (an older `reuse` does not
+read `REUSE.toml`); `gh`, logged in, is for `scripts/standard-sync.sh`, its dry run included, and
+for the live forms of `lint-issue` and `metrics`; the tests stub it.
 
 ## Structure
 

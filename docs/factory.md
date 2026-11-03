@@ -147,7 +147,7 @@ The reviewer's and the verifier's reports set the order in which the maintainer 
 2. **Reports first.** Every other pull request: the maintainer starts from the reviewer's and the verifier's reports and the description, then reads the diff.
 3. **Calibration.** One pull request in five of the second level is checked line by line against its reports, to see whether the reports can be trusted.
 
-These levels do not relax section 11 of the standard, which asks the human who answers for an agent-written pull request to have read the whole diff. Until the standard changes (#45) or an ADR records an exception (section 16), the maintainer still reads the whole diff at gate 5, before the sign-off; the levels set what is read first and what the approval line records.
+These levels do not relax section 11 of the standard, which asks the human who answers for an agent-written pull request to have read the whole diff. Standard 1.6 (section 11) says the same: the risk sets the order, and the maintainer reads the whole diff at gate 5, before the sign-off; the levels set what is read first and what the approval line records.
 
 ## Docker
 
