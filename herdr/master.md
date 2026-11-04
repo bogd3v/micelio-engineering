@@ -74,6 +74,8 @@ Before each round after the first, send the worker `/compact` (`herdr agent prom
 
 The worker's draft is a file outside the worktree. The master checks it has Problem, What changes, For review, Tests with real output, "Instructions that were wrong or missing" and what could not be verified, and that `npm run check` output is in it. On every round it also checks that the "Tests" section was rerun after the last code change (its command log or a stated round), before it starts a reviewer or verifier. A missing part, or a number from before the last code change that is not marked with its round, goes back to the worker without a reviewer; that bounce is not one of the three rounds.
 
+The master also counts the changed lines of the draft: first `git -C ../wt-<N> add -N .` (so the new files count), then `git -C ../wt-<N> diff --stat "$(git -C ../wt-<N> merge-base HEAD origin/main)"` with the generated files and the snapshots left out. Above 400 it writes the number and the reason the draft gives in its gate 2 comment, and sends the draft back, as for a missing part, when the draft gives no reason (standard, section 11). The check records and does not block by itself: the maintainer reads the reason at gate 5.
+
 ### The review packet
 
 Nothing is committed before gate 5, so the reviewer reads the worktree. Build the packet in a directory outside it (`<packets>/<N>/r<K>/`):
@@ -138,7 +140,7 @@ Each correction the maintainer, the reviewer or the verifier sends back is one l
 factory-log | 2026-10-24 | #39 | the reviewer found a retry loop that never stops when `maxAttempts` is 0 | test | -
 ```
 
-The format is `factory-log | <date> | <issue> | <what> | <category> | <destination>`, the columns of `docs/factory-log.md` in order: date (`YYYY-MM-DD`), issue (`#n`, the issue the correction was found on), what was corrected (what was wrong, not how it was fixed), category (`lint`, `test`, `skill`, `standard`, `issue` or `docs`) and destination (`-` until the retro gives one). The master never commits them.
+The format is `factory-log | <date> | <issue> | <what> | <category> | <destination>`, the columns of `docs/factory-log.md` in order: date (`YYYY-MM-DD`), issue (`#n`, the issue the correction was found on), what was corrected (what was wrong, not how it was fixed), category (one of the six, `lint`, `test`, `skill`, `standard`, `issue` or `docs`, and no other: `test/factory-log.test.ts` fails on any other value) and destination (`-` until the retro gives one). The master never commits them.
 
 ### The `scribe` step
 

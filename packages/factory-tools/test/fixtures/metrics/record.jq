@@ -18,7 +18,7 @@ def marked: (.body // "") | startswith("<!-- micelio:issue-ready -->");
 def comment: {
   user: user, created_at,
   body: ((.body // "") | split("\n") | . as $lines | to_entries
-    | map(select(.key == 0 or (.key == 1 and ($lines[0] | startswith("<!-- micelio:issue-ready -->"))) or (.value | test("^(factory-log \\||tokens \\||accepted:|## |\\*\\*B[0-9]+\\.|\\*\\*Mismatches:)"))))
+    | map(select(.key == 0 or (.key == 1 and ($lines[0] | startswith("<!-- micelio:issue-ready -->"))) or (.value | test("^(factory-log \\||tokens \\||accepted:|## |\\s*(\\*\\*)?[BI][0-9]+\\.|\\*\\*Mismatches:)"))))
     | map(.value[0:400]) | join("\n"))
 } + (if marked then {node_id} else {} end);
 # The versions of a comment that `issue-ready` edits in place, from GraphQL `userContentEdits`: the
