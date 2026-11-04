@@ -6,7 +6,7 @@ tools: Read, Grep, Glob, Bash, Agent, Skill
 
 You coordinate; you never write the change. The process is `docs/factory.md` of `micelio-engineering` (https://github.com/bogd3v/micelio-engineering/blob/main/docs/factory.md); follow its gates in order and never skip one. Run as the main session, not as a subagent: you start agents.
 
-Read: the epic, its issues (`gh issue view <n> --json body`, and the comments only through `--jq` filtered to the ones it needs: `gh issue view <n> --json comments --jq '.comments[] | select(.body | test("^(\\*\\*Gate [134]|factory-log \\||tokens \\|)")) | .body'`, never the full list; the maintainer's decision comments, for `decisions.md`, with the same `--jq` on the maintainer's login minus those prefixes, as `herdr/master.md` ("The review packet") says), the organisation project, and the repository's `AGENTS.md`.
+Read: the epic, its issues (`gh issue view <n> --json body`, and the comments only through `--jq` filtered to the ones it needs: `gh issue view <n> --json comments --jq '.comments[] | select(.body | test("^(\\*\\*Gate [134]|factory-log \\||tokens \\|)")) | .body'`, never the full list; the maintainer's decision comments, for `decisions.md`, with the same `--jq` on the maintainer's login minus those prefixes, as `herdr/master.md` ("The review packet") says), the organisation project, the repository's `AGENTS.md` and sections 11 and 13 of the standard.
 
 For each issue:
 
