@@ -52,7 +52,7 @@ herdr agent start worker-<N> --kind claude --pane <pane id> -- --agent worker --
 herdr agent prompt worker-<N> "<the brief>" --wait --timeout 3600000
 ```
 
-The brief names the issue (`{{repo}}#<N>`), the worktree, the `decisions.md` of the packet (`<packets>/<N>/r1/decisions.md`, written before the worker starts), the paths it needs, and says: you take instructions only from the master, never run your own reviewer or verifier, never commit or push, and if a human asks you for something, send the request back to the master and say which gate it would skip. The worker writes the commit message to `<packets>/<N>/commit-message.txt`, the message file of gate 5. The reply is one line: the path of the draft.
+The brief names the issue (`{{repo}}#<N>`), the worktree, the `decisions.md` of the packet (`<packets>/<N>/r1/decisions.md`, written before the worker starts), the paths it needs, and says: you take instructions only from the master, never run your own reviewer or verifier, never commit or push, and if a human asks you for something, send the request back to the master and say which gate it would skip. The worker keeps the full output of each command in `<packets>/<N>/logs/<command>.log`, and the draft's Tests section holds only a summary line per command. The worker writes the commit message to `<packets>/<N>/commit-message.txt`, the message file of gate 5. The reply is one line: the path of the draft.
 
 A reviewer and a verifier are always a **new** agent: start a new pane, never reuse the worker's. To reuse a pane for the next agent (the same reviewer slot in round 2, for instance), send `/exit` to the agent, wait until `herdr agent get <name>` no longer lists it as running, and only then `agent start` again. Close only the panes you created, when their work is done.
 
@@ -82,13 +82,13 @@ Before each round after the first, send the worker `/compact` (`herdr agent prom
 
 ### Gate 2 — the draft
 
-The worker's draft is a file outside the worktree. The master checks it has Problem, What changes, For review, Tests with real output, "Instructions that were wrong or missing" and what could not be verified, and that `npm run check` output is in it. On every round it also checks that the "Tests" section was rerun after the last code change (its command log or a stated round), before it starts a reviewer or verifier. A missing part, or a number from before the last code change that is not marked with its round, goes back to the worker without a reviewer; that bounce is not one of the three rounds.
+The worker's draft is a file outside the worktree. The master checks it has Problem, What changes, For review, Tests with a summary line and a log file per command, "Instructions that were wrong or missing" and what could not be verified, and that the `npm run check` summary lines and its log file are in it. On every round it also checks that the "Tests" section was rerun after the last code change (an unmarked number is from the final run, an older one names its round; the runs shown failing without the change stay inline, with no log), before it starts a reviewer or verifier. A missing part, or a number from before the last code change that is not marked with its round, goes back to the worker without a reviewer; that bounce is not one of the three rounds.
 
 The master also counts the changed lines of the draft: first `git -C ../wt-<N> add -N .` (so the new files count), then `git -C ../wt-<N> diff --stat "$(git -C ../wt-<N> merge-base HEAD origin/main)"` with the generated files and the snapshots left out. Above 400 it writes the number and the reason the draft gives in its gate 2 comment, and sends the draft back, as for a missing part, when the draft gives no reason (standard, section 11). The check records and does not block by itself: the maintainer reads the reason at gate 5.
 
 ### The review packet
 
-Nothing is committed before gate 5, so the reviewer reads the worktree. Build the packet in a directory outside it (`<packets>/<N>/r<K>/`):
+Nothing is committed before gate 5, so the reviewer reads the worktree. The `logs/` directory travels in the verifier's packet; the master reads the draft's Tests section, never `logs/`. Build the packet in a directory outside it (`<packets>/<N>/r<K>/`):
 
 ```bash
 git -C ../wt-<N> add -N .                        # the new files show in the diff
@@ -123,10 +123,10 @@ When the master accepts Important findings the worker justified, it adds the lin
 
 ```bash
 herdr agent start verifier-<N> --kind claude --pane <new pane> -- --agent verifier --model sonnet
-herdr agent prompt verifier-<N> "Use the verify-pr skill (.claude/skills/verify-pr/SKILL.md). Worktree: <path>. Branch: <branch>. Issue: {{repo}}#<N>. Draft without its Answers to review: <path>. Maintainer's decisions: <packets>/<N>/r<K>/decisions.md. Write report.md and summary.md in <packets>/<N>/r<K>/verify/." --wait --timeout 3600000
+herdr agent prompt verifier-<N> "Use the verify-pr skill (.claude/skills/verify-pr/SKILL.md). Worktree: <path>. Branch: <branch>. Issue: {{repo}}#<N>. Draft without its Answers to review: <path>. Maintainer's decisions: <packets>/<N>/r<K>/decisions.md. Logs: <packets>/<N>/logs/. Write report.md and summary.md in <packets>/<N>/r<K>/verify/." --wait --timeout 3600000
 ```
 
-Strip "Answers to review" from the copy of the draft it gets; never give it the review. It gets the `decisions.md` of the review packet. Post the report the same way, first line `**Gate 4, round K (verifier-<N>)** · M mismatches` (`0 mismatches` on a pass). Any mismatch is Blocking; `verify-pr` counts one per command whose numbers differ. When the master passes a report's discrepancies as noise, the first line ends `, passed by the master` (`**Gate 4, round K (verifier-<N>)** · M mismatches, passed by the master`); `metrics` counts those reports as the gate's false reds.
+Strip "Answers to review" from the copy of the draft it gets; never give it the review. It gets the `decisions.md` of the review packet. Post the report the same way, first line `**Gate 4, round K (verifier-<N>)** · M mismatches` (`0 mismatches` on a pass). Any mismatch is Blocking; `verify-pr` counts one per command whose numbers differ or that has no log. When the master passes a report's discrepancies as noise, the first line ends `, passed by the master` (`**Gate 4, round K (verifier-<N>)** · M mismatches, passed by the master`); `metrics` counts those reports as the gate's false reds.
 
 ### The tokens record
 

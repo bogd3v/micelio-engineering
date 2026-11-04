@@ -14,13 +14,15 @@ One module, no dependencies.
 
 ## Tests
 
-The command, run in the project root:
+The command, run in the project root; the full output is in `logs/npm-test.log` of the packet:
 
 ```text
 $ npm test
+exit 0
 ℹ tests 4
 ℹ pass 4
 ℹ fail 0
+log: logs/npm-test.log
 ```
 
 ## Instructions that were wrong or missing
