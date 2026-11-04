@@ -103,6 +103,7 @@ gh issue comment <N> --repo {{repo}} --body-file comment.md
 ```
 
 `metrics` reads that first line (`Gate 3, round K` and `K Blocking`) and the `**B<n>.` lines under the `## <n>. <check>` headings of the report, from the maintainer's login only. The gate passes when there are zero Blocking findings and each Important one is fixed or justified in the draft's "Answers to review"; the master decides.
+When the master accepts Important findings the worker justified, it adds the line `accepted: n` (n the number accepted) under the first line of that `Gate 3` comment; `metrics` sums it as the gate's false reds.
 
 ### Gate 4 — verification
 
@@ -111,7 +112,17 @@ herdr agent start verifier-<N> --kind claude --pane <new pane> -- --agent verifi
 herdr agent prompt verifier-<N> "Use the verify-pr skill (.claude/skills/verify-pr/SKILL.md). Worktree: <path>. Branch: <branch>. Issue: {{repo}}#<N>. Draft without its Answers to review: <path>. Maintainer's decisions: <packets>/<N>/r<K>/decisions.md. Write report.md and summary.md in <packets>/<N>/r<K>/verify/." --wait --timeout 3600000
 ```
 
-Strip "Answers to review" from the copy of the draft it gets; never give it the review. Write `decisions.md` in the packet: the maintainer's decision comments on the issue (by `{{maintainer}}`, or relayed by the master as the maintainer's), copied in full, oldest first, and never a `**Gate …**` comment or a finding; `None` when there are none. Post the report the same way, first line `**Gate 4, round K (verifier-<N>)** · M mismatches` (`0 mismatches` on a pass). Any mismatch is Blocking; `verify-pr` counts one per command whose numbers differ.
+Strip "Answers to review" from the copy of the draft it gets; never give it the review. Write `decisions.md` in the packet: the maintainer's decision comments on the issue (by `{{maintainer}}`, or relayed by the master as the maintainer's), copied in full, oldest first, and never a `**Gate …**` comment or a finding; `None` when there are none. Post the report the same way, first line `**Gate 4, round K (verifier-<N>)** · M mismatches` (`0 mismatches` on a pass). Any mismatch is Blocking; `verify-pr` counts one per command whose numbers differ. When the master passes a report's discrepancies as noise, the first line ends `, passed by the master` (`**Gate 4, round K (verifier-<N>)** · M mismatches, passed by the master`); `metrics` counts those reports as the gate's false reds.
+
+### The tokens record
+
+After each agent of a round ends (worker, reviewer or verifier), the master posts one comment on the issue with one line per agent, the numbers that agent's session reports (the master's own record, not Claude Code's transcripts nor OpenTelemetry):
+
+```text
+tokens | <date> | <issue> | <role> | <round> | <input> | <output> | <cache read>
+```
+
+The date is `YYYY-MM-DD`, the role `worker`, `reviewer` or `verifier`, and the three numbers are whole numbers without separators. `metrics` reads these lines from the maintainer's login only; a missing record is an empty cell, so never post a zero for a number you do not have.
 
 ### A red gate
 

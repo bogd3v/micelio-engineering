@@ -99,7 +99,7 @@ npm run metrics --workspace packages/factory-tools -- --milestone "Micelio · F�
 | `--fixtures <dir>`     | Reads a recording instead of `gh api` (see below), so a run needs neither `gh` nor the network                                                                                                   |
 
 The exit code is 0, or 2 when the arguments are wrong, the milestone does not exist or something
-cannot be read. The output is four tables; a total row ends the first two.
+cannot be read. The output is four tables, a total row ending the first two, and a summary line.
 
 | Table                  | Column                   | Counts                                                                                                                                                                                                                                                                                                                                                               |
 | ---------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -107,6 +107,8 @@ cannot be read. The output is four tables; a total row ends the first two.
 |                        | Gate 3 rounds            | The highest `round N` of the comments whose first line starts `Gate 3`                                                                                                                                                                                                                                                                                               |
 |                        | Blocking findings        | Over all the rounds: the `K Blocking` of the first line; if it has none, the lines of the report that start `**B<n>.`                                                                                                                                                                                                                                                |
 |                        | Verifier mismatches      | Over the maintainer's verification reports: the `K mismatch(es)` of the first line; if it has none, the `**Mismatches: K.**` line of the report; else 0. A report is a comment whose first line, without its markup (`<details><summary><b>…`, `# `, `**`), starts `Gate 4` or `Verification report`                                                                 |
+|                        | False reds, gate 3       | The `accepted: n` line of the maintainer's `Gate 3` comments, summed: the Important findings the worker justified in "Answers to review" and the master accepted (0 without the line)                                                                                                                                                                                |
+|                        | False reds, gate 4       | The maintainer's `Gate 4` comments whose first line, without its markup, says `passed by the master`: reports whose discrepancies the master let through as noise                                                                                                                                                                                                    |
 | Pull requests          | Issue                    | The issue of the milestone the body closes or refers to (`Closes`, `Fixes`, `Resolves` or `Refs #n`), `—` if none                                                                                                                                                                                                                                                    |
 |                        | Changed lines            | Additions plus deletions                                                                                                                                                                                                                                                                                                                                             |
 |                        | Maintainer corrections   | Comments on the diff (`pulls/<n>/comments`) by the maintainer                                                                                                                                                                                                                                                                                                        |
@@ -114,6 +116,9 @@ cannot be read. The output is four tables; a total row ends the first two.
 |                        | Defects after merge      | For a merged pull request, the `fix` issues (title starts `fix`) of the repository whose body cites it as `#n` or `/pull/n`                                                                                                                                                                                                                                          |
 |                        | Minutes, diff / report   | The maintainer's `time:` notes on the pull request, put together (see below): the minutes of the first reading in its column, 0 in the other, `—` in both when the note has none; `—` in all three when there is no note                                                                                                                                             |
 |                        | Minutes, Docker or test  | The `docker` or `test` minutes of the maintainer's `time:` notes, `—` when no note gives them                                                                                                                                                                                                                                                                        |
+|                        | Silent approvals         | The maintainer's reviews, approved or commented, with no text and no inline comment, on a pull request with no `time:` note from the maintainer                                                                                                                                                                                                                      |
+|                        | Reports read first       | 1 when the maintainer's `time:` notes say `report` (the reports were read first), 0 when there is a note that does not, `—` when there is none                                                                                                                                                                                                                       |
+|                        | Tokens, by role          | From the master's `tokens \|` comments on the pull request's issue (below): input plus output by role, in the order the roles first appear, with the cache reads in brackets (`worker 225000 (cache 1400000)`); `—` when the issue has no such comment, never 0. The pull requests of one issue show the same cell, and its total row is empty                       |
 | Blocking by category   | Category, Findings       | The `**B<n>.` lines of the reports, by the section 11 check (`Correctness`, `Contracts`, `Security`, `Tests`, `Documentation`, `Scope`) the `## ` heading above them starts with; any other heading is `uncategorised`; the Blocking of a first line the report does not list is `uncategorised`                                                                     |
 | Correction log         | Rows, With a destination | The rows of `docs/factory-log.md` and those whose Destination is not empty                                                                                                                                                                                                                                                                                           |
 
@@ -128,6 +133,27 @@ place, so the comment alone shows only its last state. `metrics` reads its edit 
 fails when the one before it did not: fail → pass counts 1, and fail → pass → fail counts 2. A
 comment that was never edited counts 1 if it fails and 0 if it passes. `Gate` lines from the bot, or
 the marker in a comment by a person, are not read.
+
+A line after the tables gives **Tokens per merged pull request without a later fix**: the tokens of
+every `tokens |` record of the milestone's issues (input plus output; cache reads are not added)
+divided by the merged pull requests whose "Defects after merge" is 0, with both numbers in brackets;
+`—` when there is no record or no such pull request.
+
+### The `tokens |` line
+
+After each agent of a round ends, the master posts a comment on the issue with one line per agent
+(the master's own record: `metrics` reads no Claude Code transcript and no telemetry):
+
+```text
+tokens | 2026-10-24 | #35 | worker | 1 | 120000 | 30000 | 900000
+```
+
+The fields are `tokens | <date> | <issue> | <role> | <round> | <input> | <output> | <cache read>`,
+separated by `|`: the date is `YYYY-MM-DD`; the role is `worker`, `reviewer`, `verifier`, …; the three
+numbers are the whole numbers the agent's session reports, with no separators. Only comments by the
+maintainer's login are read; a line with another number of fields, a bad date, an empty field or a
+number that is not whole is not read. Lines of the same role add up over the rounds, and a comment
+may hold several lines. The `issue` field is not checked: the issue is the one the comment is on.
 
 ### The `time:` line
 
@@ -166,10 +192,14 @@ review levels" of `docs/factory.md`.
 `test/fixtures/metrics/` is the recording of the milestone "Micelio · Fábrica" of this repository
 and its pull requests #46 to #49, made by `record.sh` with `gh api`. Each file is what GitHub
 returned, cut down by `record.jq` to what `metrics` reads, so that nothing but a login stands for a
-person: a comment keeps its first line, its `factory-log |` lines and the headings and finding
+person: a comment keeps its first line, its `factory-log |` and `tokens |` lines, its `accepted:` line and the headings and finding
 lines of a review report, and the `issue-ready` bot's comments also keep the line after the marker
 and their edit history (`comment-edits/`). `factory-log.md` is a copy of `docs/factory-log.md`, and `expected.md` is
-the output the tests compare with. Record again with `ISSUES=51 test/fixtures/metrics/record.sh
+the output the tests compare with. The master had not posted `tokens |` lines, `accepted:` lines or a `passed by the master` report
+yet when it was recorded: the ones in `comments/35.json`, `36.json` and `37.json` were added by
+hand in the form `record.jq` keeps, and a new recording keeps them once GitHub has them. Every
+pull request of the recording has a `time:` note, so its Silent approvals are 0; the tests build
+the other cases. Record again with `ISSUES=51 test/fixtures/metrics/record.sh
 bogd3v/micelio-engineering 2 46 47 48 49`.
 
 ### Limits
