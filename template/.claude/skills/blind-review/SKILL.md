@@ -33,7 +33,7 @@ Each check is a heading of your report, `## <n>. <name>`, with these names exact
 1. `## 1. Correctness and edge cases`
 2. `## 2. Contracts and the version bump` (sections 6 and 7)
 3. `## 3. Security and permissions`
-4. `## 4. Tests that would fail without the change`
+4. `## 4. Tests that would fail without the change` (a diff that changes an existing test, or a test the issue names, in any way other than adding a case, without the issue asking for it, is Blocking)
 5. `## 5. Documents the change made false`
 6. `## 6. Scope` (anything the issue did not ask for)
 

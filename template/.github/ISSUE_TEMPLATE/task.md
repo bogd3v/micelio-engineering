@@ -26,7 +26,7 @@ Part of #. Depends on #.
 
 ## Acceptance criteria
 
-<!-- Each line can be checked by a test or a command. "Works well" is not a criterion. -->
+<!-- Each line can be checked by a test or a command. "Works well" is not a criterion. A criterion that describes behaviour names the test that proves it, as `path/to/file.test.ts > "test name"` (the file may not exist yet), or the command whose output is the criterion; the worker creates that test and never edits it. -->
 
 - [ ]
 
