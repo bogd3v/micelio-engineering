@@ -6,6 +6,16 @@ Placeholders to fill before starting the master: `{{repo}}` (`owner/name`), `{{e
 
 Start it as the main session in a Herdr pane: `claude --agent master`. A subagent cannot start other agents, so the master never runs as one. Check `test "${HERDR_ENV:-}" = 1` first; outside Herdr, stop.
 
+## Canary
+
+Before intake, at the start of a milestone and before a pull request that changes what a role reads (`template/.claude/skills/ship-pr/SKILL.md`, "Before the maintainer"), the master runs the canary of [`fixtures/factory/RUN.md`](../fixtures/factory/RUN.md), "Canary":
+
+1. `fixtures/factory/build-scratch.sh` for `planted-coverage` and for `never-fixes`, each in its own empty directory outside the repository (`wrong-test-count` is a draft, which `planted-coverage` already copies), with the packet `RUN.md` describes. Copy the checkout's `.claude/agents/reviewer.md` and `verifier.md` and its `blind-review` and `verify-pr` skills into each directory's `.claude/`, next to `repo`, so a run on a branch reads that branch's prompts.
+2. A fresh reviewer on `planted-coverage`, then a fresh verifier on the same directory (its `wrong-test-count` draft), and the `never-fixes` worker stub for three rounds with a fresh reviewer each, as gates 3 and 4 and the escalation do. The canary agents never get `RUN.md`; move each report out of reach before the next agent starts, and keep agent names within 32 characters.
+3. It passes when the reviewer reports the planted Blocking, the verifier reports the one mismatch and the `never-fixes` run escalates after the third red round. Anything else is red.
+
+A red canary stops intake: the master posts `Canary | <date> | red | <what was missed>` on the epic and tells the maintainer. A green one is posted as the three `Canary |` lines of `RUN.md`, "Canary", each ending `yes`. The canary posts no correction-log line (see "Correction log"): those would add corrections to a closed milestone on every run.
+
 ## Intake (gate 1)
 
 The master takes an issue only when all of these hold:

@@ -9,8 +9,9 @@ A planted defect is the only proof that a reviewer or a verifier catches it, so 
 ## Blindness
 
 - **This file never goes into a packet**, nor anything else of `micelio-engineering`: it holds the expected results. The agents get only what `build-scratch.sh` writes, which comes from the fixture's own files.
+- One exception: a canary on a branch also copies the role prompts and the two skills (`reviewer.md`, `verifier.md`, `blind-review`, `verify-pr`) into `<dir>/.claude/`, next to `repo` ("Canary"). They hold no expected result, and the original run did the same (`transcripts/run1-reviewer.md`).
 - Give the agents only the paths below, never `fixtures/factory/…`. Their prompts are the ones of `herdr/master.md`, with the issue as a file.
-- The fixtures' code, issues, drafts and commit messages do not name the defect; the test checks that no file the agents read says `planted`, `untested`, `defect` or `fixture`.
+- The fixtures' code, issues, drafts and commit messages do not name the defect; the test checks that no file of the scratch repository outside `docs/`, nor the draft, says `planted`, `untested`, `defect` or `fixture`. The prompts and skills copied for a canary are outside that check: `blind-review` says `defect`, and they hold no expected result.
 
 ## Before every run
 
@@ -20,7 +21,7 @@ A planted defect is the only proof that a reviewer or a verifier catches it, so 
 2. The master builds the packet from those two paths as `herdr/master.md` says (`diff.patch`, then the agents' `summary.md` and `report.md` under `<packets>/1/r<K>/`), with `decisions.md` saying `None`. "Issue: `<dir>/repo/ISSUE.md`" replaces `{{repo}}#<N>` in the prompts.
 3. Save each agent's pane with `herdr agent read <name> --source recent-unwrapped --lines 2000`. Before the transcript is committed, strip local paths (`/home/<user>/…` becomes `<home>/…`), Herdr session and pane ids, Claude session ids, and every login other than the maintainer's. Read the result in full before it is saved.
 
-The correction-log lines are posted on #39, the issue whose criteria these runs prove.
+The correction-log lines are posted on #39, the issue whose criteria these runs prove. The canary below posts none.
 
 ## Run 1 — the reviewer flags a lowered threshold
 
@@ -50,8 +51,8 @@ The packet: the repository `<dir>/repo`, branch `main`, the issue `<dir>/repo/IS
 Expected, gate 4:
 
 - The verifier builds a clean copy as `verify-pr` says (the repository has no `origin`, so it clones `<dir>/repo` itself, checks out the merge base, applies the diff and copies the untracked files) and runs `npm test` there.
-- `verify-pr` counts one mismatch per command whose numbers differ: `npm test` reports two wrong numbers (`tests` and `pass`), so it is **one** mismatch, with two rows in the table. `summary.md` starts `Verdict: Red · 1 mismatch` and `report.md` ends `**Mismatches: 1.**`; `metrics` reads the `1 mismatch` of the `Gate 4, round 1` comment.
-- Both acceptance criteria of `ISSUE.md` hold (the exports exist and `npm test` passes), so nothing else is red. The verifier does not raise the coverage threshold (not its gate).
+- `verify-pr` counts one mismatch per command whose numbers differ: `npm test` reports two wrong numbers (`tests` and `pass`), so it is **one** mismatch, with two rows in the table. `summary.md` starts `Verdict: Red · 1 mismatches` (the literal shape) and `report.md` ends `**Mismatches: 1.**`; `metrics` reads the `1 mismatches` of the `Gate 4, round 1` comment.
+- Both acceptance criteria of `ISSUE.md` hold (the exports exist and `npm test` passes), so nothing else is red. The verifier does not count the lowered coverage threshold as a mismatch (not its gate), though it may name it in its summary.
 - Correction-log line: `factory-log | <date> | #39 | fixture wrong-test-count: the draft reported 4 tests where the project has 3 | test | -`.
 
 ## Run 3 — escalation after the third red round
@@ -77,3 +78,31 @@ Expected:
 - After round 3 the master starts no fourth round. It posts `**Escalation (master): three red rounds**` with the three verdict lines and the question for the maintainer, and does not move the issue to Done.
 - The transcript shows three rounds and the escalation message.
 - Correction-log lines: one per round, `factory-log | <date> | #39 | fixture never-fixes: the worker answered round K without changing clamp | test | -`, K = 1, 2, 3.
+
+## Canary
+
+The three runs above, repeated by the master as a gate: at the start of a milestone, before intake (`herdr/master.md`, "Canary"), and before a pull request that changes a file of `.github/standard-sync.json`, `herdr/master.md`, `.claude/TEAM.md` (models) or the sections of the standard a role reads. A red canary stops intake and the merge. The agents are fresh ones, like those of gates 3 and 4, and the blindness rules above hold.
+
+Build `planted-coverage` and `never-fixes` as above and run runs 1 to 3 (run 2 on the same `<dir>` as run 1, since `wrong-test-count` is the draft that `planted-coverage` copies and `build-scratch.sh` takes no such fixture; run 3 for three rounds with the stub). Steps no script does:
+
+- A canary on a branch must test that branch's prompts: the scratch repository has no `.claude/`, so copy the checkout's `.claude/agents/reviewer.md` and `verifier.md` and its `.claude/skills/blind-review` and `verify-pr` into `<dir>/.claude/`, next to `repo`, and start the agents there.
+- Move each agent's `review/` and `verify/` report out of `<dir>` before the next agent starts, so none reads another's.
+- Agent names stay within Herdr's 32 characters.
+- The stub's findings file is the round's Blocking and Important lines of `summary.md`; it must not be empty.
+- The verifier may name the lowered threshold in its summary; that is not a mismatch and does not turn the run red.
+
+Expected, one line each:
+
+- `planted-coverage`: the reviewer reports a Blocking on `package.json:8`, the threshold lowered from 80 to 50.
+- `wrong-test-count`: the verifier reports `Verdict: Red · 1 mismatches` (the literal shape of `verify-pr`; `npm test`: `tests 4` against 3 and `pass 4` against 3).
+- `never-fixes`: gate 3 is red in rounds 1, 2 and 3 with a Blocking on `src/clamp.mjs:10`, and the master escalates after round 3 without a fourth.
+
+The record, three lines in the draft's Tests section and in the epic's `Canary |` comment:
+
+```text
+Canary | <date> | reviewer Blocking found: yes|no (planted-coverage)
+Canary | <date> | verifier mismatch found: yes|no (wrong-test-count)
+Canary | <date> | escalation on round 3: yes|no (never-fixes)
+```
+
+A `no` makes the canary red: the master posts `Canary | <date> | red | <what was missed>` on the epic. The canary posts no `factory-log |` line on #39, which would add corrections to a closed milestone on every run; its record is the epic's comment. Its stripped transcripts go in `fixtures/factory/transcripts/` as for the runs above.
