@@ -183,6 +183,7 @@ describe('never-fixes', () => {
       { encoding: 'utf8' }
     )
     expect(stub.status, stub.stderr).toBe(0)
+    expect(stub.stdout).toContain('approved, sign off #1')
     expect(readFileSync(join(dir, 'draft.md'), 'utf8')).toContain('## Answers to review')
     expect(git(repo, 'diff', 'origin/main')).toBe(before)
     expect(counts(npmTest(repo).output)).toEqual({ tests: 3, pass: 2, fail: 1 })
