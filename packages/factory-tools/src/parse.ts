@@ -116,6 +116,73 @@ export function parseEvent(body: string): GateEvent | null {
   return null
 }
 
+/** One `tokens |` line: what the session of one agent reported, as the master records it. */
+export interface TokenLine {
+  date: string
+  issue: string
+  /** The agent's role: `worker`, `reviewer`, `verifier`, … */
+  role: string
+  /** The round the agent worked in, as written. */
+  round: string
+  input: number
+  output: number
+  cacheRead: number
+}
+
+/**
+ * Reads the lines that start `tokens | ` out of a comment, with the fields date, issue, role, round,
+ * input, output and cache read, separated by ` | `. The three numbers are whole numbers without
+ * separators; a line with another number of fields, a date that is not `YYYY-MM-DD`, an empty
+ * field or a number that is not whole is no record, and neither is any other line.
+ */
+export function parseTokenLines(body: string): TokenLine[] {
+  const lines: TokenLine[] = []
+  for (const line of body.split(/\r?\n/)) {
+    if (!line.startsWith('tokens | ')) continue
+    const fields = line.split(' | ').map((part) => part.trim())
+    if (fields.length !== 8) continue
+    const [, date = '', issue = '', role = '', round = '', input = '', output = '', cache = ''] =
+      fields
+    const numbers = [input, output, cache]
+    if (!/^\d{4}-\d\d-\d\d$/.test(date) || [issue, role, round].includes('')) continue
+    if (!numbers.every((n) => /^\d{1,15}$/.test(n))) continue
+    lines.push({
+      date,
+      issue,
+      role,
+      round,
+      input: Number(input),
+      output: Number(output),
+      cacheRead: Number(cache),
+    })
+  }
+  return lines
+}
+
+/**
+ * The `accepted: n` line of a `Gate 3` comment: the Important findings the worker justified in
+ * "Answers to review" and the master accepted. The line may be a list item; the last one wins.
+ *
+ * @returns `n`, or 0 when the comment has no such line.
+ */
+export function acceptedFindings(body: string): number {
+  let accepted = 0
+  for (const line of body.split(/\r?\n/)) {
+    const match = /^\s*(?:[-*]\s+)?accepted:\s*(\d{1,6})\b/i.exec(line)
+    if (match?.[1] !== undefined) accepted = Number(match[1])
+  }
+  return accepted
+}
+
+/**
+ * Whether the first line of a comment, without its markup, says `passed by the master`: a `Gate 4`
+ * report whose discrepancies the master let through as noise.
+ */
+export function passedByMaster(body: string): boolean {
+  const first = (body.split(/\r?\n/, 1)[0] ?? '').replaceAll(/<[^>]*>/g, '').replaceAll('*', '')
+  return first.toLowerCase().includes('passed by the master')
+}
+
 function count(line: string, word: string): number | null {
   const match = new RegExp(`(\\d{1,6})\\s+${word}`).exec(line)
   return match?.[1] === undefined ? null : Number(match[1])

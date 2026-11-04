@@ -1,4 +1,14 @@
-import { blockingByCategory, countLog, mergeTime, parseEvent, parseTime } from './parse.js'
+import {
+  acceptedFindings,
+  blockingByCategory,
+  countLog,
+  mergeTime,
+  parseEvent,
+  passedByMaster,
+  parseTime,
+  parseTokenLines,
+} from './parse.js'
+import type { TokenLine } from './parse.js'
 import type { TimeLine } from './parse.js'
 import { MARKER } from './ready.js'
 import type { Source } from './source.js'
@@ -17,6 +27,14 @@ export interface MetricsOptions {
   log: string
 }
 
+/** What the agents of one role reported over all the rounds of an issue. */
+export interface RoleTokens {
+  role: string
+  input: number
+  output: number
+  cacheRead: number
+}
+
 /** The per-issue numbers, from the master's comments on the issue. */
 export interface IssueRow {
   number: number
@@ -29,6 +47,12 @@ export interface IssueRow {
   blocking: number
   /** Mismatches the verifier found, over all its reports. */
   mismatches: number
+  /** Important findings the worker justified and the master accepted (`accepted: n`, gate 3). */
+  falseRedsGate3: number
+  /** `Gate 4` comments whose first line says `passed by the master`. */
+  falseRedsGate4: number
+  /** The master's `tokens |` records by role, in the order the roles first appear; none: `[]`. */
+  tokens: RoleTokens[]
 }
 
 /** The per-pull-request numbers. */
@@ -50,6 +74,12 @@ export interface PullRow {
   defects: number
   /** The maintainer's `time:` notes put together, or `null` when there is none. */
   time: TimeLine | null
+  /** Whether the pull request was merged. */
+  merged: boolean
+  /** The maintainer's reviews with no text and no inline comment, on a pull request with no `time:` note. */
+  silentApprovals: number
+  /** The `tokens |` records of its issue (shared by the pull requests of one issue). */
+  tokens: RoleTokens[]
 }
 
 /** Everything `renderMetrics` prints. */
@@ -61,6 +91,12 @@ export interface Metrics {
   categories: [string, number][]
   /** Rows of the correction log, and those with a Destination. */
   log: { rows: number; converted: number }
+  /**
+   * The tokens of the milestone: `total` is input plus output over every `tokens |` record of its
+   * issues (cache reads are not added), `null` when there is none; `cleanPulls` counts the merged
+   * pull requests with no defect after merge.
+   */
+  tokens: { total: number | null; cleanPulls: number }
 }
 
 const RED = new Set(['failure', 'timed_out', 'cancelled', 'action_required', 'startup_failure'])
@@ -101,6 +137,9 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
       rounds: 0,
       blocking: 0,
       mismatches: 0,
+      falseRedsGate3: 0,
+      falseRedsGate4: 0,
+      tokens: [],
     }
     let reviews = 0
     for (const comment of (await source.comments(row.number)).map(object)) {
@@ -111,10 +150,15 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
       }
       const body = text(comment.body)
       const event = parseEvent(body)
+      for (const line of parseTokenLines(body)) addTokens(row.tokens, line)
       if (event?.kind === 'returned') row.returned++
-      if (event?.kind === 'verification') row.mismatches += event.mismatches ?? 0
+      if (event?.kind === 'verification') {
+        row.mismatches += event.mismatches ?? 0
+        if (passedByMaster(body)) row.falseRedsGate4++
+      }
       if (event?.kind === 'review') {
         reviews++
+        row.falseRedsGate3 += acceptedFindings(body)
         row.rounds = Math.max(row.rounds, event.round ?? 0, reviews)
         const found = blockingByCategory(body)
         const listed = [...found.values()].reduce((sum, n) => sum + n, 0)
@@ -162,15 +206,67 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
       ),
       defects: merged ? fixes.filter((fix) => cites(text(fix.body), number)).length : 0,
       time,
+      merged,
+      silentApprovals: await silentApprovals(source, number, maintainer, time),
+      tokens: issueRows.find((row) => row.number === closes)?.tokens ?? [],
     })
   }
+  const recorded = issueRows.flatMap((row) => row.tokens)
   return {
     milestone: options.milestone,
     issues: issueRows.toSorted((a, b) => a.number - b.number),
     pulls: pullRows.toSorted((a, b) => a.number - b.number),
     categories: [...categories].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])),
     log: (({ rows, converted }) => ({ rows, converted }))(countLog(options.log)),
+    tokens: {
+      total: recorded.length === 0 ? null : recorded.reduce((n, r) => n + r.input + r.output, 0),
+      cleanPulls: pullRows.filter((pull) => pull.merged && pull.defects === 0).length,
+    },
   }
+}
+
+/**
+ * The maintainer's reviews, `APPROVED` or `COMMENTED`, with no text and no inline comment, on a pull
+ * request with no `time:` note of the maintainer in any comment or review (`time` is `null`). A
+ * review whose only text is a `time:` line has text, and gives the pull request a note: it is not
+ * silent.
+ */
+async function silentApprovals(
+  source: Source,
+  number: number,
+  maintainer: string,
+  time: TimeLine | null
+): Promise<number> {
+  if (time !== null) return 0
+  const inline = new Set(
+    (await source.reviewComments(number)).map(object).map((c) => c.pull_request_review_id)
+  )
+  return (await source.reviews(number))
+    .map(object)
+    .filter(
+      (r) =>
+        text(object(r.user).login) === maintainer &&
+        (r.state === 'APPROVED' || r.state === 'COMMENTED') &&
+        text(r.body).trim() === '' &&
+        !(r.id !== undefined && inline.has(r.id))
+    ).length
+}
+
+/** Adds a `tokens |` record to the total of its role, keeping the order the roles first appear. */
+function addTokens(into: RoleTokens[], line: TokenLine): void {
+  const found = into.find((r) => r.role === line.role)
+  if (found === undefined) {
+    into.push({
+      role: line.role,
+      input: line.input,
+      output: line.output,
+      cacheRead: line.cacheRead,
+    })
+    return
+  }
+  found.input += line.input
+  found.output += line.output
+  found.cacheRead += line.cacheRead
 }
 
 /**

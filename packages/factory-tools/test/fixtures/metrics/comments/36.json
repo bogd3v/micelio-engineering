@@ -102,7 +102,7 @@
       "login": "ale9420"
     },
     "created_at": "2026-10-24T15:32:54Z",
-    "body": "**Gate 3, round 4 (reviewer-36-r4): Pass, 0 Blocking.** Follow-up from unchanged text: `filePaths` `[.:!?]+$` (`src/rules.ts:211`) and `ISSUE_REF` (`src/rules.ts:59`) are still quadratic (1.5–2.5 s at 65,000 characters). Report posted by the master.\n## Method\n## 1. Is each rewrite linear?\n## 2. Is the behaviour unchanged?\n## 3. Do the timing tests fail on the old regex, and is the bound sound?\n## Findings in the changed text\n## Follow-up (unchanged text; not Blocking)\n## `instructions-wrong.md`\n## Scope and size\n## Findings for the master"
+    "body": "**Gate 3, round 4 (reviewer-36-r4): Pass, 0 Blocking.** Follow-up from unchanged text: `filePaths` `[.:!?]+$` (`src/rules.ts:211`) and `ISSUE_REF` (`src/rules.ts:59`) are still quadratic (1.5–2.5 s at 65,000 characters). Report posted by the master.\naccepted: 2\n## Method\n## 1. Is each rewrite linear?\n## 2. Is the behaviour unchanged?\n## 3. Do the timing tests fail on the old regex, and is the bound sound?\n## Findings in the changed text\n## Follow-up (unchanged text; not Blocking)\n## `instructions-wrong.md`\n## Scope and size\n## Findings for the master"
   },
   {
     "user": {
@@ -138,5 +138,12 @@
     },
     "created_at": "2026-10-24T16:28:40Z",
     "body": "**Progress updated by the master** (Progress section only). Pull request: #48."
+  },
+  {
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-10-24T20:00:00Z",
+    "body": "tokens | 2026-10-24 | #36 | worker | 1 | 150000 | 40000 | 1200000\ntokens | 2026-10-24 | #36 | verifier | 1 | 50000 | 7000 | 300000"
   }
 ]

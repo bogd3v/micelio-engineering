@@ -6,12 +6,15 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { metrics } from '../src/metrics.js'
 import {
+  acceptedFindings,
   blockingByCategory,
   countLog,
   mergeTime,
   parseEvent,
   parseLogLines,
   parseTime,
+  parseTokenLines,
+  passedByMaster,
 } from '../src/parse.js'
 import { renderMetrics } from '../src/render.js'
 import { repoRoot, run } from '../src/run.js'
@@ -658,6 +661,9 @@ describe('metrics', () => {
       redChecks: 3,
       defects: 2,
       time: { diff: null, report: 6, handsOn: null },
+      merged: true,
+      silentApprovals: 0,
+      tokens: [],
     })
     expect(result.pulls[1]).toMatchObject({ issue: null, time: null, defects: 0 })
     expect(result.pulls[2]).toMatchObject({ issue: 1, defects: 0 })
@@ -955,5 +961,210 @@ describe('factory-tools metrics', () => {
     })
     expect(metrics.status).toBe(2)
     expect(metrics.stderr).toContain('metrics needs --milestone')
+  })
+})
+
+describe('the columns of the token and review-quality metrics', () => {
+  const line = (role: string, round: string, input: number, output: number, cache: number) =>
+    `tokens | 2026-10-24 | #2 | ${role} | ${round} | ${input} | ${output} | ${cache}`
+  const pull = (number: number, body = 'Closes #2'): object => ({
+    number,
+    title: 'feat: x',
+    created_at: '2026-01-01T00:00:00Z',
+    merged_at: '2026-01-02T00:00:00Z',
+    base: { ref: 'main' },
+    milestone: { title: 'M2' },
+    body,
+  })
+  const read = (data: Parameters<typeof source>[0]) =>
+    metrics(source({ issues: [issue(1), issue(2)], ...data }), { milestone: 'M2', log: '' })
+
+  it('parses the tokens | line and refuses what is not one', () => {
+    expect(parseTokenLines(`x\n${line('worker', '1', 120, 30, 900)}\n`)).toEqual([
+      {
+        date: '2026-10-24',
+        issue: '#2',
+        role: 'worker',
+        round: '1',
+        input: 120,
+        output: 30,
+        cacheRead: 900,
+      },
+    ])
+    for (const bad of [
+      'tokens | 2026-10-24 | #2 | worker | 1 | 120 | 30',
+      'tokens | 2026-10-24 | #2 | worker | 1 | 120 | 30 | 9 | 4',
+      'tokens | 24-10-2026 | #2 | worker | 1 | 120 | 30 | 9',
+      'tokens | 2026-10-24 | #2 | worker | 1 | 1,200 | 30 | 9',
+      'tokens | 2026-10-24 | #2 |  | 1 | 120 | 30 | 9',
+      'tokens | 2026-10-24 | #2 | worker | 1 | 12.5 | 30 | 9',
+      ' tokens | 2026-10-24 | #2 | worker | 1 | 1 | 2 | 3',
+    ]) {
+      expect(parseTokenLines(bad)).toEqual([])
+    }
+  })
+
+  it('Tokens, by role: sums the tokens | lines of the issue by role, from the maintainer only', async () => {
+    const result = await read({
+      pulls: [pull(7)],
+      comments: {
+        2: [
+          comment(
+            'maint',
+            `${line('worker', '1', 100, 20, 500)}\n${line('reviewer', '1', 50, 5, 70)}`
+          ),
+          comment('maint', line('worker', '2', 10, 2, 5)),
+          comment('someone', line('worker', '9', 999999, 999999, 999999)),
+        ],
+      },
+    })
+    expect(result.issues[1]?.tokens).toEqual([
+      { role: 'worker', input: 110, output: 22, cacheRead: 505 },
+      { role: 'reviewer', input: 50, output: 5, cacheRead: 70 },
+    ])
+    expect(result.pulls[0]?.tokens).toEqual(result.issues[1]?.tokens)
+    const out = renderMetrics(result, '2026-10-24')
+    expect(out).toContain('| worker 132 (cache 505), reviewer 55 (cache 70) |')
+  })
+
+  it('Tokens, by role: a missing tokens | comment is an empty cell, never a zero', async () => {
+    const result = await read({ pulls: [pull(7)], comments: { 2: [comment('maint', 'hello')] } })
+    expect(result.pulls[0]?.tokens).toEqual([])
+    expect(result.tokens.total).toBeNull()
+    const out = renderMetrics(result, '2026-10-24')
+    expect(out).toContain('| 0 | — | — |\n')
+    expect(out).toContain('**Tokens per merged pull request without a later fix:** —')
+  })
+
+  it('Silent approvals: counts the empty reviews of the maintainer on a pull request with no time: note', async () => {
+    const review = (login: string, state: string, body: string, id = 0) => ({
+      id,
+      user: { login },
+      state,
+      submitted_at: '2026-01-03T00:00:00Z',
+      body,
+    })
+    // no time: note: an APPROVED or COMMENTED review with no text counts; other text, another
+    // state, another author and a review with an inline comment do not
+    const bare = await read({
+      pulls: [pull(7)],
+      reviews: {
+        7: [
+          review('maint', 'APPROVED', '', 1),
+          review('maint', 'COMMENTED', '  \n', 2),
+          review('maint', 'APPROVED', 'LGTM', 3),
+          review('maint', 'CHANGES_REQUESTED', '', 4),
+          review('maint', 'APPROVED', '', 5),
+          review('someone', 'APPROVED', '', 6),
+        ],
+      },
+      reviewComments: {
+        7: [{ user: { login: 'maint' }, pull_request_review_id: 5, body: 'rename this' }],
+      },
+    })
+    expect(bare.pulls[0]?.silentApprovals).toBe(2)
+    expect(renderMetrics(bare, '2026-10-24')).toContain('| Silent approvals |')
+    // a review whose only text is a time: line is not silent, and gives the pull request a note
+    const timed = await read({
+      pulls: [pull(7)],
+      reviews: {
+        7: [review('maint', 'COMMENTED', 'time: 10m diff'), review('maint', 'APPROVED', '')],
+      },
+    })
+    expect(timed.pulls[0]?.silentApprovals).toBe(0)
+    // the note may be in a comment: an empty approval next to it is not silent either
+    const noted = await read({
+      pulls: [pull(7)],
+      reviews: { 7: [review('maint', 'APPROVED', '')] },
+      comments: { 7: [comment('maint', 'time: 2m diff')] },
+    })
+    expect(noted.pulls[0]?.silentApprovals).toBe(0)
+    // a time: note of someone else is not the maintainer's
+    const other = await read({
+      pulls: [pull(7)],
+      reviews: { 7: [review('maint', 'APPROVED', '')] },
+      comments: { 7: [comment('someone', 'time: 2m diff')] },
+    })
+    expect(other.pulls[0]?.silentApprovals).toBe(1)
+  })
+
+  it('Reports read first: 1 when the time: line says report, 0 when it does not, — with none', async () => {
+    const note = (body: string) => comment('maint', body)
+    const result = await read({
+      pulls: [pull(7), pull(8), pull(9)],
+      comments: { 7: [note('time: 4m report')], 8: [note('time: 3m diff')], 9: [] },
+    })
+    const out = renderMetrics(result, '2026-10-24')
+    const rows = out.split('\n').filter((l) => /^\| #[789] /.test(l))
+    const cells = rows.map((l) => l.split(' | ').slice(-3, -1))
+    expect(cells).toEqual([
+      ['0', '1'],
+      ['0', '0'],
+      ['0', '—'],
+    ])
+    expect(out).toMatch(/\| Total \|.*\| 0 \| 1 \| {2}\|/)
+  })
+
+  it('False reds, gate 3: sums the accepted: n line of the Gate 3 comments, from the maintainer only', async () => {
+    const result = await read({
+      comments: {
+        2: [
+          comment('maint', '**Gate 3, round 1 (r): Red, 1 Blocking, 2 Important**\naccepted: 0'),
+          comment('maint', '**Gate 3, round 2 (r): Pass, 0 Blocking**\nbody\n- accepted: 2\n'),
+          comment('maint', 'accepted: 7'),
+          comment('someone', '**Gate 3, round 3 (r): Pass, 0 Blocking**\naccepted: 5'),
+        ],
+      },
+    })
+    expect(result.issues[1]?.falseRedsGate3).toBe(2)
+    expect(result.issues[0]?.falseRedsGate3).toBe(0)
+    expect(acceptedFindings('no line')).toBe(0)
+    expect(acceptedFindings('accepted: 1\naccepted: 3')).toBe(3)
+  })
+
+  it('False reds, gate 4: counts the Gate 4 comments whose first line says passed by the master', async () => {
+    const result = await read({
+      comments: {
+        2: [
+          comment('maint', '**Gate 4, round 1 (verifier-2)** · 2 mismatches, passed by the master'),
+          comment('maint', '**Gate 4, round 2 (verifier-2)** · 0 mismatches'),
+          comment('maint', '**Gate 4, round 3 (verifier-2)** · 1 mismatch\npassed by the master'),
+          comment('maint', '**Master:** the discrepancy was passed by the master'),
+          comment('someone', '**Gate 4 (v)** · 1 mismatch, passed by the master'),
+        ],
+      },
+    })
+    expect(result.issues[1]).toMatchObject({ mismatches: 3, falseRedsGate4: 1 })
+    expect(passedByMaster('<details><summary><b>Gate 4</b> · passed by the master')).toBe(true)
+  })
+
+  it('tokens per merged pull request without a later fix: divides the total by the clean merged pull requests', async () => {
+    const fixes = [{ number: 50, title: 'fix: y', body: 'from #8', pull_request: null }]
+    const result = await read({
+      all: fixes,
+      pulls: [pull(7), pull(8, 'Refs #2'), { ...pull(9), merged_at: null }],
+      comments: {
+        2: [
+          comment(
+            'maint',
+            `${line('worker', '1', 300, 100, 1)}\n${line('verifier', '1', 90, 10, 1)}`
+          ),
+        ],
+      },
+    })
+    expect(result.tokens).toEqual({ total: 500, cleanPulls: 1 })
+    expect(renderMetrics(result, '2026-10-24')).toContain(
+      '**Tokens per merged pull request without a later fix:** 500 (500 tokens over 1 merged pull requests without a defect after merge)'
+    )
+  })
+
+  it('the summary line is — when every merged pull request has a defect after merge', async () => {
+    const result = await read({
+      all: [{ number: 50, title: 'fix: y', body: 'from #7', pull_request: null }],
+      pulls: [pull(7)],
+      comments: { 2: [comment('maint', line('worker', '1', 1, 1, 1))] },
+    })
+    expect(result.tokens).toEqual({ total: 2, cleanPulls: 0 })
+    expect(renderMetrics(result, '2026-10-24')).toContain('without a later fix:** —')
   })
 })

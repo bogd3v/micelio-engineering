@@ -5,9 +5,11 @@
 # `issue-ready` comment that went from failing to passing).
 # Every file is what `gh api` returned, cut down by record.jq to the fields `metrics` reads: a user
 # is only its login, and a comment keeps its first line, its `factory-log |` lines and the headings
-# finding lines and mismatch count of a review report. Nothing else is kept. The correction log is
-# copied as it is, for the Destination count. Of a comment that starts with the `issue-ready` marker
-# the edit history is recorded too, as `comment-edits/<node id>.json` (`gh api graphql`, read only).
+# finding lines and mismatch count of a review report, and its `tokens |` and `accepted:` lines. A
+# review keeps its `id` and a review comment its `pull_request_review_id`, to tell the reviews that
+# have an inline comment.
+# Nothing else is kept. The correction log is copied as it is, for the Destination count. Of a
+# comment that starts with the `issue-ready` marker the edit history is recorded too, as `comment-edits/<node id>.json` (`gh api graphql`, read only).
 set -euo pipefail
 repo=$1 milestone=$2
 shift 2
