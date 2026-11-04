@@ -50,6 +50,15 @@ describe("this repository's own factory files", () => {
   })
 })
 
+describe('CLAUDE.md', () => {
+  it('does not import the engineering standard', () => {
+    const imports = readFileSync(join(ROOT, 'template/CLAUDE.md'), 'utf8')
+      .split('\n')
+      .filter((line) => line.startsWith('@'))
+    expect(imports.filter((line) => line.includes('engineering-standard.md'))).toEqual([])
+  })
+})
+
 describe('the factory roles', () => {
   const agents = join(ROOT, 'template/.claude/agents')
   const skills = [

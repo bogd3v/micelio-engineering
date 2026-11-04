@@ -52,7 +52,7 @@ The repository keeps what is its own: a script that prints the plan as JSON (`ta
 2. Run a release and check that it reaches the approval and publishes after it.
 3. Settings, Secrets and variables, Actions: delete the repository secret `NPM_TOKEN`.
 
-`standard-sync.yml` is this repository's own, not a reusable one: it opens the pull requests that keep the copies of the standard in step, together with the factory's agent prompts, skills and pull request template (`docs/standard-sync.md`). `dco.yml` skips the commits of the Micelio bot, like Dependabot's.
+`standard-sync.yml` is this repository's own, not a reusable one: it opens the pull requests that keep the copies of the standard in step, together with the factory's agent prompts, skills, pull request template and `CLAUDE.md` (`docs/standard-sync.md`). `dco.yml` skips the commits of the Micelio bot, like Dependabot's.
 
 `.github/workflows/ci.yml` runs all five on this repository, with a dry-run release over `fixtures/basic`. `publish-packages.yml` is what publishes the packages of this repository: one tag per package.
 
