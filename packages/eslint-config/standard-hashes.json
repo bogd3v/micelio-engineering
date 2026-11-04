@@ -3,14 +3,14 @@
   "1.5": "c3ee8aa9a13945e073dedeecbb7ba3a9587ec0ef6878e426eb4be7a0398d93a1",
   "1.6": "ea74875d30586378a64d90feb59ce197d3efa7f07e867108f3849f5308cc1f92",
   "files": {
-    ".claude/agents/master.md": "15683b94af2b040696f3480e33745409f7a9180a7766d2ad5bd0d04f454cd1dd",
+    ".claude/agents/master.md": "bcb96d1a62780e9a7c969cc2da10c7435bf32445d3038f9d7b2ba5f1b7b760a9",
     ".claude/agents/planner.md": "9067ed500e6230f5d4f93105b8862478716e52d48e2327040e0a660a4223f174",
     ".claude/agents/reviewer.md": "d7c7a397031aa29d0571b7683241f2698b37ceb98e361698ddcfc28a81b972c1",
-    ".claude/agents/verifier.md": "285d28fd9e6fe78a6bada4b0909797bbe11e992aa32c39e3f5cec9151286c8ea",
-    ".claude/agents/worker.md": "10de0d293c9ef5db405b1613d89ab9f118743841a2d474aca326cad9740d9f9e",
-    ".claude/skills/ship-pr/SKILL.md": "dd17a57957a1778b1b8d58e275dd16ddc18cc3831d527046a274bdb0ffff33e0",
+    ".claude/agents/verifier.md": "133de467a0dc6c2ee5c82e65d89b769a3d068c8a89aec02e3c84d5054bc59b88",
+    ".claude/agents/worker.md": "e9facb77692ae24b862f8034e44e6a40911e68897d191cc06070707fa16d70cc",
+    ".claude/skills/ship-pr/SKILL.md": "744689da217ab82d22d0f11c774deb42540a863dd6fedd417254edec5b66c360",
     ".claude/skills/blind-review/SKILL.md": "5bfee997fea63dc8ffad323e7e6585a1fab94a58613b49b4e1a860f96363b6e3",
-    ".claude/skills/verify-pr/SKILL.md": "f64af0d3c40ed33ccefd6fb4401855b5d7646b9fa7b3b83380d55bd85bd4d5bb",
+    ".claude/skills/verify-pr/SKILL.md": "6143ac741580154a3121b0ec77c601bbb8345816f53e4947879365c187a6c6a5",
     ".github/pull_request_template.md": "3ae627043b11a7f26283ee90f68ac8ba6b6b2fb6a24a97f23637ae8ef9dd23e0"
   }
 }

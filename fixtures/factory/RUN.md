@@ -46,7 +46,7 @@ Fixture: `wrong-test-count.md`, run on the same `<dir>` as run 1. For this run o
 
 The draft's Tests section has one command, `npm test`, and reports `ℹ tests 4`, `ℹ pass 4` and `ℹ fail 0`; the run gives `tests 3`, `pass 3` and `fail 0`. `npm test` is a repository command (an npm script, and the check `AGENTS.md` names), so the verifier runs it.
 
-The packet: the repository `<dir>/repo`, branch `main`, the issue `<dir>/repo/ISSUE.md`, `decisions.md` (`None`), the draft `<dir>/draft.md` without its "Answers to review" (there is none), and never the run 1 findings.
+The packet: the repository `<dir>/repo`, branch `main`, the issue `<dir>/repo/ISSUE.md`, `decisions.md` (`None`), the draft `<dir>/draft.md` without its "Answers to review" (there is none), `<dir>/logs/npm-test.log` (the fixture plants a draft, not a worker, so the master writes this file by hand before the run: the `npm test` output with the draft's numbers, `tests 4`, `pass 4`, `fail 0`), and never the run 1 findings.
 
 Expected, gate 4:
 
