@@ -24,6 +24,7 @@ What the commands need besides Node 22: the `node:22` image has `git` but not `j
 `npm run verify:template` also needs `reuse` 6.2.0, the version CI pins (an older `reuse` does not
 read `REUSE.toml`); `gh`, logged in, is for `scripts/standard-sync.sh`, its dry run included, and
 for the live forms of `lint-issue` and `metrics`; the tests stub it.
+In a git worktree, Docker also needs the main repository's `.git` mounted at the same path (the worktree's `.git` is a file that points to it), and on an SELinux host `--security-opt label=disable`.
 
 ## Structure
 

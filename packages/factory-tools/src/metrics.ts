@@ -2,6 +2,7 @@ import {
   acceptedFindings,
   blockingByCategory,
   countLog,
+  hasFindings,
   mergeTime,
   parseEvent,
   passedByMaster,
@@ -53,6 +54,11 @@ export interface IssueRow {
   falseRedsGate4: number
   /** The master's `tokens |` records by role, in the order the roles first appear; none: `[]`. */
   tokens: RoleTokens[]
+  /**
+   * The `Gate 3` and `Gate 4` comments with findings, when the issue has no `factory-log |`
+   * comment; 0 when it has one.
+   */
+  unlogged: number
 }
 
 /** The per-pull-request numbers. */
@@ -70,6 +76,8 @@ export interface PullRow {
    * per commit and check.
    */
   redChecks: number
+  /** The `unlogged` of its issue (see `IssueRow`), or 0 when it has none. */
+  unlogged: number
   /** `fix` issues that cite the pull request, when it was merged. */
   defects: number
   /** The maintainer's `time:` notes put together, or `null` when there is none. */
@@ -140,8 +148,11 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
       falseRedsGate3: 0,
       falseRedsGate4: 0,
       tokens: [],
+      unlogged: 0,
     }
     let reviews = 0
+    let findings = 0
+    let logged = false
     for (const comment of (await source.comments(row.number)).map(object)) {
       const login = text(object(comment.user).login)
       if (login !== maintainer) {
@@ -149,8 +160,10 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
         continue
       }
       const body = text(comment.body)
+      if (/^factory-log \| /m.test(body)) logged = true
       const event = parseEvent(body)
       for (const line of parseTokenLines(body)) addTokens(row.tokens, line)
+      if (hasFindings(body)) findings++
       if (event?.kind === 'returned') row.returned++
       if (event?.kind === 'verification') {
         row.mismatches += event.mismatches ?? 0
@@ -171,6 +184,7 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
         }
       }
     }
+    row.unlogged = logged ? 0 : findings
     issueRows.push(row)
   }
 
@@ -204,6 +218,7 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
         text(listed.created_at),
         required.get(branch) ?? new Set()
       ),
+      unlogged: issueRows.find((row) => row.number === closes)?.unlogged ?? 0,
       defects: merged ? fixes.filter((fix) => cites(text(fix.body), number)).length : 0,
       time,
       merged,

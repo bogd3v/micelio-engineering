@@ -13,7 +13,7 @@ the retro fills the Destination when it turns the correction into a check, a ski
 | Date               | `YYYY-MM-DD`, the day of the correction                                                                                                                                                                                                        |
 | Issue              | The issue it was found on, `#n`; another repository's as `repo#n`; several separated by spaces                                                                                                                                                 |
 | What was corrected | One line: what was wrong, not how it was fixed                                                                                                                                                                                                 |
-| Category           | `lint`, `test`, `skill`, `standard`, `issue` or `docs`                                                                                                                                                                                         |
+| Category           | `lint`, `test`, `skill`, `standard`, `issue` or `docs`, the only ones; `test/factory-log.test.ts` fails on any other                                                                                                                           |
 | Destination        | The check, skill or rule it became (a link or a path) or what the retro wrote: `#n YYYY-MM-DD` (the issue it became), `single YYYY-MM-DD` or `declined YYYY-MM-DD`; empty until the retro decides, and an empty cell means "not converted yet" |
 
 Rows keep the order in which they were recorded. The first rows were moved here from the

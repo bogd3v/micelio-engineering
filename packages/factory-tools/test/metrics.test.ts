@@ -9,6 +9,7 @@ import {
   acceptedFindings,
   blockingByCategory,
   countLog,
+  hasFindings,
   mergeTime,
   parseEvent,
   parseLogLines,
@@ -396,7 +397,73 @@ describe('factory log', () => {
   })
 })
 
+describe('hasFindings', () => {
+  it.each([
+    ['**Gate 3, round 1 (reviewer-1): 1 Blocking, 0 Important.**', true],
+    ['**Gate 3, round 2 (reviewer-1-r2): Pass, 0 Blocking, 2 Important.**', true],
+    ['**Gate 3, round 3 (reviewer-1-r3): Pass, 0 Blocking, 0 Important.**', false],
+    ['**Gate 3, round 1 (reviewer-1)** - report\n\n**I1.** a finding', true],
+    ['**Gate 3, round 1 (reviewer-1)** - report\n\n**B1.** a finding', true],
+    ['**Gate 3, round 1 (reviewer-1)** - report\n\nI1. Important: `a.ts:1` a finding', true],
+    ['**Gate 3, round 1 (reviewer-1)** - report\n\nB1. Blocking: `a.ts:1` a finding', true],
+    ['**Gate 4 (verifier-1): Red, 1 mismatch.**', true],
+    ['**Gate 4 (verifier-1): Green, 0 mismatches.**', false],
+    ['# Verification report: Red\n\n**Mismatches: 2.**', true],
+    ['**Gate 1 (master): not ready — not started.**', false],
+    ['**Gate 5 (master): ready.** 2 Important in round 1', false],
+  ])('reads %j', (body, expected) => {
+    expect(hasFindings(body)).toBe(expected)
+  })
+})
+
 describe('metrics', () => {
+  it('counts the findings of an issue with no factory-log comment, and none when it has one', async () => {
+    const gate = comment('maint', '**Gate 3, round 1 (reviewer): 1 Blocking, 1 Important.**')
+    const log = comment('maint', 'factory-log | 2026-01-01 | #2 | a correction | test | -')
+    const result = await metrics(
+      source({
+        issues: [issue(1), issue(2), issue(3)],
+        pulls: [
+          pull(10, { body: 'Closes #1' }),
+          pull(11, { body: 'Closes #2' }),
+          pull(12, { body: 'Closes #3' }),
+        ],
+        comments: {
+          1: [gate, comment('maint', '**Gate 4 (verifier): Red, 1 mismatch.**')],
+          2: [gate, log],
+          3: [comment('maint', '**Gate 3, round 1 (reviewer): Pass, 0 Blocking, 0 Important.**')],
+        },
+      }),
+      { milestone: 'M1', log: '' }
+    )
+    expect(result.issues.map((i) => [i.number, i.unlogged])).toEqual([
+      [1, 2],
+      [2, 0],
+      [3, 0],
+    ])
+    expect(result.pulls.map((p) => [p.number, p.unlogged])).toEqual([
+      [10, 2],
+      [11, 0],
+      [12, 0],
+    ])
+  })
+
+  it("does not take a factory-log line by someone else for the maintainer's row", async () => {
+    const result = await metrics(
+      source({
+        issues: [issue(1)],
+        comments: {
+          1: [
+            comment('maint', '**Gate 3, round 1 (reviewer): 1 Blocking, 0 Important.**'),
+            comment('someone', 'factory-log | 2026-01-01 | #1 | x | test | -'),
+          ],
+        },
+      }),
+      { milestone: 'M1', log: '' }
+    )
+    expect(result.issues[0]?.unlogged).toBe(1)
+  })
+
   it('prints the recorded milestone as the golden table, with every column filled', async () => {
     const result = await run(['metrics', '--milestone', MILESTONE, '--fixtures', RECORDED], deps)
     expect(result.code).toBe(0)
@@ -422,6 +489,16 @@ describe('metrics', () => {
       [47, 35, 405, { diff: 10, report: null, handsOn: null }],
       [48, 36, 1804, { diff: 12, report: null, handsOn: null }],
       [49, 37, 466, { diff: 7, report: null, handsOn: null }],
+      [9053, 9052, 40, null],
+    ])
+    // #9052 has a Gate 3 and a Gate 4 comment with findings and no `factory-log |` comment; the Gate
+    // 3 pass without findings does not count. #35 to #37 have findings and a log row.
+    expect(result.pulls.map((p) => [p.number, p.unlogged])).toEqual([
+      [46, 0],
+      [47, 0],
+      [48, 0],
+      [49, 0],
+      [9053, 2],
     ])
   })
 
@@ -659,6 +736,7 @@ describe('metrics', () => {
       lines: 15,
       corrections: 2,
       redChecks: 3,
+      unlogged: 0,
       defects: 2,
       time: { diff: null, report: 6, handsOn: null },
       merged: true,
@@ -668,9 +746,9 @@ describe('metrics', () => {
     expect(result.pulls[1]).toMatchObject({ issue: null, time: null, defects: 0 })
     expect(result.pulls[2]).toMatchObject({ issue: 1, defects: 0 })
     const text = renderMetrics(result, '2026-10-24')
-    expect(text).toContain('| #10 | #1 | 15 | 2 | 3 | 2 | 0 | 6 | — |')
-    expect(text).toContain('| #12 | — | 15 | 0 | 0 | 0 | — | — | — |')
-    expect(text).toContain('| Total |  | 45 | 2 | 3 | 2 | 0 | 6 | 0 |')
+    expect(text).toContain('| #10 | #1 | 15 | 2 | 3 | 0 | 2 | 0 | 6 | — |')
+    expect(text).toContain('| #12 | — | 15 | 0 | 0 | 0 | 0 | — | — | — |')
+    expect(text).toContain('| Total |  | 45 | 2 | 3 | 0 | 2 | 0 | 6 | 0 |')
   })
 
   it('reads the notes the maintainer writes now: diff and Docker minutes, a remark, a test, none stated, and a later note over an earlier one', async () => {
@@ -729,12 +807,12 @@ describe('metrics', () => {
     ])
     const text = renderMetrics(result, '2026-10-28')
     expect(text).toContain('| Minutes, diff | Minutes, report | Minutes, Docker or test |')
-    expect(text).toContain('| #10 | #1 | 15 | 0 | 0 | 0 | 3 | 0 | 0 |')
-    expect(text).toContain('| #11 | #1 | 15 | 0 | 0 | 0 | 2 | 0 | 2 |')
-    expect(text).toContain('| #12 | #1 | 15 | 0 | 0 | 0 | — | — | 2 |')
-    expect(text).toContain('| #13 | #1 | 15 | 0 | 0 | 0 | 5 | 0 | 4 |')
-    expect(text).toContain('| #14 | #1 | 15 | 0 | 0 | 0 | 7 | 0 | — |')
-    expect(text).toContain('| Total |  | 75 | 0 | 0 | 0 | 17 | 0 | 8 |')
+    expect(text).toContain('| #10 | #1 | 15 | 0 | 0 | 0 | 0 | 3 | 0 | 0 |')
+    expect(text).toContain('| #11 | #1 | 15 | 0 | 0 | 0 | 0 | 2 | 0 | 2 |')
+    expect(text).toContain('| #12 | #1 | 15 | 0 | 0 | 0 | 0 | — | — | 2 |')
+    expect(text).toContain('| #13 | #1 | 15 | 0 | 0 | 0 | 0 | 5 | 0 | 4 |')
+    expect(text).toContain('| #14 | #1 | 15 | 0 | 0 | 0 | 0 | 7 | 0 | — |')
+    expect(text).toContain('| Total |  | 75 | 0 | 0 | 0 | 0 | 17 | 0 | 8 |')
   })
 
   it('splits the Blocking findings by category and keeps the uncounted ones as uncategorised', async () => {
@@ -944,7 +1022,7 @@ describe('factory-tools metrics', () => {
     )
     expect(done.status).toBe(0)
     expect(done.stdout).toMatch(/^\*\*metrics\*\* · "Micelio · Fábrica" · \d{4}-\d\d-\d\d\n/)
-    expect(done.stdout).toContain('| #46 | #35 | 18 | 0 | 0 | 0 | 2 | 0 |')
+    expect(done.stdout).toContain('| #46 | #35 | 18 | 0 | 0 | 0 | 0 | 2 | 0 |')
   })
 
   it('serves metrics and issue-ready from the same bin', () => {
@@ -961,6 +1039,49 @@ describe('factory-tools metrics', () => {
     })
     expect(metrics.status).toBe(2)
     expect(metrics.stderr).toContain('metrics needs --milestone')
+  })
+
+  it('record.jq keeps the finding lines hasFindings reads', () => {
+    const body = ['**Gate 3 r1** - r', 'prose', 'I1. Important: x', '**B2.** b', 'more prose'].join(
+      '\n'
+    )
+    const out = spawnSync('jq', ['-c', '-L', `${RECORDED}`, 'include "record"; comment | .body'], {
+      encoding: 'utf8',
+      input: JSON.stringify({ user: { login: 'u' }, created_at: 'x', body }),
+    })
+    expect(out.status).toBe(0)
+    const kept = JSON.parse(out.stdout) as string
+    expect(kept).toBe('**Gate 3 r1** - r\nI1. Important: x\n**B2.** b')
+    expect(hasFindings(kept)).toBe(true)
+  })
+
+  it('record.sh keeps the hand-written rows and does not fetch their comments', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'record-'))
+    const dir = join(root, 'a/b/c/d/e')
+    await mkdir(join(dir, 'comments'), { recursive: true })
+    await mkdir(join(root, 'docs'), { recursive: true })
+    await mkdir(join(root, 'bin'))
+    await writeFile(join(root, 'docs/factory-log.md'), '')
+    // A `gh` that finds nothing on GitHub: every page is empty.
+    await writeFile(join(root, 'bin/gh'), '#!/bin/sh\necho "[[]]"\n', { mode: 0o755 })
+    for (const f of ['record.sh', 'record.jq', 'milestone-issues.json', 'pulls.json']) {
+      await writeFile(join(dir, f), await readFile(join(RECORDED, f)), { mode: 0o755 })
+    }
+    const comments = await readFile(join(RECORDED, 'comments/9052.json'), 'utf8')
+    await writeFile(join(dir, 'comments/9052.json'), comments)
+    const out = spawnSync('bash', [join(dir, 'record.sh'), 'o/r', '2'], {
+      encoding: 'utf8',
+      env: { ...process.env, PATH: `${join(root, 'bin')}:${process.env.PATH ?? ''}` },
+    })
+    expect(out.stderr).toBe('')
+    expect(out.status).toBe(0)
+    const numbers = async (f: string) =>
+      (JSON.parse(await readFile(join(dir, f), 'utf8')) as { number: number }[]).map(
+        (r) => r.number
+      )
+    expect(await numbers('milestone-issues.json')).toEqual([9052])
+    expect(await numbers('pulls.json')).toEqual([9053])
+    expect(await readFile(join(dir, 'comments/9052.json'), 'utf8')).toBe(comments)
   })
 })
 

@@ -10,21 +10,27 @@
 # have an inline comment.
 # Nothing else is kept. The correction log is copied as it is, for the Destination count. Of a
 # comment that starts with the `issue-ready` marker the edit history is recorded too, as `comment-edits/<node id>.json` (`gh api graphql`, read only).
+# The hand-written fixtures have numbers from 9000 up, which GitHub does not have: their rows in
+# `milestone-issues.json` and `pulls.json` are kept, and their comments are not fetched.
 set -euo pipefail
 repo=$1 milestone=$2
 shift 2
 dir=$(cd "$(dirname "$0")" && pwd)
 api() { gh api --paginate --slurp "$@" | jq 'add // []'; }
 q() { jq -L "$dir" "include \"record\"; $1"; }
+# The rows of the hand-written fixtures (number 9000 or more) in a file, or none.
+hand() { jq -c '[.[] | select(.number >= 9000)]' "$dir/$1" 2>/dev/null || echo '[]'; }
+hand_issues=$(hand milestone-issues.json)
+hand_pulls=$(hand pulls.json)
 
 mkdir -p "$dir/comments" "$dir/comment-edits" "$dir/pulls" "$dir/check-runs"
 api "repos/$repo/milestones?state=all" | jq '[.[] | {number, title, state}]' >"$dir/milestones.json"
-api "repos/$repo/issues?milestone=$milestone&state=all&per_page=100" | q '[.[] | issue]' >"$dir/milestone-issues.json"
+api "repos/$repo/issues?milestone=$milestone&state=all&per_page=100" | q "[.[] | issue] + $hand_issues" >"$dir/milestone-issues.json"
 api "repos/$repo/issues?state=all&per_page=100" | q '[.[] | issue]' >"$dir/all-issues.json"
-api "repos/$repo/pulls?state=all&per_page=100" | q '[.[] | pull_of_list]' >"$dir/pulls.json"
+api "repos/$repo/pulls?state=all&per_page=100" | q "$hand_pulls + [.[] | pull_of_list]" >"$dir/pulls.json"
 
 # shellcheck disable=SC2086 # ISSUES is a list of numbers
-for n in $(jq -r '.[].number' "$dir/milestone-issues.json") "$@" ${ISSUES:-}; do
+for n in $(jq -r '.[].number | select(. < 9000)' "$dir/milestone-issues.json") "$@" ${ISSUES:-}; do
   api "repos/$repo/issues/$n/comments?per_page=100" | q '[.[] | comment]' >"$dir/comments/$n.json"
 done
 # The comment an app edits in place has no other history than its edits.

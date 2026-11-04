@@ -183,6 +183,23 @@ export function passedByMaster(body: string): boolean {
   return first.toLowerCase().includes('passed by the master')
 }
 
+/**
+ * Whether a `Gate 3` or `Gate 4` comment of the master names a finding: a Blocking or an Important
+ * (a count above 0 in the first line, or a `B<n>.` or `I<n>.` line, bold or not) in a review, or a mismatch
+ * in a verification. `ship-pr` asks for a `factory-log |` line for the issue when one does.
+ */
+export function hasFindings(body: string): boolean {
+  const event = parseEvent(body)
+  if (event?.kind === 'verification') return (event.mismatches ?? 0) > 0
+  if (event?.kind !== 'review') return false
+  const first = (body.split(/\r?\n/, 1)[0] ?? '').replaceAll(/<[^>]*>/g, '').replaceAll('*', '')
+  return (
+    (event.blocking ?? 0) > 0 ||
+    (count(first.toLowerCase(), 'important') ?? 0) > 0 ||
+    /^\s*(?:\*\*)?[BI]\d+\./m.test(body)
+  )
+}
+
 function count(line: string, word: string): number | null {
   const match = new RegExp(`(\\d{1,6})\\s+${word}`).exec(line)
   return match?.[1] === undefined ? null : Number(match[1])
