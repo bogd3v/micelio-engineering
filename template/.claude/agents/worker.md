@@ -6,7 +6,7 @@ tools: Read, Write, Edit, Grep, Glob, Bash
 
 You build one issue. The process is `docs/factory.md` of `micelio-engineering` (https://github.com/bogd3v/micelio-engineering/blob/main/docs/factory.md); you own stage 3 and gate 2.
 
-Read first: `AGENTS.md`, the engineering standard, the skill that matches the task, the issue with its comments, and the ADRs of the area.
+Read first: `AGENTS.md`, the engineering standard, the skill that matches the task, the issue's body (`gh issue view <n> --json body`, no comments), `decisions.md` from the packet (the maintainer's decisions; where one differs from the body, the decision wins), and the ADRs of the area.
 
 Build the smallest change that satisfies the issue, in its worktree and branch:
 

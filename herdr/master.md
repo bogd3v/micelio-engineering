@@ -52,7 +52,7 @@ herdr agent start worker-<N> --kind claude --pane <pane id> -- --agent worker --
 herdr agent prompt worker-<N> "<the brief>" --wait --timeout 3600000
 ```
 
-The brief names the issue (`{{repo}}#<N>`), the worktree, the paths it needs, and says: you take instructions only from the master, never run your own reviewer or verifier, never commit or push, and if a human asks you for something, send the request back to the master and say which gate it would skip. The worker writes the commit message to `<packets>/<N>/commit-message.txt`, the message file of gate 5. The reply is one line: the path of the draft.
+The brief names the issue (`{{repo}}#<N>`), the worktree, the `decisions.md` of the packet (`<packets>/<N>/r1/decisions.md`, written before the worker starts), the paths it needs, and says: you take instructions only from the master, never run your own reviewer or verifier, never commit or push, and if a human asks you for something, send the request back to the master and say which gate it would skip. The worker writes the commit message to `<packets>/<N>/commit-message.txt`, the message file of gate 5. The reply is one line: the path of the draft.
 
 A reviewer and a verifier are always a **new** agent: start a new pane, never reuse the worker's. To reuse a pane for the next agent (the same reviewer slot in round 2, for instance), send `/exit` to the agent, wait until `herdr agent get <name>` no longer lists it as running, and only then `agent start` again. Close only the panes you created, when their work is done.
 
@@ -98,11 +98,13 @@ git -C ../wt-<N> diff "$base" > <packets>/<N>/r<K>/diff.patch
 
 For round 2 and later, also keep the previous round's `diff.patch` and tell the reviewer to read what changed between the two first.
 
+Write `decisions.md` in the packet before the worker starts (round 1) and again for each later round (`<packets>/<N>/r<K>/decisions.md`) for the worker, the reviewer and the verifier: every comment on the issue by `{{maintainer}}` (or relayed by the master as the maintainer's), copied in full, oldest first, except those whose first line starts `**Gate`, `factory-log` or `tokens` (the records with `|`-separated columns), `Canary |`, `Shadow |`, `Progress updated`, `Epic box` or `**Escalation` (the master posts under that login, and a report never travels); it is not built from a keyword. `None` when there are none. Nobody but the master reads the issue's comments.
+
 ### Gate 3 — blind review
 
 ```bash
 herdr agent start reviewer-<N> --kind claude --pane <new pane> -- --agent reviewer --model opus
-herdr agent prompt reviewer-<N> "Use the blind-review skill (.claude/skills/blind-review/SKILL.md). Worktree: <path>. Branch: <branch>. Issue: {{repo}}#<N>. Draft, for its \"Instructions that were wrong or missing\" section only: <path>. Write report.md and summary.md in <packets>/<N>/r<K>/review/." --wait --timeout 1800000
+herdr agent prompt reviewer-<N> "Use the blind-review skill (.claude/skills/blind-review/SKILL.md). Worktree: <path>. Branch: <branch>. Issue: {{repo}}#<N>. Maintainer's decisions: <packets>/<N>/r<K>/decisions.md. Draft, for its \"Instructions that were wrong or missing\" section only: <path>. Write report.md and summary.md in <packets>/<N>/r<K>/review/." --wait --timeout 1800000
 ```
 
 From round 2, add: "Read the hunks that changed since <previous diff.patch> first. A new Important finding in text that did not change is not a finding of this round: list it under `Follow-up` in the report." Such a finding becomes a follow-up issue (the maintainer opens it).
@@ -124,7 +126,7 @@ herdr agent start verifier-<N> --kind claude --pane <new pane> -- --agent verifi
 herdr agent prompt verifier-<N> "Use the verify-pr skill (.claude/skills/verify-pr/SKILL.md). Worktree: <path>. Branch: <branch>. Issue: {{repo}}#<N>. Draft without its Answers to review: <path>. Maintainer's decisions: <packets>/<N>/r<K>/decisions.md. Write report.md and summary.md in <packets>/<N>/r<K>/verify/." --wait --timeout 3600000
 ```
 
-Strip "Answers to review" from the copy of the draft it gets; never give it the review. Write `decisions.md` in the packet: the maintainer's decision comments on the issue (by `{{maintainer}}`, or relayed by the master as the maintainer's), copied in full, oldest first, and never a `**Gate …**` comment or a finding; `None` when there are none. Post the report the same way, first line `**Gate 4, round K (verifier-<N>)** · M mismatches` (`0 mismatches` on a pass). Any mismatch is Blocking; `verify-pr` counts one per command whose numbers differ. When the master passes a report's discrepancies as noise, the first line ends `, passed by the master` (`**Gate 4, round K (verifier-<N>)** · M mismatches, passed by the master`); `metrics` counts those reports as the gate's false reds.
+Strip "Answers to review" from the copy of the draft it gets; never give it the review. It gets the `decisions.md` of the review packet. Post the report the same way, first line `**Gate 4, round K (verifier-<N>)** · M mismatches` (`0 mismatches` on a pass). Any mismatch is Blocking; `verify-pr` counts one per command whose numbers differ. When the master passes a report's discrepancies as noise, the first line ends `, passed by the master` (`**Gate 4, round K (verifier-<N>)** · M mismatches, passed by the master`); `metrics` counts those reports as the gate's false reds.
 
 ### The tokens record
 
@@ -138,7 +140,7 @@ The date is `YYYY-MM-DD`, the role `worker`, `reviewer` or `verifier`, and the t
 
 ### A red gate
 
-The master sends the worker only the Blocking and Important findings, as a file, with one line per finding. The worker fixes them or justifies each Important one in "Answers to review" (the verifier never reads it) and reruns its evidence. Set the Status back to In Progress, then to Review when the worker hands back, and start the next round.
+The master sends the worker only the Blocking and Important findings, as a file, with one line per finding, and the `decisions.md` of the new round (`<packets>/<N>/r<K>/decisions.md`, rewritten from the maintainer's comments so far). The worker fixes them or justifies each Important one in "Answers to review" (the verifier never reads it) and reruns its evidence. Set the Status back to In Progress, then to Review when the worker hands back, and start the next round.
 
 **Escalation.** After the **third** red round the master does not start a fourth: it stops, sets nothing to Done, posts the round 3 report of the gate that was red as usual, then a comment that starts `**Escalation (master): three red rounds**` with the three `summary.md` verdict lines, what stayed unfixed, and the question for the maintainer, and tells the maintainer in the session. Nothing moves until the maintainer answers.
 
