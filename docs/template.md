@@ -34,7 +34,7 @@ Each box of section 14 is ticked by a file or an organisation setting. `scripts/
 | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Licence, REUSE, third-party list and the allowlist check        | `LICENSE`, `LICENSES/AGPL-3.0-only.txt`, `REUSE.toml`, `THIRD-PARTY.md`, `scripts/check-licenses.mjs`                      |
 | README and the short `CONTRIBUTING.md`                          | `README.md`, `CONTRIBUTING.md`; `SECURITY.md` and `CODE_OF_CONDUCT.md` come from `bogd3v/.github` (#2)                     |
-| `AGENTS.md`, `CLAUDE.md`, `.claude/TEAM.md` and the standard    | the files of the same names                                                                                                |
+| `AGENTS.md`, `CLAUDE.md`, `.claude/TEAM.md` and the standard    | the files of the same names (`CLAUDE.md` imports `AGENTS.md` and `.claude/TEAM.md`, not the standard)                      |
 | The five factory role prompts (part of the box above)           | `.claude/agents/planner.md`, `master.md`, `worker.md`, `reviewer.md`, `verifier.md`, described in [factory.md](factory.md) |
 | The `ship-pr` skill (gate 5)                                    | `.claude/skills/ship-pr/SKILL.md`                                                                                          |
 | `.editorconfig`, `.nvmrc`, `.env.example`                       | the files of the same names                                                                                                |

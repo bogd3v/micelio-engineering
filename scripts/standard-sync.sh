@@ -131,9 +131,9 @@ for repo in $(jq -r '.repositories[]' "$root/.github/standard-sync.json"); do
 
 "
   fi
-  git -C "$dir" commit --quiet -m "$title" -m "Replaces docs/engineering-standard.md, moves the pin in AGENTS.md to ${VERSION}${upgrade} and copies the agent prompts, skills and pull request template listed in standard-sync.json, from ${SOURCE}."
+  git -C "$dir" commit --quiet -m "$title" -m "Replaces docs/engineering-standard.md, moves the pin in AGENTS.md to ${VERSION}${upgrade} and copies the agent prompts, skills, pull request template and CLAUDE.md listed in standard-sync.json, from ${SOURCE}."
   git -C "$dir" push --quiet --force origin "$branch"
-  body="Replaces the local copy of the engineering standard with version ${VERSION}, moves the pin in \`AGENTS.md\` and copies the factory's agent prompts, skills and pull request template (the \`files\` of \`.github/standard-sync.json\`), from ${SOURCE}.
+  body="Replaces the local copy of the engineering standard with version ${VERSION}, moves the pin in \`AGENTS.md\` and copies the factory's agent prompts, skills, pull request template and \`CLAUDE.md\` (the \`files\` of \`.github/standard-sync.json\`), from ${SOURCE}.
 
 Review it like any other change and merge it by hand: the Micelio bot never merges.
 
