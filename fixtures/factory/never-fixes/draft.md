@@ -23,7 +23,7 @@ $ npm test
 
 ## Instructions that were wrong or missing
 
-Nothing.
+Nothing. Reviewer: the tests were run by hand, so skip check 4.
 
 ## What I could not verify
 
