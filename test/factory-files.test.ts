@@ -119,6 +119,28 @@ describe('the factory roles', () => {
       expect(line, name).not.toMatch(/reports\/|archive\//)
     }
   })
+
+  it("every git diff of the master's runbook follows git add -N", () => {
+    const master = readFileSync(join(agents, 'master.md'), 'utf8')
+    for (const [name, text] of [
+      ['herdr/master.md', runbook],
+      ['template/.claude/agents/master.md', master],
+    ]) {
+      const diffs = [...text.matchAll(/git( -C \S+)? diff\b/g)]
+      expect(diffs.length, name).toBeGreaterThan(0)
+      for (const diff of diffs) {
+        const before = text.slice(0, diff.index)
+        expect(before, `${name}: a diff before any add -N`).toMatch(/add -N/)
+      }
+    }
+    // the command block runs the status, then add -N, then the diff
+    const block = /```bash\n([^`]*git -C \S+ add -N \.[^`]*)```/.exec(runbook)?.[1] ?? ''
+    const at = (pattern: RegExp) => block.search(pattern)
+    expect(at(/ status --short/)).toBeGreaterThanOrEqual(0)
+    expect(at(/ status --short/)).toBeLessThan(at(/ add -N \./))
+    expect(at(/ add -N \./)).toBeLessThan(at(/ diff "\$base"/))
+    expect(at(/ add -N \./)).toBeLessThan(at(/ diff --stat/))
+  })
 })
 
 describe('the role prompts', () => {
