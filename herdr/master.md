@@ -138,7 +138,7 @@ tokens | <date> | <issue> | <role> | <round> | <input> | <output> | <cache read>
 
 The date is `YYYY-MM-DD`, the role `worker`, `reviewer` or `verifier`, and the three numbers are whole numbers without separators. `metrics` reads these lines from the maintainer's login only; a missing record is an empty cell, so never post a zero for a number you do not have.
 
-At milestone close the master also posts its own record and the canary's on the epic, in the same format, with the roles `master` and `canary` and the numbers `fixtures/factory/tok.py <session id>` prints for each session (`input` is the input plus cache creation tokens, the `output` and the `cache read` as printed; one line per session, as many lines as sessions). `metrics` counts them once for the milestone and attaches them to no pull request.
+The master posts its own record on the epic when each session ends, and the canary's at milestone close, in the same format, with the roles `master` and `canary` and the numbers `fixtures/factory/tok.py <session id>` prints for each session (`input` is the input plus cache creation tokens, the `output` and the `cache read` as printed; one line per session, as many lines as sessions). `metrics` counts them once for the milestone and attaches them to no pull request.
 
 ### A red gate
 
@@ -173,6 +173,10 @@ Once gate 4 passes, tell the maintainer the issue is ready, with both reports an
 ## Tokens
 
 97% of a session's tokens are cache reads, which grow with context size times turns. So: the master reads only `summary.md`; workers are compacted before each round; verifiers run on Sonnet and reviewers on Opus; tool calls are batched and agents are waited on in the background; issues are frozen after gate 1; reviewers focus on changed hunks from round 2; a worker never runs its own reviewer or verifier.
+
+## Session length
+
+A master session ends after 4 merged pull requests, counted from its start. It then starts no new worker, reviewer or verifier. It waits for the agents still running, posts their gate comments and `tokens |` lines as usual, and closes their panes, so no name stays live. It adds to the `### Progress` of each issue in flight its worktree, its packet directory and its draft's path, then writes the issue's `updatedAt`, read after that edit, to `<packets>/<N>/freeze.txt`, which the next session compares as gate 1's freeze; it posts its own `tokens |` line on the epic (role `master`, round `-`; one line, when the session ends), tells the maintainer and exits. The maintainer starts a new session with `claude --agent master` and the same placeholders. It hands over nothing else: the next session starts from what GitHub and the packets hold, namely each issue's Status on the project and its `### Progress`, the gate comments, the open pull requests and `<packets>/<N>/`. Anything more the next session would need goes in that `### Progress` too, never in a free comment (it would be copied into `decisions.md`) and never left in the chat. No gate moves: the next session takes up an issue at the gate its Status and gate comments show, and runs any gate not yet posted. A later round starts a new worker with the issue, the packet and the findings: the worker of the ended session is gone.
 
 ## Report
 
