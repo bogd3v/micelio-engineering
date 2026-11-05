@@ -8,7 +8,8 @@ import type { Metrics, PullRow, RoleTokens } from './metrics.js'
  * `tokens |` record, never 0. After the correction log table come the tokens of the milestone by
  * role (the `master` and `canary` records included, cache reads shown) and two summary lines, the
  * tokens per merged pull request without a later fix without and with cache reads; a pull request's
- * issue record is counted once in them, however many pull requests repeat its cell.
+ * issue record is counted once in them, however many pull requests repeat its cell. The same holds
+ * for `Findings without a log row` in the totals row.
  *
  * @param date - The day of the run, `YYYY-MM-DD`.
  */
@@ -22,6 +23,14 @@ export function renderMetrics(result: Metrics, date: string): string {
     if (time === null || (time.diff === null && time.report === null)) return '—'
     return time[column] ?? 0
   }
+
+  // `unlogged` is its issue's: an issue with two pull requests counts once in the Total.
+  const unloggedOnce = sum(
+    result.pulls.filter(
+      (p, at) => p.issue === null || result.pulls.findIndex((q) => q.issue === p.issue) === at
+    ),
+    (p) => p.unlogged
+  )
 
   const issues = table(
     [
@@ -92,7 +101,7 @@ export function renderMetrics(result: Metrics, date: string): string {
         sum(result.pulls, (p) => p.lines),
         sum(result.pulls, (p) => p.corrections),
         sum(result.pulls, (p) => p.redChecks),
-        sum(result.pulls, (p) => p.unlogged),
+        unloggedOnce,
         sum(result.pulls, (p) => p.defects),
         minutes('diff'),
         minutes('report'),

@@ -29,5 +29,5 @@ The main session acts as **tech lead**: it reads the issue, does the work or han
 
 - Never push, merge, tag, release, deploy or run anything against production or staging. The agent prepares; the user approves.
 - Never read or print `.env`, tokens or anything under `~/.claude/secrets/`. Use `.env.example` to learn variable names.
-- **The sign-off.** The rule is written once, in `.claude/agents/master.md` ("Delivery"); no other role, and no main session that is not the master, runs `git commit -s`.
+- **The sign-off.** The rule is written once, in `.claude/agents/master.md` ("Delivery"); no other role, and no main session that is not the master, runs `git commit -s`; no agent writes a `Signed-off-by` by hand or adds one with `git commit --amend`.
 - Code, identifiers, commits, PR titles and descriptions in English (see `AGENTS.md`).

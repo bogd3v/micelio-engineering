@@ -57,6 +57,13 @@ describe('CLAUDE.md', () => {
       .filter((line) => line.startsWith('@'))
     expect(imports.filter((line) => line.includes('engineering-standard.md'))).toEqual([])
   })
+
+  it('does not import the engineering standard inline', () => {
+    const inline = readFileSync(join(ROOT, 'template/CLAUDE.md'), 'utf8')
+      .split('\n')
+      .filter((line) => /(^|\s)@\S*engineering-standard\.md/.test(line))
+    expect(inline).toEqual([])
+  })
 })
 
 describe('the factory roles', () => {

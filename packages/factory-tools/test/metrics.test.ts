@@ -450,6 +450,25 @@ describe('metrics', () => {
     ])
   })
 
+  it('an issue with two pull requests counts once in the Total', async () => {
+    const result = await metrics(
+      source({
+        issues: [issue(1)],
+        pulls: [pull(10, { body: 'Closes #1' }), pull(11, { body: 'Refs #1' })],
+        comments: {
+          1: [comment('maint', '**Gate 3, round 1 (reviewer): 1 Blocking, 1 Important.**')],
+        },
+      }),
+      { milestone: 'M1', log: '' }
+    )
+    expect(result.pulls.map((p) => [p.number, p.unlogged])).toEqual([
+      [10, 1],
+      [11, 1],
+    ])
+    const text = renderMetrics(result, '2026-10-24')
+    expect(text).toMatch(/^\| Total \|  \| \d+ \| 0 \| 0 \| 1 \| 0 \|/m)
+  })
+
   it("does not take a factory-log line by someone else for the maintainer's row", async () => {
     const result = await metrics(
       source({
