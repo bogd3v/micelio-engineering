@@ -1,8 +1,9 @@
 # @micelio/factory-tools
 
 The commands of the Micelio software factory: `lint-issue` (Gate 1, the Definition of Ready, as a
-script), [`issue-ready`](#issue-ready) (what the workflow does with its result) and
-[`metrics`](#metrics) (the factory's numbers for a milestone).
+script), [`issue-ready`](#issue-ready) (what the workflow does with its result),
+[`metrics`](#metrics) (the factory's numbers for a milestone) and [`lint-draft`](#lint-draft) (the
+shape of a draft's section "Instructions that were wrong or missing").
 
 ## lint-issue
 
@@ -78,6 +79,33 @@ and only moves a Status that is Ready back to Todo.
 It prints one line per change and exits 0, or 2 with the reason (for example a Status option the
 project does not have; nothing is changed then). The logic is tested against recorded API
 responses in `test/fixtures/ready/`, with no network.
+
+## `lint-draft`
+
+Gate 2 reads the draft's section "Instructions that were wrong or missing" with this command. The
+shape is in `docs/factory.md`, "The learning loop".
+
+```bash
+# In the worktree of the branch, after `git add -N .` so that new files are in the diff
+node <checkout>/packages/factory-tools/dist/cli.js lint-draft --file <draft> --base "$(git merge-base HEAD origin/main)"
+```
+
+It reads the section (the lines under that heading, up to the next heading; a leading `-` is
+ignored) and the `files` of `.github/standard-sync.json` of the `micelio-engineering` checkout the
+command was built in (the target repository has none), and lists
+the lines that break a rule. Exit 0 when none does, 1 when one does, 2 when the arguments are wrong
+or a file cannot be read.
+
+- `Nothing` passes.
+- A line that ends `fixed in <path>` fails when `git diff --name-only <ref>` lacks the path. In
+  `micelio-engineering` a synced file is fixed under `template/<path>`, which is in the diff, so it
+  passes.
+- A line whose subject is an own file, `AGENTS.md` or a skill under `.claude/skills/` that
+  `standard-sync.json` does not list, fails when it ends `reported to the master`. The standard, the
+  issue and a synced file (outside `micelio-engineering`) end `reported to the master` and pass.
+- A line in neither shape, a missing section and an empty one fail.
+
+It does not judge whether a "Nothing" is true.
 
 ## metrics
 
