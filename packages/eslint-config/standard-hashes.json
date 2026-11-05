@@ -5,7 +5,7 @@
   "1.7": "8a185de1a7a2dd16579d7ab4d3eceed17a935c25a1c67570561fbdbbcbe84496",
   "files": {
     ".claude/agents/master.md": "b0ed442f84f2ab67b5a0fcad9a886bdc04ac602ac0f27afca2fdb8d7d5c3ce2c",
-    ".claude/agents/planner.md": "e2aefb1c1d2bfb783e505097a9dc9816624b042ed3e62939745c44cdbad73768",
+    ".claude/agents/planner.md": "b2f77081ace0b52a75fa5f18b891351b84c5996d0d2d6772ccbd233523bef2de",
     ".claude/agents/reviewer.md": "ac9bfe9567bd33cff5d22662c1ee45308b55a12054617d07dd6f6d5d6c205e4e",
     ".claude/agents/verifier.md": "7fc1c73eec7c64ba669ece73075c0f967b316d81c9389a00ae729acf29505ae8",
     ".claude/agents/worker.md": "bcfc2a4162e03ea1bbfec7f19f279867d7d1fcc5737980073fa5dff949563615",
