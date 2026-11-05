@@ -120,3 +120,37 @@ describe('the factory roles', () => {
     }
   })
 })
+
+describe('the role prompts', () => {
+  /** Words per prompt, as `wc -w` counts them: runs of non-whitespace. */
+  const BUDGET: Record<string, number> = {
+    master: 1400,
+    worker: 1250,
+    planner: 950,
+    verifier: 700,
+    reviewer: 600,
+  }
+  const TOTAL = 4900
+
+  it('each role prompt stays under its word budget', () => {
+    const dir = join(ROOT, 'template/.claude/agents')
+    const counts = Object.fromEntries(
+      Object.keys(BUDGET).map((role) => [
+        role,
+        readFileSync(join(dir, `${role}.md`), 'utf8')
+          .split(/\s+/)
+          .filter(Boolean).length,
+      ])
+    )
+    expect(readdirSync(dir).sort()).toEqual(
+      Object.keys(BUDGET)
+        .sort()
+        .map((r) => `${r}.md`)
+    )
+    for (const [role, limit] of Object.entries(BUDGET)) {
+      expect(counts[role], `${role}.md words`).toBeLessThanOrEqual(limit)
+    }
+    const total = Object.values(counts).reduce((a, b) => a + b, 0)
+    expect(total, 'total words').toBeLessThanOrEqual(TOTAL)
+  })
+})
