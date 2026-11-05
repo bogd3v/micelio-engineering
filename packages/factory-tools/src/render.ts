@@ -5,7 +5,10 @@ import type { Metrics, PullRow, RoleTokens } from './metrics.js'
  * ends the first two. A pull request without a `time:` line shows `—` in the three minutes columns;
  * with one, a column it does not give shows `—`, except that `diff` and `report` are alternatives,
  * so a note with one of them shows 0 in the other. The tokens cell is `—` when the issue has no
- * `tokens |` record, never 0.
+ * `tokens |` record, never 0. After the correction log table come the tokens of the milestone by
+ * role (the `master` and `canary` records included, cache reads shown) and two summary lines, the
+ * tokens per merged pull request without a later fix without and with cache reads; a pull request's
+ * issue record is counted once in them, however many pull requests repeat its cell.
  *
  * @param date - The day of the run, `YYYY-MM-DD`.
  */
@@ -105,8 +108,29 @@ export function renderMetrics(result: Metrics, date: string): string {
     result.categories.length ? result.categories : [['none', 0]]
   )
   const learnings = table(
-    ['Correction log rows', 'With a destination'],
-    [[result.log.rows, result.log.converted]]
+    ['Correction log rows', 'With a destination', 'Learnings converted'],
+    [[result.log.rows, result.log.converted, result.learnings]]
+  )
+  const roles = table(
+    ['Tokens of the milestone, by role', 'Input', 'Output', 'Cache reads', 'Input plus output'],
+    result.milestoneTokens.length
+      ? [
+          ...result.milestoneTokens.map((t) => [
+            t.role,
+            t.input,
+            t.output,
+            t.cacheRead,
+            t.input + t.output,
+          ]),
+          [
+            'Total',
+            sum(result.milestoneTokens, (t) => t.input),
+            sum(result.milestoneTokens, (t) => t.output),
+            sum(result.milestoneTokens, (t) => t.cacheRead),
+            sum(result.milestoneTokens, (t) => t.input + t.output),
+          ],
+        ]
+      : [['none', 0, 0, 0, 0]]
   )
   const { total, cleanPulls } = result.tokens
   const perPull =
@@ -114,6 +138,11 @@ export function renderMetrics(result: Metrics, date: string): string {
       ? '—'
       : `${Math.round(total / cleanPulls)} (${total} tokens over ${cleanPulls} merged pull requests without a defect after merge)`
   const summary = `**Tokens per merged pull request without a later fix:** ${perPull}`
+  const withCache =
+    total === null || cleanPulls === 0
+      ? '—'
+      : `${Math.round((total + result.cacheReads) / cleanPulls)} (${total + result.cacheReads} tokens over ${cleanPulls} merged pull requests without a defect after merge)`
+  const summaryCache = `**Tokens per merged pull request without a later fix, with cache reads:** ${withCache}`
   return (
     [
       `**metrics** · "${result.milestone}" · ${date}`,
@@ -121,7 +150,9 @@ export function renderMetrics(result: Metrics, date: string): string {
       pulls,
       categories,
       learnings,
+      roles,
       summary,
+      summaryCache,
     ].join('\n\n') + '\n'
   )
 }

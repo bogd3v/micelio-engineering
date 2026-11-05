@@ -308,3 +308,21 @@ export function countLog(markdown: string): { rows: number; converted: number } 
   }
   return { rows, converted }
 }
+
+/**
+ * Counts the rows of `docs/factory-log.md` whose Destination (the fifth cell) is an issue, `#n`:
+ * the learnings that became a change. `single …` and `declined` are destinations too, but nothing
+ * was built for them, so they are not counted here (`countLog` counts them in `converted`).
+ */
+export function countLearnings(markdown: string): number {
+  let learnings = 0
+  for (const line of markdown.split(/\r?\n/)) {
+    if (!/^\|\s*\d{4}-\d\d-\d\d\s*\|/.test(line)) continue
+    const cells = line
+      .trim()
+      .replace(/^\||\|$/g, '')
+      .split(/(?<!\\)\|/)
+    if (/^#\d{1,7}\b/.test((cells[4] ?? '').trim())) learnings++
+  }
+  return learnings
+}

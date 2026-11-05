@@ -138,6 +138,8 @@ tokens | <date> | <issue> | <role> | <round> | <input> | <output> | <cache read>
 
 The date is `YYYY-MM-DD`, the role `worker`, `reviewer` or `verifier`, and the three numbers are whole numbers without separators. `metrics` reads these lines from the maintainer's login only; a missing record is an empty cell, so never post a zero for a number you do not have.
 
+At milestone close the master also posts its own record and the canary's on the epic, in the same format, with the roles `master` and `canary` and the numbers `fixtures/factory/tok.py <session id>` prints for each session (`input` is the input plus cache creation tokens, the `output` and the `cache read` as printed; one line per session, as many lines as sessions). `metrics` counts them once for the milestone and attaches them to no pull request.
+
 ### A red gate
 
 The master sends the worker only the Blocking and Important findings, as a file, with one line per finding, and the `decisions.md` of the new round (`<packets>/<N>/r<K>/decisions.md`, rewritten from the maintainer's comments so far). The worker fixes them or justifies each Important one in "Answers to review" (the verifier never reads it) and reruns its evidence. Set the Status back to In Progress, then to Review when the worker hands back, and start the next round.

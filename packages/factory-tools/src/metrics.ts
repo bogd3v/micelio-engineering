@@ -1,6 +1,7 @@
 import {
   acceptedFindings,
   blockingByCategory,
+  countLearnings,
   countLog,
   hasFindings,
   mergeTime,
@@ -99,13 +100,26 @@ export interface Metrics {
   categories: [string, number][]
   /** Rows of the correction log, and those with a Destination. */
   log: { rows: number; converted: number }
+  /** Rows of the correction log whose Destination is an issue (`#n`): `Learnings converted`. */
+  learnings: number
   /**
    * The tokens of the milestone: `total` is input plus output over every `tokens |` record of its
    * issues (cache reads are not added), `null` when there is none; `cleanPulls` counts the merged
    * pull requests with no defect after merge.
    */
   tokens: { total: number | null; cleanPulls: number }
+  /**
+   * Every `tokens |` record of the milestone by role, in the order the roles first appear: those
+   * of its issues and the `master` and `canary` ones, which belong to the milestone and to no pull
+   * request. Cache reads are included.
+   */
+  milestoneTokens: RoleTokens[]
+  /** The cache reads of the records behind `tokens.total` (those of the issues' roles). */
+  cacheReads: number
 }
+
+/** The roles whose `tokens |` lines belong to the milestone, not to an issue or a pull request. */
+const MILESTONE_ROLES = new Set(['master', 'canary'])
 
 const RED = new Set(['failure', 'timed_out', 'cancelled', 'action_required', 'startup_failure'])
 const CLOSES = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d{1,7})\b/gi
@@ -137,6 +151,7 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
 
   const categories = new Map<string, number>()
   const issueRows: IssueRow[] = []
+  const sessions: RoleTokens[] = []
   for (const issue of issues) {
     const row: IssueRow = {
       number: Number(issue.number),
@@ -162,7 +177,9 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
       const body = text(comment.body)
       if (/^factory-log \| /m.test(body)) logged = true
       const event = parseEvent(body)
-      for (const line of parseTokenLines(body)) addTokens(row.tokens, line)
+      for (const line of parseTokenLines(body)) {
+        addTokens(MILESTONE_ROLES.has(line.role) ? sessions : row.tokens, line)
+      }
       if (hasFindings(body)) findings++
       if (event?.kind === 'returned') row.returned++
       if (event?.kind === 'verification') {
@@ -227,12 +244,19 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
     })
   }
   const recorded = issueRows.flatMap((row) => row.tokens)
+  const milestoneTokens: RoleTokens[] = []
+  for (const record of [...recorded, ...sessions]) {
+    addTokens(milestoneTokens, { ...record, date: '', issue: '', round: '' })
+  }
   return {
     milestone: options.milestone,
     issues: issueRows.toSorted((a, b) => a.number - b.number),
     pulls: pullRows.toSorted((a, b) => a.number - b.number),
     categories: [...categories].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])),
     log: (({ rows, converted }) => ({ rows, converted }))(countLog(options.log)),
+    learnings: countLearnings(options.log),
+    milestoneTokens,
+    cacheReads: recorded.reduce((n, r) => n + r.cacheRead, 0),
     tokens: {
       total: recorded.length === 0 ? null : recorded.reduce((n, r) => n + r.input + r.output, 0),
       cleanPulls: pullRows.filter((pull) => pull.merged && pull.defects === 0).length,

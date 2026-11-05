@@ -31,8 +31,17 @@
 | Correctness | 5 |
 | uncategorised | 4 |
 
-| Correction log rows | With a destination |
-| --- | --- |
-| 45 | 0 |
+| Correction log rows | With a destination | Learnings converted |
+| --- | --- | --- |
+| 45 | 0 | 0 |
+
+| Tokens of the milestone, by role | Input | Output | Cache reads | Input plus output |
+| --- | --- | --- | --- | --- |
+| worker | 420000 | 107000 | 3300000 | 527000 |
+| verifier | 50000 | 7000 | 300000 | 57000 |
+| reviewer | 80000 | 9000 | 400000 | 89000 |
+| Total | 550000 | 123000 | 4000000 | 673000 |
 
 **Tokens per merged pull request without a later fix:** 134600 (673000 tokens over 5 merged pull requests without a defect after merge)
+
+**Tokens per merged pull request without a later fix, with cache reads:** 934600 (4673000 tokens over 5 merged pull requests without a defect after merge)

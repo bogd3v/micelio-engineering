@@ -8,6 +8,7 @@ import { metrics } from '../src/metrics.js'
 import {
   acceptedFindings,
   blockingByCategory,
+  countLearnings,
   countLog,
   hasFindings,
   mergeTime,
@@ -1155,6 +1156,84 @@ describe('the columns of the token and review-quality metrics', () => {
     const out = renderMetrics(result, '2026-10-24')
     expect(out).toContain('| 0 | — | — |\n')
     expect(out).toContain('**Tokens per merged pull request without a later fix:** —')
+  })
+
+  it('counts master and canary tokens once for the milestone', async () => {
+    const result = await read({
+      pulls: [pull(7), pull(8, 'Refs #2')],
+      comments: {
+        1: [
+          comment(
+            'maint',
+            `${line('master', '1', 1000, 200, 90000)}\n${line('canary', '1', 50, 10, 4000)}`
+          ),
+          comment('maint', line('master', '2', 500, 100, 10000)),
+          comment('someone', line('master', '9', 999999, 999999, 999999)),
+        ],
+        2: [comment('maint', line('worker', '1', 300, 100, 1000))],
+      },
+    })
+    expect(result.milestoneTokens).toEqual([
+      { role: 'worker', input: 300, output: 100, cacheRead: 1000 },
+      { role: 'master', input: 1500, output: 300, cacheRead: 100000 },
+      { role: 'canary', input: 50, output: 10, cacheRead: 4000 },
+    ])
+    expect(result.issues[0]?.tokens).toEqual([])
+    expect(result.pulls.map((p) => p.tokens)).toEqual([
+      [{ role: 'worker', input: 300, output: 100, cacheRead: 1000 }],
+      [{ role: 'worker', input: 300, output: 100, cacheRead: 1000 }],
+    ])
+    expect(result.tokens.total).toBe(400)
+    const out = renderMetrics(result, '2026-10-24')
+    expect(out).toContain('| master | 1500 | 300 | 100000 | 1800 |')
+    expect(out).toContain('| canary | 50 | 10 | 4000 | 60 |')
+    expect(out).toContain('| Total | 1850 | 410 | 105000 | 2260 |')
+  })
+
+  it('the summary prints tokens with and without cache reads', async () => {
+    const result = await read({
+      pulls: [pull(7), pull(8, 'Refs #2')],
+      comments: {
+        1: [comment('maint', line('master', '1', 1000, 200, 90000))],
+        2: [
+          comment(
+            'maint',
+            `${line('worker', '1', 300, 100, 1000)}\n${line('reviewer', '1', 90, 10, 500)}`
+          ),
+        ],
+      },
+    })
+    expect(result.cacheReads).toBe(1500)
+    const out = renderMetrics(result, '2026-10-24')
+    expect(out).toContain(
+      '**Tokens per merged pull request without a later fix:** 250 (500 tokens over 2 merged pull requests without a defect after merge)'
+    )
+    expect(out).toContain(
+      '**Tokens per merged pull request without a later fix, with cache reads:** 1000 (2000 tokens over 2 merged pull requests without a defect after merge)'
+    )
+    const none = renderMetrics(await read({ pulls: [pull(7)] }), '2026-10-24')
+    expect(none).toContain('without a later fix, with cache reads:** —')
+    expect(none).toContain('| none | 0 | 0 | 0 | 0 |')
+  })
+
+  it('Learnings converted counts only rows with an issue', async () => {
+    const log = [
+      '| Date | Issue | What was corrected | Category | Destination |',
+      '| ---- | ----- | ------------------ | -------- | ----------- |',
+      '| 2026-10-24 | #35 | one | docs | #120 2026-11-04 |',
+      '| 2026-10-24 | #36 | two | test | single 2026-10-29 |',
+      '| 2026-10-25 | #37 | three | lint | declined 2026-11-04 |',
+      '| 2026-10-25 | #38 | four | lint | `lint-issue` rule |',
+      '| 2026-10-25 | #39 | five | lint |  |',
+      '| 2026-10-25 | #40 | six | lint | #121 |',
+    ].join('\n')
+    expect(countLearnings(log)).toBe(2)
+    expect(countLog(log)).toEqual({ rows: 6, converted: 5 })
+    const result = await metrics(source({ issues: [issue(1)] }), { milestone: 'M2', log })
+    expect(result.learnings).toBe(2)
+    expect(renderMetrics(result, '2026-10-24')).toContain(
+      '| Correction log rows | With a destination | Learnings converted |\n| --- | --- | --- |\n| 6 | 5 | 2 |'
+    )
   })
 
   it('Silent approvals: counts the empty reviews of the maintainer on a pull request with no time: note', async () => {
