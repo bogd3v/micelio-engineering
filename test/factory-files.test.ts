@@ -84,4 +84,39 @@ describe('the factory roles', () => {
       if (named.length > 0) expect(tools, named.join(', ')).toContain('Skill')
     }
   )
+
+  it("the runbook gives a later reviewer the previous diff without an earlier round's directory", () => {
+    const lines = runbook.split('\n')
+    const prompts = lines.filter((line) => line.includes('herdr agent prompt '))
+    const later = lines.filter((line) => line.startsWith('From round 2, add:'))
+    expect(later).toHaveLength(1)
+    expect(later[0]).toContain('<packets>/<N>/r<K>/previous.patch')
+    expect(runbook).toMatch(
+      /copy round K-1's `diff\.patch` to `<packets>\/<N>\/r<K>\/previous\.patch`/
+    )
+    expect(runbook).not.toMatch(/r<K-1>|r<K\+1>|r<K>\/(review|verify)\//)
+    // a prompt (and the round 2 sentence) names a path of this round or the logs, never another one
+    for (const line of [...prompts, ...later]) {
+      for (const [, dir] of line.matchAll(/<packets>\/<N>\/([^/\s.]+)/g)) {
+        expect(['r<K>', 'logs'], line).toContain(dir)
+      }
+    }
+    expect(prompts.filter((line) => line.includes('reviewer-'))).not.toHaveLength(0)
+  })
+
+  it('the runbook writes each report in a directory no prompt names and moves it to archive/', () => {
+    const prompts = runbook.split('\n').filter((line) => line.includes('herdr agent prompt '))
+    expect(runbook).toMatch(/^uuidgen .*<packets>\/<N>\/reports\/<that id>$/m)
+    expect(runbook).toMatch(/^mkdir -p <report dir> /m)
+    expect(runbook).toContain(
+      'mkdir -p <packets>/<N>/archive && mv <report dir> <packets>/<N>/archive/gate<G>-r<K>'
+    )
+    expect(runbook).toContain('it is not a sandbox')
+    expect(runbook).not.toContain('$out')
+    for (const name of ['reviewer', 'verifier']) {
+      const line = prompts.find((l) => l.includes(`herdr agent prompt ${name}-`))
+      expect(line, name).toContain('Write report.md and summary.md in <report dir>.')
+      expect(line, name).not.toMatch(/reports\/|archive\//)
+    }
+  })
 })

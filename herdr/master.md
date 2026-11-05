@@ -96,7 +96,16 @@ base=$(git -C ../wt-<N> merge-base HEAD origin/main)
 git -C ../wt-<N> diff "$base" > <packets>/<N>/r<K>/diff.patch
 ```
 
-For round 2 and later, also keep the previous round's `diff.patch` and tell the reviewer to read what changed between the two first.
+For round K of 2 or later, also copy round K-1's `diff.patch` to `<packets>/<N>/r<K>/previous.patch` and tell the reviewer to read what changed between the two first. No prompt names an earlier round's directory.
+
+The reports do not live in a round's directory. Before an agent starts, make it a directory with a name nobody is given, outside every `r<K>/`, and name only that directory in its prompt:
+
+```bash
+uuidgen                 # <report dir> is <packets>/<N>/reports/<that id>
+mkdir -p <report dir>   # the agent writes report.md and summary.md here
+```
+
+When the agent ends, read `summary.md`, post `report.md`, and move the directory out of the way before the next agent starts: `mkdir -p <packets>/<N>/archive && mv <report dir> <packets>/<N>/archive/gate<G>-r<K>` (`archive/` is never named in a prompt). This limits what the agents are pointed to; it is not a sandbox, and an agent's tools can still read any path.
 
 Write `decisions.md` in the packet before the worker starts (round 1) and again for each later round (`<packets>/<N>/r<K>/decisions.md`) for the worker, the reviewer and the verifier: every comment on the issue by `{{maintainer}}` (or relayed by the master as the maintainer's), copied in full, oldest first, except those whose first line starts `**Gate`, `factory-log` or `tokens` (the records with `|`-separated columns), `Canary |`, `Shadow |`, `Progress updated`, `Epic box` or `**Escalation` (the master posts under that login, and a report never travels); it is not built from a keyword. `None` when there are none. Nobody but the master reads the issue's comments.
 
@@ -104,10 +113,10 @@ Write `decisions.md` in the packet before the worker starts (round 1) and again 
 
 ```bash
 herdr agent start reviewer-<N> --kind claude --pane <new pane> -- --agent reviewer --model opus
-herdr agent prompt reviewer-<N> "Use the blind-review skill (.claude/skills/blind-review/SKILL.md). Worktree: <path>. Branch: <branch>. Issue: {{repo}}#<N>. Maintainer's decisions: <packets>/<N>/r<K>/decisions.md. Draft, for its \"Instructions that were wrong or missing\" section only: <path>. Write report.md and summary.md in <packets>/<N>/r<K>/review/." --wait --timeout 1800000
+herdr agent prompt reviewer-<N> "Use the blind-review skill (.claude/skills/blind-review/SKILL.md). Worktree: <path>. Branch: <branch>. Issue: {{repo}}#<N>. Maintainer's decisions: <packets>/<N>/r<K>/decisions.md. Draft, for its \"Instructions that were wrong or missing\" section only: <path>. Write report.md and summary.md in <report dir>." --wait --timeout 1800000
 ```
 
-From round 2, add: "Read the hunks that changed since <previous diff.patch> first. A new Important finding in text that did not change is not a finding of this round: list it under `Follow-up` in the report." Such a finding becomes a follow-up issue (the maintainer opens it).
+From round 2, add: "Read the hunks that changed since <packets>/<N>/r<K>/previous.patch first. A new Important finding in text that did not change is not a finding of this round: list it under `Follow-up` in the report." Such a finding becomes a follow-up issue (the maintainer opens it).
 
 The master reads **only `summary.md`**. It posts the full `report.md` as a comment with `--body-file`, whose first line is the gate line:
 
@@ -123,7 +132,7 @@ When the master accepts Important findings the worker justified, it adds the lin
 
 ```bash
 herdr agent start verifier-<N> --kind claude --pane <new pane> -- --agent verifier --model sonnet
-herdr agent prompt verifier-<N> "Use the verify-pr skill (.claude/skills/verify-pr/SKILL.md). Worktree: <path>. Branch: <branch>. Issue: {{repo}}#<N>. Draft without its Answers to review: <path>. Maintainer's decisions: <packets>/<N>/r<K>/decisions.md. Logs: <packets>/<N>/logs/. Write report.md and summary.md in <packets>/<N>/r<K>/verify/." --wait --timeout 3600000
+herdr agent prompt verifier-<N> "Use the verify-pr skill (.claude/skills/verify-pr/SKILL.md). Worktree: <path>. Branch: <branch>. Issue: {{repo}}#<N>. Draft without its Answers to review: <path>. Maintainer's decisions: <packets>/<N>/r<K>/decisions.md. Logs: <packets>/<N>/logs/. Write report.md and summary.md in <report dir>." --wait --timeout 3600000
 ```
 
 Strip "Answers to review" from the copy of the draft it gets; never give it the review. It gets the `decisions.md` of the review packet. Post the report the same way, first line `**Gate 4, round K (verifier-<N>)** · M mismatches` (`0 mismatches` on a pass). Any mismatch is Blocking; `verify-pr` counts one per command whose numbers differ or that has no log. When the master passes a report's discrepancies as noise, the first line ends `, passed by the master` (`**Gate 4, round K (verifier-<N>)** · M mismatches, passed by the master`); `metrics` counts those reports as the gate's false reds.
