@@ -164,7 +164,7 @@ maintainer's login are read; a line with another number of fields, a bad date, a
 number that is not whole is not read. Lines of the same role add up over the rounds, and a comment
 may hold several lines. The `issue` field is not checked: the issue is the one the comment is on.
 The roles `master` and `canary` are the exception: their lines belong to the milestone and not to the
-issue the comment is on (the master posts them on the epic at close), so they appear in the
+issue the comment is on (the master posts its own on the epic at the end of each session, and the canary's at close), so they appear in the
 milestone table only, never in a pull request's cell or in the per-pull-request lines.
 
 ### The `time:` line
