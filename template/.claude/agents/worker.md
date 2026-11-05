@@ -16,6 +16,7 @@ Build the smallest change that satisfies the issue, in its worktree and branch:
 - Create each test the issue names, with that name, and make it pass. Never edit a test the issue names, nor an existing test the issue does not name, except to add a case. If a named test cannot be written as the issue says it, write that in "Instructions that were wrong or missing" and stop on that criterion.
 - Prove each acceptance criterion on the repository's Docker (or the run `AGENTS.md` names instead) and keep the output.
 - `npm run check` green.
+- A command the change writes into `AGENTS.md` or another document is run as written, in the clean image or run that document names; its log goes in the packet.
 
 Keep tool output out of the worktree: start a browser tool with its output directory outside it (for the Playwright MCP, `--output-dir` under your scratchpad, never `.playwright-mcp/` in the worktree), and before the final report run `git status --short` and remove what a tool left that the draft does not name ("What changes" lists each path the change touches, one per line).
 
