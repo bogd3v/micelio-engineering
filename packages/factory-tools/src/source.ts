@@ -100,22 +100,37 @@ export function ghSource(repo: string): Source {
  * `pulls/<n>.commits.json`, `rules/<branch>.json`, `check-runs/<sha>.json`). A missing file is an empty list, as an endpoint
  * with no items is.
  *
+ * Hand-written files are not part of a recording: they sit in `<dir>/overlay/`, with the same
+ * layout, and are read after it. A list file is the recording's rows plus the overlay's, and an
+ * overlay row with the `number` of a recorded row replaces it; any other file is the overlay's
+ * when the overlay has it.
+ *
  * @param dir - The directory of the recording.
  */
 export function fixtureSource(dir: string): Source {
-  const read = async (file: string): Promise<unknown> => {
+  const parse = async (root: string, file: string): Promise<unknown> => {
     try {
-      return JSON.parse(await readFile(join(dir, file), 'utf8')) as unknown
+      return JSON.parse(await readFile(join(root, file), 'utf8')) as unknown
     } catch (error) {
       if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return null
       throw new Error(
-        `cannot read ${join(dir, file)}: ${error instanceof Error ? error.message : ''}`
+        `cannot read ${join(root, file)}: ${error instanceof Error ? error.message : ''}`
       )
     }
   }
+  const overlay = join(dir, 'overlay')
+  const read = async (file: string): Promise<unknown> =>
+    (await parse(overlay, file)) ?? (await parse(dir, file))
   const list = async (file: string): Promise<unknown[]> => {
-    const json = await read(file)
-    return Array.isArray(json) ? json : []
+    const recorded = await parse(dir, file)
+    const added = await parse(overlay, file)
+    const rows = Array.isArray(recorded) ? recorded : []
+    if (!Array.isArray(added)) return rows
+    const numbers = new Set(added.map(numberOf))
+    return [
+      ...rows.filter((row) => numberOf(row) === null || !numbers.has(numberOf(row))),
+      ...added,
+    ]
   }
   return {
     milestones: () => list('milestones.json'),
@@ -160,4 +175,14 @@ function checkRunsOf(json: unknown): unknown[] {
   const runs =
     typeof json === 'object' && json !== null && 'check_runs' in json ? json.check_runs : []
   return Array.isArray(runs) ? runs : []
+}
+
+/** The `number` of a row, or `null` when it has none (a comment has none). */
+function numberOf(row: unknown): number | null {
+  return typeof row === 'object' &&
+    row !== null &&
+    'number' in row &&
+    typeof row.number === 'number'
+    ? row.number
+    : null
 }

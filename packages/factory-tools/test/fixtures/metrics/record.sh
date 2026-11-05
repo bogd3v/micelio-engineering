@@ -10,45 +10,49 @@
 # have an inline comment.
 # Nothing else is kept. The correction log is copied as it is, for the Destination count. Of a
 # comment that starts with the `issue-ready` marker the edit history is recorded too, as `comment-edits/<node id>.json` (`gh api graphql`, read only).
-# The hand-written fixtures have numbers from 9000 up, which GitHub does not have: their rows in
-# `milestone-issues.json` and `pulls.json` are kept, and their comments are not fetched.
+# Nothing is written into this directory until every call has succeeded: the recording is made in a
+# temporary directory next to it and moved in at the end, so a failed run leaves the fixtures as
+# they were. The hand-written fixtures are in `overlay/`, which a recording never touches.
 set -euo pipefail
 repo=$1 milestone=$2
 shift 2
 dir=$(cd "$(dirname "$0")" && pwd)
 api() { gh api --paginate --slurp "$@" | jq 'add // []'; }
 q() { jq -L "$dir" "include \"record\"; $1"; }
-# The rows of the hand-written fixtures (number 9000 or more) in a file, or none.
-hand() { jq -c '[.[] | select(.number >= 9000)]' "$dir/$1" 2>/dev/null || echo '[]'; }
-hand_issues=$(hand milestone-issues.json)
-hand_pulls=$(hand pulls.json)
+out=$(mktemp -d "$dir/.recording.XXXXXX")
+trap 'rm -rf "$out"' EXIT
 
-mkdir -p "$dir/comments" "$dir/comment-edits" "$dir/pulls" "$dir/check-runs"
-api "repos/$repo/milestones?state=all" | jq '[.[] | {number, title, state}]' >"$dir/milestones.json"
-api "repos/$repo/issues?milestone=$milestone&state=all&per_page=100" | q "[.[] | issue] + $hand_issues" >"$dir/milestone-issues.json"
-api "repos/$repo/issues?state=all&per_page=100" | q '[.[] | issue]' >"$dir/all-issues.json"
-api "repos/$repo/pulls?state=all&per_page=100" | q "$hand_pulls + [.[] | pull_of_list]" >"$dir/pulls.json"
+mkdir -p "$out/comments" "$out/comment-edits" "$out/pulls" "$out/check-runs"
+api "repos/$repo/milestones?state=all" | jq '[.[] | {number, title, state}]' >"$out/milestones.json"
+api "repos/$repo/issues?milestone=$milestone&state=all&per_page=100" | q '[.[] | issue]' >"$out/milestone-issues.json"
+api "repos/$repo/issues?state=all&per_page=100" | q '[.[] | issue]' >"$out/all-issues.json"
+api "repos/$repo/pulls?state=all&per_page=100" | q '[.[] | pull_of_list]' >"$out/pulls.json"
 
 # shellcheck disable=SC2086 # ISSUES is a list of numbers
-for n in $(jq -r '.[].number | select(. < 9000)' "$dir/milestone-issues.json") "$@" ${ISSUES:-}; do
-  api "repos/$repo/issues/$n/comments?per_page=100" | q '[.[] | comment]' >"$dir/comments/$n.json"
+for n in $(jq -r '.[].number' "$out/milestone-issues.json") "$@" ${ISSUES:-}; do
+  api "repos/$repo/issues/$n/comments?per_page=100" | q '[.[] | comment]' >"$out/comments/$n.json"
 done
 # The comment an app edits in place has no other history than its edits.
 edits='query($id: ID!) { node(id: $id) { ... on IssueComment { userContentEdits(first: 100) { nodes { editedAt diff } } } } }'
-for id in $(jq -r '.[] | .node_id // empty' "$dir"/comments/*.json); do
-  gh api graphql -f query="$edits" -f id="$id" | q '[.data.node.userContentEdits.nodes // [] | .[] | edit]' >"$dir/comment-edits/$id.json"
+for id in $(find "$out/comments" -name '*.json' -print0 | xargs -0 -r jq -r '.[] | .node_id // empty'); do
+  gh api graphql -f query="$edits" -f id="$id" | q '[.data.node.userContentEdits.nodes // [] | .[] | edit]' >"$out/comment-edits/$id.json"
 done
 for n in "$@"; do
-  gh api "repos/$repo/pulls/$n" | q 'pull_detail' >"$dir/pulls/$n.json"
-  api "repos/$repo/pulls/$n/reviews?per_page=100" | q '[.[] | review]' >"$dir/pulls/$n.reviews.json"
-  api "repos/$repo/pulls/$n/comments?per_page=100" | q '[.[] | review_comment]' >"$dir/pulls/$n.review-comments.json"
-  api "repos/$repo/pulls/$n/commits?per_page=100" | q '[.[] | commit]' >"$dir/pulls/$n.commits.json"
+  gh api "repos/$repo/pulls/$n" | q 'pull_detail' >"$out/pulls/$n.json"
+  api "repos/$repo/pulls/$n/reviews?per_page=100" | q '[.[] | review]' >"$out/pulls/$n.reviews.json"
+  api "repos/$repo/pulls/$n/comments?per_page=100" | q '[.[] | review_comment]' >"$out/pulls/$n.review-comments.json"
+  api "repos/$repo/pulls/$n/commits?per_page=100" | q '[.[] | commit]' >"$out/pulls/$n.commits.json"
   # The checks of the commits pushed after the pull request opened, as `metrics` reads them.
   opened=$(gh api "repos/$repo/pulls/$n" --jq .created_at)
-  for sha in $(jq -r --arg opened "$opened" '.[] | select(.commit.committer.date > $opened) | .sha' "$dir/pulls/$n.commits.json"); do
-    gh api "repos/$repo/commits/$sha/check-runs?per_page=100" | q 'checks' >"$dir/check-runs/$sha.json"
+  for sha in $(jq -r --arg opened "$opened" '.[] | select(.commit.committer.date > $opened) | .sha' "$out/pulls/$n.commits.json"); do
+    gh api "repos/$repo/commits/$sha/check-runs?per_page=100" | q 'checks' >"$out/check-runs/$sha.json"
   done
 done
-mkdir -p "$dir/rules"
-api "repos/$repo/rules/branches/main?per_page=100" | q '[.[] | rule]' >"$dir/rules/main.json"
-cp "$dir/../../../../../docs/factory-log.md" "$dir/factory-log.md"
+mkdir -p "$out/rules"
+api "repos/$repo/rules/branches/main?per_page=100" | q '[.[] | rule]' >"$out/rules/main.json"
+cp "$dir/../../../../../docs/factory-log.md" "$out/factory-log.md"
+# Every call succeeded: replace the recorded files, and only those; `overlay/` stays.
+for f in "$out"/*; do
+  rm -rf "${dir:?}/$(basename "$f")"
+  mv "$f" "$dir/"
+done

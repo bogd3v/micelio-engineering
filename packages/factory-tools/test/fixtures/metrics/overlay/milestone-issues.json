@@ -1,0 +1,17 @@
+[
+  {
+    "number": 9052,
+    "title": "chore(factory): a fixture issue with findings and no log row",
+    "state": "closed",
+    "user": {
+      "login": "ale9420"
+    },
+    "milestone": {
+      "number": 2,
+      "title": "Micelio · Fábrica"
+    },
+    "labels": [],
+    "pull_request": null,
+    "body": ""
+  }
+]
