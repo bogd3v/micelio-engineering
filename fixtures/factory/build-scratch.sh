@@ -7,7 +7,7 @@
 #
 # - <dir>/repo: the scratch repository. Its first commit is the base that the reviewer and the
 #   verifier merge-base against, as `origin/main`, and holds `AGENTS.md` (which names the check),
-#   `ISSUE.md` (the issue, numbered #1) and `docs/engineering-standard.md`. The work is left
+#   `CLAUDE.md` (the synced one), `ISSUE.md` (the issue, numbered #1) and `docs/engineering-standard.md`. The work is left
 #   uncommitted and marked with `git add -N`, like a worker's work before gate 5.
 # - <dir>/draft.md: the pull request draft, outside the repository, like a worker's draft.
 #
@@ -27,6 +27,7 @@ mkdir -p "$target/repo/docs"
 target="$(cd "$target" && pwd)"
 repo="$target/repo"
 cp "$here/../../docs/engineering-standard.md" "$repo/docs/"
+cp "$here/../../CLAUDE.md" "$repo/"
 
 if [ "$fixture" = planted-coverage ]; then
   src="$here/planted-coverage"
