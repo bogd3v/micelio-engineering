@@ -19,6 +19,7 @@ export { metrics } from './metrics.js'
 export type { IssueRow, Metrics, MetricsOptions, PullRow } from './metrics.js'
 export {
   blockingByCategory,
+  countLearnings,
   countLog,
   mergeTime,
   parseEvent,
