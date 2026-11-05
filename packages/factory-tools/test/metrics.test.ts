@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import type { SpawnSyncReturns } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, readdir, realpath, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -1056,33 +1057,128 @@ describe('factory-tools metrics', () => {
     expect(hasFindings(kept)).toBe(true)
   })
 
-  it('record.sh keeps the hand-written rows and does not fetch their comments', async () => {
+  it('record.jq keeps every line the parser reads', () => {
+    const body = [
+      '**Gate 4 (v): 2 mismatches, one passed by the master**',
+      'prose that is dropped',
+      'factory-log | 2026-10-24 | #1 | a thing | test | -',
+      'tokens | 2026-10-24 | #1 | worker | 1 | 10 | 20 | 30',
+      'accepted: 1',
+      '- Accepted: 2',
+      '  * accepted: 3',
+      '## 1. Correctness and edge cases',
+      '**B1.** a blocking finding',
+      '  I2. an important one',
+      '**mismatches: 2.**',
+      'more prose that is dropped',
+    ].join('\n')
+    const out = spawnSync('jq', ['-c', '-L', RECORDED, 'include "record"; comment | .body'], {
+      encoding: 'utf8',
+      input: JSON.stringify({ user: { login: 'u' }, created_at: 'x', body }),
+    })
+    expect(out.status).toBe(0)
+    const kept = JSON.parse(out.stdout) as string
+    expect(kept.split('\n')).toEqual(body.split('\n').filter((l) => !l.includes('dropped')))
+    for (const read of [
+      parseLogLines,
+      parseTokenLines,
+      acceptedFindings,
+      passedByMaster,
+      hasFindings,
+      parseEvent,
+      blockingByCategory,
+    ]) {
+      expect(read(kept)).toEqual(read(body))
+    }
+    expect(acceptedFindings(kept)).toBe(3)
+  })
+
+  it('a hand-written overlay wins over a recording', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'overlay-'))
+    const put = async (file: string, json: unknown) => {
+      await mkdir(join(dir, file, '..'), { recursive: true })
+      await writeFile(join(dir, file), JSON.stringify(json))
+    }
+    await put('milestone-issues.json', [
+      { number: 1, title: 'recorded' },
+      { number: 2, title: 'kept' },
+    ])
+    await put('overlay/milestone-issues.json', [
+      { number: 1, title: 'hand-written' },
+      { number: 9000, title: 'only by hand' },
+    ])
+    await put('comments/3.json', [{ body: 'recorded comment' }])
+    await put('overlay/comments/3.json', [{ body: 'tokens | hand-added' }])
+    await put('pulls/7.json', { number: 7, additions: 1 })
+    await put('overlay/pulls/7.json', { number: 7, additions: 2 })
+    await put('overlay/pulls/8.json', { number: 8, additions: 3 })
+    const recorded = fixtureSource(dir)
+    expect(await recorded.milestoneIssues(2)).toEqual([
+      { number: 2, title: 'kept' },
+      { number: 1, title: 'hand-written' },
+      { number: 9000, title: 'only by hand' },
+    ])
+    expect(await recorded.comments(3)).toEqual([
+      { body: 'recorded comment' },
+      { body: 'tokens | hand-added' },
+    ])
+    expect(await recorded.pull(7)).toEqual({ number: 7, additions: 2 })
+    expect(await recorded.pull(8)).toEqual({ number: 8, additions: 3 })
+    expect(await recorded.pulls()).toEqual([])
+  })
+
+  /** A copy of `record.sh` three levels under a repository whose `gh` is the script given. */
+  async function recorder(
+    gh: string
+  ): Promise<{ dir: string; run: () => SpawnSyncReturns<string> }> {
     const root = await mkdtemp(join(tmpdir(), 'record-'))
     const dir = join(root, 'a/b/c/d/e')
     await mkdir(join(dir, 'comments'), { recursive: true })
+    await mkdir(join(dir, 'overlay'), { recursive: true })
     await mkdir(join(root, 'docs'), { recursive: true })
     await mkdir(join(root, 'bin'))
-    await writeFile(join(root, 'docs/factory-log.md'), '')
-    // A `gh` that finds nothing on GitHub: every page is empty.
-    await writeFile(join(root, 'bin/gh'), '#!/bin/sh\necho "[[]]"\n', { mode: 0o755 })
-    for (const f of ['record.sh', 'record.jq', 'milestone-issues.json', 'pulls.json']) {
+    await writeFile(join(root, 'docs/factory-log.md'), 'log\n')
+    await writeFile(join(root, 'bin/gh'), gh, { mode: 0o755 })
+    for (const f of ['record.sh', 'record.jq']) {
       await writeFile(join(dir, f), await readFile(join(RECORDED, f)), { mode: 0o755 })
     }
-    const comments = await readFile(join(RECORDED, 'comments/9052.json'), 'utf8')
-    await writeFile(join(dir, 'comments/9052.json'), comments)
-    const out = spawnSync('bash', [join(dir, 'record.sh'), 'o/r', '2'], {
-      encoding: 'utf8',
-      env: { ...process.env, PATH: `${join(root, 'bin')}:${process.env.PATH ?? ''}` },
-    })
+    await writeFile(join(dir, 'milestone-issues.json'), '[{"number":5}]')
+    await writeFile(join(dir, 'comments/5.json'), '["recorded"]')
+    await writeFile(join(dir, 'overlay/pulls.json'), '[{"number":9000}]')
+    return {
+      dir,
+      run: () =>
+        spawnSync('bash', [join(dir, 'record.sh'), 'o/r', '2'], {
+          encoding: 'utf8',
+          env: { ...process.env, PATH: `${join(root, 'bin')}:${process.env.PATH ?? ''}` },
+        }),
+    }
+  }
+
+  it('a failed recording leaves the fixtures as they were', async () => {
+    // Every page is empty, except the list of pull requests, which fails.
+    const { dir, run } = await recorder(
+      '#!/bin/sh\ncase "$*" in *pulls?state*) exit 1;; esac\necho "[[]]"\n'
+    )
+    const out = run()
+    expect(out.status).not.toBe(0)
+    expect(await readFile(join(dir, 'milestone-issues.json'), 'utf8')).toBe('[{"number":5}]')
+    expect(await readFile(join(dir, 'comments/5.json'), 'utf8')).toBe('["recorded"]')
+    expect(await readFile(join(dir, 'overlay/pulls.json'), 'utf8')).toBe('[{"number":9000}]')
+    expect(await readdir(dir)).toEqual(
+      ['comments', 'milestone-issues.json', 'overlay', 'record.jq', 'record.sh'].sort()
+    )
+  })
+
+  it('a recording replaces the recorded files and leaves the overlay', async () => {
+    const { dir, run } = await recorder('#!/bin/sh\necho "[[]]"\n')
+    const out = run()
     expect(out.stderr).toBe('')
     expect(out.status).toBe(0)
-    const numbers = async (f: string) =>
-      (JSON.parse(await readFile(join(dir, f), 'utf8')) as { number: number }[]).map(
-        (r) => r.number
-      )
-    expect(await numbers('milestone-issues.json')).toEqual([9052])
-    expect(await numbers('pulls.json')).toEqual([9053])
-    expect(await readFile(join(dir, 'comments/9052.json'), 'utf8')).toBe(comments)
+    expect(await readFile(join(dir, 'milestone-issues.json'), 'utf8')).toBe('[]\n')
+    expect(await readdir(join(dir, 'comments'))).toEqual([])
+    expect(await readFile(join(dir, 'overlay/pulls.json'), 'utf8')).toBe('[{"number":9000}]')
+    expect((await readdir(dir)).filter((f) => f.startsWith('.recording'))).toEqual([])
   })
 })
 

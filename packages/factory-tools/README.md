@@ -230,16 +230,23 @@ review levels" of `docs/factory.md`.
 ### Recorded fixtures
 
 `test/fixtures/metrics/` is the recording of the milestone "Micelio · Fábrica" of this repository
-and its pull requests #46 to #49, made by `record.sh` with `gh api`. Issue #9052 and its pull request #9053 are the exception: they are written by hand (a Gate 3 and a Gate 4 with findings and no `factory-log |` line, which no recorded issue has), with numbers GitHub does not have, and recording again does not touch them. Each other file is what GitHub
+and its pull requests #46 to #49, made by `record.sh` with `gh api`. Each file is what GitHub
 returned, cut down by `record.jq` to what `metrics` reads, so that nothing but a login stands for a
-person: a comment keeps its first line, its `factory-log |` and `tokens |` lines, its `accepted:` line and the headings and finding
-lines of a review report, and the `issue-ready` bot's comments also keep the line after the marker
-and their edit history (`comment-edits/`). `factory-log.md` is a copy of `docs/factory-log.md`, and `expected.md` is
-the output the tests compare with. The master had not posted `tokens |` lines, `accepted:` lines or a `passed by the master` report
-yet when it was recorded: the ones in `comments/35.json`, `36.json` and `37.json` were added by
-hand in the form `record.jq` keeps, and a new recording keeps them once GitHub has them. Every
-pull request of the recording has a `time:` note, so its Silent approvals are 0; the tests build
-the other cases. Record again with `ISSUES=51 test/fixtures/metrics/record.sh
+person; the tests run `record.jq` on a sample comment and check that it keeps every line the
+parsers read (`factory-log |`, `tokens |`, `accepted:`, headings, finding lines and the mismatch
+count). `factory-log.md` is a copy of `docs/factory-log.md`, and `expected.md` is the output the
+tests compare with.
+
+What GitHub does not have is written by hand in `test/fixtures/metrics/overlay/`, with the same
+layout, and `fixtureSource` reads it after the recording: its rows are added to a list file (a row
+with the `number` of a recorded one replaces it), and any other file of it wins over the recorded
+one. It holds issue #9052 and its pull request #9053 (a Gate 3 and a Gate 4 with findings and no
+`factory-log |` line, with numbers GitHub does not have) and the `tokens |` lines and the `passed by
+the master` report that the master had not posted on #35 to #37 when it was recorded. A recording
+never touches it. `record.sh` writes to a temporary directory and replaces the recorded files only
+when every call has succeeded, so a failed run leaves the fixtures as they were. Every pull
+request of the recording has a `time:` note, so its Silent approvals are 0; the tests build the
+other cases. Record again with `ISSUES=51 test/fixtures/metrics/record.sh
 bogd3v/micelio-engineering 2 46 47 48 49`.
 
 ### Limits
