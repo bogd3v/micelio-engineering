@@ -26,6 +26,7 @@ read `REUSE.toml`); `gh`, logged in, is for `scripts/standard-sync.sh`, its dry 
 for the live forms of `lint-issue` and `metrics`; the tests stub it.
 In the container, `apt-get update && apt-get install -y jq python3-pip` and `pip install --break-system-packages reuse==6.2.0` supply them.
 In a git worktree, Docker also needs the main repository's `.git` mounted at the same path (the worktree's `.git` is a file that points to it), and on an SELinux host `--security-opt label=disable`.
+In the container, run `git config --global --add safe.directory <worktree path>` first, or git refuses the mounted worktree as owned by another user.
 
 ## Structure
 
