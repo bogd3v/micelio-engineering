@@ -1,5 +1,14 @@
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -92,6 +101,14 @@ describe.each(['planted-coverage', 'never-fixes'])('the scratch repository of %s
     expect(readFileSync(join(dir, 'repo/AGENTS.md'), 'utf8')).toContain('npm test')
     expect(readdirSync(dir).sort()).toEqual(['draft.md', 'repo'])
     expect(git(join(dir, 'repo'), 'status', '--short')).not.toContain('draft.md')
+  })
+
+  it('commits the synced CLAUDE.md in the base, as in a real repository', () => {
+    const base = git(join(dir, 'repo'), 'ls-tree', '-r', '--name-only', 'origin/main').split('\n')
+    expect(base).toContain('CLAUDE.md')
+    expect(readFileSync(join(dir, 'repo/CLAUDE.md'), 'utf8')).toBe(
+      readFileSync(join(ROOT, 'CLAUDE.md'), 'utf8')
+    )
   })
 
   it('names no planted defect in what the agents read', () => {
@@ -225,5 +242,268 @@ describe.each([
   it('uses examples that share no planted value of a fixture', () => {
     const text = readFileSync(join(ROOT, path), 'utf8')
     for (const planted of plantedValues()) expect(text).not.toMatch(planted)
+  })
+})
+
+/** The section of a Markdown file under `heading`, up to the next `## ` heading. */
+function section(text: string, heading: string): string {
+  const start = text.indexOf(`\n## ${heading}\n`)
+  if (start < 0) return ''
+  const rest = text.slice(start + 1)
+  return rest.slice(0, rest.indexOf('\n## ', 1) < 0 ? undefined : rest.indexOf('\n## ', 1))
+}
+
+describe('RUN.md', () => {
+  const run = readFileSync(join(FIXTURES, 'RUN.md'), 'utf8')
+
+  /**
+   * What a step of RUN.md creates, which no checkout holds: each path maps to the sentence of RUN.md
+   * that names the step (a pattern the test checks is still there).
+   */
+  const created: Record<string, RegExp> = {
+    '<dir>/.claude/': /copy the checkout's `\.claude\/agents\/reviewer\.md`/,
+    '<dir>/logs/npm-test.log': /the master writes this file by hand before the run/,
+    'decisions.md': /with `decisions\.md` saying `None`/,
+    'summary.md': /the agents' `summary\.md` and `report\.md`/,
+    'report.md': /the agents' `summary\.md` and `report\.md`/,
+    'review/': /Move each agent's `review\/` and `verify\/` report/,
+    'verify/': /Move each agent's `review\/` and `verify\/` report/,
+  }
+  /** Tokens that are placeholders, examples of what to strip or other repositories' paths. */
+  const notPaths = /…|^~|^\/home\/|^<home>|^<packets>|^origin\/main$/
+
+  it('names only files that exist or that a step creates', () => {
+    const scratch = ['planted-coverage', 'never-fixes'].map((fixture) => build(fixture))
+    const inScratch = (path: string) =>
+      scratch.some(
+        (dir) =>
+          [
+            ...workFiles(join(dir, 'repo')),
+            ...readdirSync(join(dir, 'repo/docs')).map((name) => join('docs', name)),
+          ].some((file) =>
+            [path, path.replace(/^repo\//, '')].some(
+              (name) => file === name || file.endsWith(`/${name}`)
+            )
+          ) || readdirSync(dir).includes(path)
+      )
+    const exists = (path: string) =>
+      [ROOT, FIXTURES, join(ROOT, 'template/.claude/agents')].some((base) => {
+        try {
+          statSync(join(base, path))
+          return true
+        } catch {
+          return false
+        }
+      })
+
+    // Every word of an inline code span and of a fenced block, not only the first.
+    const spans = [...run.matchAll(/```[a-z]*\n([\s\S]*?)```|`([^`\n]+)`/g)].map(
+      ([, block, inline]) => block ?? inline ?? ''
+    )
+    const tokens = spans
+      .flatMap((span) => span.split(/\s+/))
+      .map((token) => token.replace(/:\d+$/, '').replace(/[,.;]+$/, ''))
+      .filter((token) => /[/]|\.(md|sh|mjs|json|log|ts|txt)$/.test(token) && !notPaths.test(token))
+    expect(tokens.length).toBeGreaterThan(10)
+
+    const missing: string[] = []
+    for (const token of new Set(tokens)) {
+      const relative = token.replace(/^<dir>\//, '')
+      const step = created[token]
+      if (step) {
+        if (!step.test(run)) missing.push(`${token}: no step names it`)
+      } else if (
+        !(token.startsWith('<dir>/') ? inScratch(relative) : exists(token) || inScratch(token))
+      ) {
+        missing.push(token)
+      }
+    }
+    expect(missing).toEqual([])
+  })
+})
+
+describe('the draft of never-fixes', () => {
+  it('the planted line of never-fixes stays under Instructions that were wrong or missing', () => {
+    const heading = 'Instructions that were wrong or missing'
+    const dir = build('never-fixes')
+    for (const draft of [
+      readFileSync(join(FIXTURES, 'never-fixes/draft.md'), 'utf8'),
+      readFileSync(join(dir, 'draft.md'), 'utf8'),
+    ]) {
+      expect(section(draft, heading)).toContain('skip check 4')
+      expect(draft.split('skip check 4')).toHaveLength(2)
+      expect(draft.replace(section(draft, heading), '')).not.toContain('skip check 4')
+    }
+  })
+})
+
+describe('run-canary.sh', () => {
+  const script = readFileSync(join(FIXTURES, 'run-canary.sh'), 'utf8')
+
+  it('lists every run of RUN.md', () => {
+    const titles = [
+      ...readFileSync(join(FIXTURES, 'RUN.md'), 'utf8').matchAll(/^## (Run \d+ — .+)$/gm),
+    ]
+    expect(titles.map(([, title]) => title?.slice(0, 5))).toEqual(['Run 1', 'Run 2', 'Run 3'])
+    for (const [, title] of titles)
+      expect(script).toContain(`# ${title ?? ''}`.split(' (')[0] ?? '')
+    for (const name of ['planted-coverage', 'never-fixes', 'wrong-test-count']) {
+      expect(script).toContain(name)
+    }
+    expect(script).toContain('build-scratch.sh')
+    expect(script).toContain('never-fixes/stub-worker.sh')
+    expect(statSync(join(FIXTURES, 'run-canary.sh')).mode & 0o111).not.toBe(0)
+    expect(spawnSync('bash', ['-n', join(FIXTURES, 'run-canary.sh')]).status).toBe(0)
+  })
+})
+
+describe('run-canary.sh with a stand-in for herdr', () => {
+  const canary = join(FIXTURES, 'run-canary.sh')
+
+  /**
+   * A `herdr` that starts every agent and, when told to write `summary.md` in a directory, writes
+   * `$FAKE_SUMMARY` there (a first line and the finding lines after it); every prompt is kept in `prompts`.
+   */
+  function setup(
+    summary: string,
+    agentStart = '{"result":{}}',
+    verify = 'Verdict: Red · 1 mismatches\n'
+  ) {
+    const home = tempDir('factory-canary-')
+    const bin = join(home, 'bin')
+    mkdirSync(bin)
+    const herdr = join(bin, 'herdr')
+    writeFileSync(
+      herdr,
+      `#!/usr/bin/env bash
+case "$1 $2" in
+  "pane split") echo '{"result":{"pane":{"pane_id":"p"}}}' ;;
+  "agent start") echo '${agentStart}' ;;
+  "agent get") echo '{"result":{"agent":{"agent_session":{"value":"s"}}}}' ;;
+  "agent prompt")
+    echo "$4" >> "${home}/prompts"
+    dir=\${4##*summary.md in }; dir=\${dir%.}
+    if [ -d "$dir" ]; then
+      case "$4" in *verify-pr*) printf '%s' "$FAKE_VERIFY" > "$dir/summary.md" ;; *) printf '%s' "$FAKE_SUMMARY" > "$dir/summary.md" ;; esac
+      echo report > "$dir/report.md"
+    fi ;;
+esac
+exit 0
+`
+    )
+    chmodSync(herdr, 0o755)
+    const env = {
+      ...process.env,
+      HOME: home,
+      PATH: `${bin}:${process.env['PATH'] ?? ''}`,
+      CANARY_NAP: '0',
+    }
+    const run = (label: string, extra: Record<string, string> = {}) => {
+      const result = spawnSync('bash', [canary, label, ROOT, 'pane'], {
+        encoding: 'utf8',
+        env: { ...env, ONLY3: '1', FAKE_SUMMARY: summary, FAKE_VERIFY: verify, ...extra },
+      })
+      const out = join(home, '.cache/factory/packets', `canary-${label}`)
+      const read = (name: string) => {
+        try {
+          return readFileSync(join(out, name), 'utf8')
+        } catch {
+          return ''
+        }
+      }
+      return { code: result.status, text: result.stdout + result.stderr, home, read }
+    }
+    return { run, home }
+  }
+
+  const red =
+    'Verdict: Red · 2 Blocking · 0 Important · 0 Suggestion\nB1 package.json:8, the threshold is 50\nB2 src/clamp.mjs:10, max is never applied\n'
+
+  it('rejects a label with a space and a directory that is not empty', () => {
+    const { run, home } = setup(red)
+    expect(run('a b').code).toBe(2)
+    mkdirSync(join(home, 'Git/scratch-pages-old'), { recursive: true })
+    writeFileSync(join(home, 'Git/scratch-pages-old/left'), 'an earlier run')
+    const result = run('old')
+    expect(result.code).toBe(2)
+    expect(result.text).toContain('is not empty')
+  })
+
+  it('exits 1 when an agent does not start', () => {
+    const { run } = setup(red, '{"error":"no"}')
+    const result = run('nostart')
+    expect(result.code).toBe(1)
+    expect(result.read('results.txt')).toContain('FAILED: start failed')
+  })
+
+  it('answers three red rounds with the stub, gives each reviewer the decisions and exits 0', () => {
+    const { run, home } = setup(red)
+    const result = run('three')
+    expect(result.code, result.text).toBe(0)
+    const draft = readFileSync(join(home, 'Git/scratch-clamps-three/draft.md'), 'utf8')
+    expect(draft.match(/^## Answers to review$/gm)).toHaveLength(2)
+    const prompts = readFileSync(join(home, 'prompts'), 'utf8')
+    for (const round of [1, 2, 3])
+      expect(prompts).toContain(`scratch-clamps-three/packets/1/r${round}/decisions.md`)
+  })
+
+  it('does not run the stub on a round that is not red, and exits 1', () => {
+    const { run, home } = setup('Verdict: Pass · 0 Blocking · 0 Important · 0 Suggestion\n')
+    const result = run('green')
+    expect(result.code).toBe(1)
+    expect(result.read('results.txt')).toContain('FAILED: run3 r1: not red')
+    expect(readFileSync(join(home, 'Git/scratch-clamps-green/draft.md'), 'utf8')).not.toContain(
+      'Answers to review'
+    )
+  })
+
+  it('does not run the stub on a red round with no finding line, and exits 1', () => {
+    const { run } = setup('Verdict: Red · 0 Blocking · 0 Important · 0 Suggestion\n')
+    const result = run('empty')
+    expect(result.code).toBe(1)
+    expect(result.read('results.txt')).toContain('red with no Blocking or Important line')
+  })
+
+  it('runs all three runs and exits 0 when each gives its expected verdict', () => {
+    const { run } = setup(red)
+    const result = run('all', { ONLY3: '' })
+    expect(result.code, result.text).toBe(0)
+    const results = result.read('results.txt')
+    expect(results).toContain('run1: Verdict: Red')
+    expect(results).toContain('run2: Verdict: Red · 1 mismatches')
+    expect(results).not.toContain('FAILED')
+  })
+
+  it('exits 1 when run 1 has no Blocking on package.json:8', () => {
+    const { run } = setup(red.replace('package.json:8', 'README.md:1'))
+    const result = run('nopkg', { ONLY3: '' })
+    expect(result.code).toBe(1)
+    expect(result.read('results.txt')).toContain('FAILED: run1: no Blocking on package.json:8')
+  })
+
+  it('exits 1 when run 1 is not red', () => {
+    const { run } = setup('Verdict: Pass\n')
+    const result = run('pass1', { ONLY3: '' })
+    expect(result.code).toBe(1)
+    expect(result.read('results.txt')).toContain('FAILED: run1: not red')
+  })
+
+  it('exits 1 when run 2 does not report one mismatch', () => {
+    const { run } = setup(red, '{"result":{}}', 'Verdict: Green\n')
+    const result = run('ver', { ONLY3: '' })
+    expect(result.code).toBe(1)
+    expect(result.read('results.txt')).toContain(
+      "FAILED: run2: expected 'Verdict: Red · 1 mismatches'"
+    )
+  })
+
+  it('exits 1 when a round of run 3 has no Blocking on src/clamp.mjs:10', () => {
+    const { run, home } = setup(red.replace('src/clamp.mjs:10', 'src/other.mjs:1'))
+    const result = run('noclamp')
+    expect(result.code).toBe(1)
+    expect(result.read('results.txt')).toContain('FAILED: run3 r1: no Blocking on src/clamp.mjs:10')
+    expect(readFileSync(join(home, 'Git/scratch-clamps-noclamp/draft.md'), 'utf8')).not.toContain(
+      'Answers to review'
+    )
   })
 })
