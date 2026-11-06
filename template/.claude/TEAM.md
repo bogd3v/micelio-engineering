@@ -16,7 +16,7 @@ The main session acts as **tech lead**: it reads the issue, does the work or han
 
 1. **Understand** — read `AGENTS.md`, the issue and its Progress section, and the ADRs of the area. Ambiguous scope that is expensive to redo goes to the user.
 2. **Implement** — the smallest change that satisfies the issue; tests with it.
-3. **Verify** — `npm run check`, plus the suites the issue names. Record the real numbers.
+3. **Verify** — the check command, plus the suites the issue names. Record the real numbers.
 4. **Ship** — the main session prepares the branch, the commit message and the pull request following section 11 of the standard, and asks the user before pushing. It never runs `git commit -s`: the user does (see the sign-off below).
 5. **Close** — a summary for the user: what changed, what was tested, what was not verified, decisions pending.
 
