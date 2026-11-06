@@ -1,8 +1,9 @@
 // Copies the canonical standard into a repository, moves the pin in its AGENTS.md to the standard's
-// version, and copies the files of `.github/standard-sync.json` ("files": the agent prompts, the
-// skills, the pull request template) from `template/` to the same path. A listed path that does not
-// exist yet (a skill that has not landed) is skipped. Used by standard-sync.yml; prints `changed`
-// or `unchanged`, and one `synced <path>` line per file written, on stderr.
+// version (a `profile:` pin is left as it is), and copies the files of `.github/standard-sync.json`
+// ("files": the agent prompts, the skills, the pull request template) from `template/` to the same
+// path. A listed path that does not exist yet (a skill that has not landed) is skipped. Used by
+// standard-sync.yml; prints `changed` or `unchanged`, and one `synced <path>` line per file
+// written, on stderr.
 //
 //   node scripts/apply-standard.mjs <repository directory> [standard file]
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'

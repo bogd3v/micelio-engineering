@@ -31,6 +31,14 @@ version `AGENTS.md` pins (`` `standard: X.Y` ``), using the SHA-256 hashes in
 and to `npm run check`. A pinned version newer than the installed package knows fails with a message
 that says to upgrade the package.
 
+A repository may also pin its profiles on the same line, comma-separated (`` `standard: 2.0` ``,
+`` `profile: typescript, site-engine` ``; ADR-0001); with no `profile:` pin it is read as
+`typescript`. In `standard-hashes.json` a version maps to one hash (1.4 to 1.8, one file) or to
+`{ "core": "<sha256>", "profiles": { "<profile>": "<sha256>" } }`; for the second form the command
+also compares `docs/standard/<profile>.md` for each pinned profile and names the file that differs.
+A profile the pinned version does not have fails, naming the ones it has (a one-file version has
+`typescript` and `site-engine`).
+
 ## `lint:ee`
 
 `micelio-lint-ee [--allow <path>]... [root]` fails when a file git tracks enables Strapi Enterprise
