@@ -1,0 +1,20 @@
+{
+  "data": {
+    "repository": {
+      "issue": {
+        "id": "I_kwDOS-nPcs8AAAABc12oBg",
+        "milestone": { "title": "Micelio · Corte 0.7 — El sitio y el fediverso" },
+        "projectItems": {
+          "nodes": [
+            {
+              "id": "PVTI_lADOE_m_z84Bn8wbzhGYF6w",
+              "project": { "id": "PVT_kwDOE_m_z84Bn8wb" },
+              "releaseLine": null,
+              "front": null
+            }
+          ]
+        }
+      }
+    }
+  }
+}
