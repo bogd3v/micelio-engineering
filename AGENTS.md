@@ -9,8 +9,9 @@ The rules shared by every Micelio repository live in [`docs/engineering-standard
 ## Commands
 
 ```bash
-npm ci
-npm run check            # typecheck, lint, format:check, test, lint:licenses and lint:standard
+install: npm ci
+test: npm test
+check: npm run check            # typecheck, lint, format:check, test, lint:licenses and lint:standard
 npm run build            # compiles the packages (typecheck, lint and test run it first)
 npm run template -- <dir> # creates a repository from template/ (docs/template.md)
 npm run verify:template  # creates one, installs the packed packages and runs its checks (needs the registry)

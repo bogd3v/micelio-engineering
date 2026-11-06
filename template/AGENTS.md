@@ -9,8 +9,9 @@ The rules shared by every Micelio repository live in [`docs/engineering-standard
 ## Commands
 
 ```bash
-npm ci
-npm run check            # typecheck, lint, format:check, test, lint:licenses, lint:standard and lint:ee
+install: npm ci
+test: npm test
+check: npm run check            # typecheck, lint, format:check, test, lint:licenses, lint:standard and lint:ee
 npm run build            # compiles src/ to dist/
 ```
 

@@ -66,6 +66,25 @@ describe('CLAUDE.md', () => {
   })
 })
 
+describe('the synced files and the language of the repository', () => {
+  it('no synced file names an npm script, TSDoc or a .test.ts path', () => {
+    const files = [
+      ...SYNCED.flatMap((path) =>
+        filesAt(join(ROOT, 'template'), path).map((file) => `template/${file}`)
+      ),
+      'template/.claude/TEAM.md',
+    ]
+    expect(files.length).toBeGreaterThan(0)
+    const found = files.flatMap((file) => {
+      const text = readFileSync(join(ROOT, file), 'utf8')
+      return [/npm (run (check|test|build)\b|ci\b|test\b|install\b)/, /TSDoc/, /\.test\.ts/]
+        .filter((pattern) => pattern.test(text))
+        .map((pattern) => `${file} matches ${pattern}`)
+    })
+    expect(found).toEqual([])
+  })
+})
+
 describe('the factory roles', () => {
   const agents = join(ROOT, 'template/.claude/agents')
   const skills = [

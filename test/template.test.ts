@@ -92,6 +92,19 @@ describe('the repository template', () => {
     }
   })
 
+  it('AGENTS.md states the check command on a check: line', () => {
+    for (const text of [
+      readFileSync(join(project, 'AGENTS.md'), 'utf8'),
+      readFileSync(join(ROOT, 'AGENTS.md'), 'utf8'),
+    ]) {
+      const block = /```bash\n([\s\S]*?)```/.exec(text.split('## Commands')[1] ?? '')?.[1] ?? ''
+      const lines = block.split('\n')
+      expect(lines.filter((line) => line.startsWith('check:'))).toHaveLength(1)
+      expect(lines.some((line) => line.startsWith('test:'))).toBe(true)
+      expect(lines.some((line) => line.startsWith('install:'))).toBe(true)
+    }
+  })
+
   it('has the scripts that section 14 names', () => {
     const box = CHECKLIST.find((entry) => entry.box.startsWith('The scripts'))?.box ?? ''
     const names = [...box.matchAll(/`([a-z:]+)`/g)].map((match) => match[1] as string)
