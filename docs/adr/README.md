@@ -4,4 +4,4 @@ Decisions about the Micelio engineering standard and the shared tooling, the one
 
 | Record                                                               | Decision                                             | Status   |
 | -------------------------------------------------------------------- | ---------------------------------------------------- | -------- |
-| [0001](0001-split-the-standard-into-a-core-and-language-profiles.md) | Split the standard into a core and language profiles | Proposed |
+| [0001](0001-split-the-standard-into-a-core-and-language-profiles.md) | Split the standard into a core and language profiles | Accepted |

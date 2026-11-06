@@ -1,6 +1,6 @@
 # ADR-0001: Split the standard into a core and language profiles
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-11-05
 **Deciders:** The maintainer (bogd3v)
 
