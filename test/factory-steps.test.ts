@@ -44,6 +44,7 @@ const STEPS: Record<string, string[]> = {
     'herdr/master.md',
     'docs/factory.md',
   ],
+  'whatever K is, 0 and 1 included': [`${SKILLS}verify-pr/SKILL.md`],
   'the check command': [
     `${AGENTS}verifier.md`,
     `${AGENTS}worker.md`,
