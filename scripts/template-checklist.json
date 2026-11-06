@@ -7,7 +7,8 @@
       "REUSE.toml",
       "THIRD-PARTY.md",
       "scripts/check-licenses.mjs"
-    ]
+    ],
+    "scripts": ["lint:ee"]
   },
   {
     "box": "`README.md` and the short `CONTRIBUTING.md` that links Micelio's canonical one (section 1); `SECURITY.md` and `CODE_OF_CONDUCT.md` only when the repository has something to add to the organisation's",

@@ -30,3 +30,18 @@ version `AGENTS.md` pins (`` `standard: X.Y` ``), using the SHA-256 hashes in
 `@micelio/eslint-config/standard-hashes.json`. Add it as `"lint:standard": "micelio-lint-standard"`
 and to `npm run check`. A pinned version newer than the installed package knows fails with a message
 that says to upgrade the package.
+
+## `lint:ee`
+
+`micelio-lint-ee [--allow <path>]... [root]` fails when a file git tracks enables Strapi Enterprise
+code, which is not AGPL-compatible (bogd3v/micelio-cms#96). It reads the tracked files with an
+extension of code or configuration (`.js`, `.ts` and their variants, `.json`, `.yml`, `.sh`,
+`.env.example`, `Dockerfile`) line by line and reports `path:line message` for three rules:
+
+- the line names `STRAPI_LICENSE` (sets or reads the Enterprise licence key);
+- the line imports `@strapi/review-workflows` or `@strapi/content-releases`;
+- the line imports Strapi code under `ee/` (`@strapi/<package>/ee`).
+
+`--allow <path>` (repeatable) names a tracked file, relative to the root, that may mention them, such
+as `THIRD-PARTY.md` or `package-lock.json`; nothing else is skipped. A repository without Strapi
+passes. Add it as `"lint:ee": "micelio-lint-ee"` and to `npm run check`.
