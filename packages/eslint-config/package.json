@@ -45,6 +45,7 @@
     "provenance": true
   },
   "bin": {
+    "micelio-lint-ee": "./dist/lint-ee.js",
     "micelio-lint-standard": "./dist/lint-standard.js"
   },
   "devDependencies": {

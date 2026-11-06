@@ -20,6 +20,7 @@ const REF = 'a'.repeat(40)
 interface Entry {
   box: string
   files?: string[]
+  scripts?: string[]
   setting?: string
 }
 
@@ -101,8 +102,18 @@ describe('the repository template', () => {
     for (const name of names) expect(pkg.scripts, name).toHaveProperty(name)
     // check runs the fast checks of section 15 in the order CI does
     expect(pkg.scripts.check).toBe(
-      'npm run typecheck && npm run lint && npm run format:check && npm run test && npm run lint:licenses && npm run lint:standard'
+      'npm run typecheck && npm run lint && npm run format:check && npm run test && npm run lint:licenses && npm run lint:standard && npm run lint:ee'
     )
+  })
+
+  it('runs lint:ee, the script the checklist maps to the licence box', () => {
+    const pkg = JSON.parse(readFileSync(join(project, 'package.json'), 'utf8')) as {
+      scripts: Record<string, string>
+    }
+    const mapped = CHECKLIST.flatMap((entry) => entry.scripts ?? [])
+    expect(mapped).toContain('lint:ee')
+    for (const name of mapped) expect(pkg.scripts, name).toHaveProperty(name)
+    expect(pkg.scripts.check).toContain('npm run lint:ee')
   })
 
   it('leaves no placeholder behind and fills the repository name', () => {

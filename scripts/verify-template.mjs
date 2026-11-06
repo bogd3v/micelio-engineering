@@ -40,9 +40,11 @@ console.log(`Created ${files.length} files in ${project}`)
 
 const packed = readdirSync(tarballs).map((file) => join(tarballs, file))
 run('npm', ['install', '--save-dev', ...packed], project)
+// lint:ee scans the files git tracks, as in a real repository, and reuse reads .gitignore only inside
+// one; without it node_modules is scanned.
+run('git', ['init', '--quiet'], project)
+run('git', ['add', '--all'], project)
 run('npm', ['run', 'check'], project)
 run('npm', ['run', 'build'], project)
-// reuse reads .gitignore only inside a git repository, as in CI; without it node_modules is scanned.
-run('git', ['init', '--quiet'], project)
 run('reuse', ['lint'], project)
 console.log('A repository created from the template passes npm run check, build and reuse lint.')
