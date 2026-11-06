@@ -1,0 +1,76 @@
+name: Project fields backfill
+
+# Sets Release line and Front on every open issue of one milestone in the Micelio repositories,
+# from the milestone's entry in .github/project-fields.json, with the rules of issue-ready
+# (docs/workflows.md): a field that already has a value is kept, an issue that is not in the
+# organisation project is left alone, and a missing field or option fails before anything is
+# written. Run by hand, once per milestone that had issues before its entry existed.
+#
+# The milestone title is an input: it reaches the command through the environment, never an
+# expression in a shell, and is compared with each repository's milestones as data. The Micelio
+# bot's token is limited to the repositories below, Issues read and the organisation's Projects write.
+
+on:
+  workflow_dispatch:
+    inputs:
+      milestone:
+        description: Milestone title, exactly as in the repositories and in .github/project-fields.json
+        type: string
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: project-fields-backfill
+  cancel-in-progress: false
+
+env:
+  # The Micelio repositories with milestones; the Micelio bot must be installed on each.
+  REPOSITORIES: micelio,micelio-cms,micelio-plugin-core,micelio-plugin-fediverse,micelio-engineering
+
+jobs:
+  backfill:
+    name: Backfill
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Build the tools
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+
+      - name: Mint a token for Micelio bot
+        id: token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.MICELIO_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.MICELIO_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ env.REPOSITORIES }}
+          permission-issues: read
+          permission-organization-projects: write
+
+      - name: Set Release line and Front
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          MILESTONE: ${{ inputs.milestone }}
+          PROJECT: ${{ github.repository_owner }}/1
+        run: |
+          node packages/factory-tools/dist/cli.js project-fields-backfill \
+            --milestone "$MILESTONE" \
+            --project "$PROJECT" \
+            --project-fields .github/project-fields.json \
+            --repositories "$REPOSITORIES"

@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { GhError, MARKER, applyReadiness, defaultGh, neutralise, runReady } from '../src/ready.js'
 import type { Gh, ReadyParams } from '../src/ready.js'
+import { backfillFields, parseProjectFields, runBackfill } from '../src/fields.js'
+import type { ProjectFields } from '../src/fields.js'
 
 const FIXTURES = new URL('./fixtures/ready/', import.meta.url)
 
@@ -399,5 +401,347 @@ describe('runReady', () => {
     })
     expect(bad.code).toBe(2)
     expect(bad.stderr).toContain('--passed must be true or false')
+  })
+})
+
+const RELEASE_LINE = 'PVTSSF_lADOE_m_z84Bn8wbzhnB4l0'
+const FRONT = 'PVTSSF_lADOE_m_z84Bn8wbzhnB4kw'
+const CORTE = 'Micelio · Corte 0.7 — El sitio y el fediverso'
+const CONFIG: ProjectFields = {
+  [CORTE]: { releaseLine: '0.7', front: 'Plugin core' },
+}
+
+type Value = { optionId: string; name: string } | null
+/** The shape of `issue-fields.json`'s data. */
+interface IssueData {
+  repository: {
+    issue: {
+      milestone: { title: string } | null
+      projectItems: { nodes: { releaseLine: Value; front: Value }[] }
+    }
+  }
+}
+/** The shape of the recorded project's data. */
+interface ProjectData {
+  organization: {
+    projectV2: { fields: { nodes: { name?: string; options?: { name: string }[] }[] } }
+  }
+}
+
+interface IssueFields {
+  /** The milestone title; `null` for none (default: the recorded one, "Corte 0.7"). */
+  milestone?: string | null
+  /** Whether the issue is an item of the project (default: yes). */
+  item?: boolean
+  releaseLine?: { optionId: string; name: string } | null
+  front?: { optionId: string; name: string } | null
+}
+
+/**
+ * `fake` plus the issue's milestone and field values, from `issue-fields.json`: the answer for
+ * bogd3v/micelio-cms#418 read on 2026-11-06, an item with neither field set.
+ */
+async function withFields(world: World, issue: IssueFields = {}): Promise<ReturnType<typeof fake>> {
+  const recorded = await readFile(new URL('issue-fields.json', FIXTURES), 'utf8')
+  const base = fake(world)
+  const graphql = base.gh.graphql
+  base.gh.graphql = async (query, variables) => {
+    if (!query.includes('releaseLine:')) return graphql(query, variables)
+    const data = (JSON.parse(recorded) as { data: IssueData }).data
+    const node = data.repository.issue
+    if (issue.milestone !== undefined)
+      node.milestone = issue.milestone === null ? null : { title: issue.milestone }
+    if (issue.item === false) node.projectItems.nodes = []
+    if (issue.releaseLine) node.projectItems.nodes[0].releaseLine = issue.releaseLine
+    if (issue.front) node.projectItems.nodes[0].front = issue.front
+    return data
+  }
+  return base
+}
+
+/** The writes to Release line or Front, as `field option`. */
+function fieldWrites(writes: string[]): string[] {
+  return writes
+    .filter((w) => w.includes(RELEASE_LINE) || w.includes(FRONT))
+    .map((w) => {
+      const v = JSON.parse(w.slice('status '.length)) as { field: string; option: string }
+      return `${v.field === RELEASE_LINE ? 'Release line' : 'Front'} ${v.option}`
+    })
+}
+
+describe('Release line and Front', () => {
+  it("sets Release line and Front from the milestone's entry", async () => {
+    const { gh, writes } = await withFields({
+      labelled: false,
+      current: todo,
+      project: await recorded('project-with-ready.json'),
+    })
+    const done = await applyReadiness(gh, params({ fields: CONFIG }))
+    expect(done).toEqual([
+      'label ready added',
+      'status set to Ready',
+      'Release line set to 0.7',
+      'Front set to Plugin core',
+    ])
+    expect(fieldWrites(writes)).toEqual(['Release line 9fa44fbc', 'Front 61f3d615'])
+  })
+
+  it('keeps a field that already has a value', async () => {
+    const { gh, writes } = await withFields(
+      { labelled: false, current: todo, project: await recorded('project-with-ready.json') },
+      { releaseLine: { optionId: 'f0546171', name: '0.6' } }
+    )
+    const done = await applyReadiness(gh, params({ fields: CONFIG }))
+    expect(done.slice(-2)).toEqual(['Release line left as it is (0.6)', 'Front set to Plugin core'])
+    expect(fieldWrites(writes)).toEqual(['Front 61f3d615'])
+  })
+
+  it('a milestone with no entry changes nothing and says so', async () => {
+    const { gh, writes } = await withFields(
+      { labelled: false, current: todo, project: await recorded('project-with-ready.json') },
+      { milestone: 'Micelio · Otra' }
+    )
+    const done = await applyReadiness(gh, params({ fields: CONFIG }))
+    expect(done.at(-1)).toBe(
+      'fields left alone: the milestone "Micelio · Otra" has no entry in .github/project-fields.json'
+    )
+    expect(fieldWrites(writes)).toEqual([])
+  })
+
+  it('frontByRepository wins over front for that repository', async () => {
+    const { gh, writes } = await withFields({
+      labelled: false,
+      current: todo,
+      project: await recorded('project-with-ready.json'),
+    })
+    const fields = {
+      [CORTE]: { ...CONFIG[CORTE]!, frontByRepository: { r: 'Fediverse', x: 'Themes' } },
+    }
+    const done = await applyReadiness(gh, params({ fields }))
+    expect(done.at(-1)).toBe('Front set to Fediverse')
+    expect(fieldWrites(writes)).toEqual(['Release line 9fa44fbc', 'Front b66c961e'])
+  })
+
+  it('an issue with no milestone, or not in the project, changes nothing and says so', async () => {
+    const project = await recorded('project-with-ready.json')
+    const none = await withFields({ labelled: false, current: todo, project }, { milestone: null })
+    const done = await applyReadiness(none.gh, params({ fields: CONFIG }))
+    expect(done.at(-1)).toBe('fields left alone: the issue has no milestone')
+    expect(fieldWrites(none.writes)).toEqual([])
+
+    const out = await withFields({ labelled: false, item: false, project }, { item: false })
+    const failed = await applyReadiness(
+      out.gh,
+      params({ passed: false, report: FAILING, fields: CONFIG })
+    )
+    expect(failed.at(-1)).toBe('fields left alone: not in the project')
+    expect(fieldWrites(out.writes)).toEqual([])
+  })
+
+  it('a missing field or option fails before anything is written, naming it', async () => {
+    const option = await withFields({ project: await recorded('project-with-ready.json') })
+    const typo = { [CORTE]: { releaseLine: '0.7', front: 'Plugin' } }
+    await expect(applyReadiness(option.gh, params({ fields: typo }))).rejects.toThrow(
+      'the Front of project bogd3v/1 has no option "Plugin" (it has: Themes, Fediverse, Foundations, Plugin core, Builder); add it in the project settings'
+    )
+    expect(option.writes).toEqual([])
+
+    const project = (await recorded('project-with-ready.json')) as { data: ProjectData }
+    const nodes = project.data.organization.projectV2.fields.nodes as { name?: string }[]
+    project.data.organization.projectV2.fields.nodes = nodes.filter(
+      (n) => n.name !== 'Release line'
+    )
+    const field = await withFields({ project })
+    await expect(applyReadiness(field.gh, params({ fields: CONFIG }))).rejects.toThrow(
+      'project bogd3v/1 has no single-select field named "Release line"'
+    )
+    expect(field.writes).toEqual([])
+  })
+
+  it('runReady reads --project-fields and prints a line per field', async () => {
+    const { gh } = await withFields({
+      labelled: false,
+      current: todo,
+      project: await recorded('project-with-ready.json'),
+    })
+    const files: Record<string, string> = {
+      'report.md': 'report\n',
+      'f.json': JSON.stringify(CONFIG),
+    }
+    const args = [
+      'issue-ready',
+      'o/r#7',
+      '--passed',
+      'true',
+      '--report',
+      'report.md',
+      '--project',
+      'bogd3v/1',
+    ]
+    const result = await runReady(
+      [
+        ...args,
+        '--author',
+        'b[bot]',
+        '--association',
+        'MEMBER',
+        '--state',
+        'open',
+        '--project-fields',
+        'f.json',
+      ],
+      { gh, readText: async (path) => files[path] ?? '' }
+    )
+    expect(result.stdout).toBe(
+      'label ready added\nstatus set to Ready\nRelease line set to 0.7\nFront set to Plugin core\n'
+    )
+  })
+
+  it("names only options the recorded project has, in this repository's file", async () => {
+    const file = new URL('../../../.github/project-fields.json', import.meta.url)
+    const config = parseProjectFields(await readFile(file, 'utf8'))
+    const project = (await recorded('project-with-ready.json')).data as ProjectData
+    const options = (name: string): string[] =>
+      (
+        project.organization.projectV2.fields.nodes as {
+          name?: string
+          options?: { name: string }[]
+        }[]
+      )
+        .find((n) => n.name === name)!
+        .options!.map((o) => o.name)
+    expect(Object.keys(config)).toContain(CORTE)
+    for (const entry of Object.values(config)) {
+      expect(options('Release line')).toContain(entry.releaseLine)
+      for (const front of [entry.front, ...Object.values(entry.frontByRepository ?? {})])
+        expect(options('Front')).toContain(front)
+    }
+  })
+
+  it('rejects a file with the wrong shape', () => {
+    expect(() => parseProjectFields('[]')).toThrow('the file must be an object of milestones')
+    expect(() => parseProjectFields('{"m": {"front": "x"}}')).toThrow(
+      '"m" needs releaseLine and front as strings'
+    )
+    expect(() =>
+      parseProjectFields(
+        '{"m": {"releaseLine": "0.7", "front": "x", "frontByRepository": {"r": 1}}}'
+      )
+    ).toThrow('frontByRepository of "m" must map names to strings')
+  })
+})
+
+describe('the backfill', () => {
+  /**
+   * The milestones and open issues of bogd3v/micelio-plugin-fediverse read on 2026-11-06 (trimmed to
+   * the keys the backfill reads), a pull request added, and `issue-fields.json` for each issue.
+   */
+  async function world(
+    over: { values?: Record<number, { optionId: string; name: string }> } = {}
+  ): Promise<{ gh: Gh; writes: string[] }> {
+    const milestones = JSON.parse(
+      await readFile(new URL('fediverse-milestones.json', FIXTURES), 'utf8')
+    ) as unknown[]
+    const issues = JSON.parse(
+      await readFile(new URL('fediverse-issues.json', FIXTURES), 'utf8')
+    ) as unknown[]
+    const issue = await readFile(new URL('issue-fields.json', FIXTURES), 'utf8')
+    const project = await recorded('project-with-ready.json')
+    const writes: string[] = []
+    const gh: Gh = {
+      rest: async (method, path) => {
+        if (path.startsWith('/repos/bogd3v/micelio-plugin-fediverse/milestones?state=all'))
+          return milestones
+        if (path.startsWith('/repos/bogd3v/micelio-plugin-fediverse/issues?milestone=1&state=open'))
+          return [...issues, { number: 9, pull_request: {} }]
+        if (path.startsWith('/repos/bogd3v/micelio-themes/milestones')) return []
+        writes.push(`${method} ${path}`)
+        return []
+      },
+      graphql: async (query, variables) => {
+        if (query.includes('projectV2(number')) return project.data
+        if (query.includes('releaseLine:')) {
+          const data = (JSON.parse(issue) as { data: IssueData }).data
+          const value = over.values?.[variables.number as number]
+          if (value) data.repository.issue.projectItems.nodes[0].releaseLine = value
+          return data
+        }
+        writes.push(`status ${JSON.stringify(variables)}`)
+        return {}
+      },
+    }
+    return { gh, writes }
+  }
+
+  const config: ProjectFields = {
+    [CORTE]: {
+      releaseLine: '0.7',
+      front: 'Plugin core',
+      frontByRepository: { 'micelio-plugin-fediverse': 'Fediverse' },
+    },
+  }
+
+  it('sets both fields on every open issue of the milestone, keeping a value set by hand', async () => {
+    const { gh, writes } = await world({ values: { 5: { optionId: 'f0546171', name: '0.6' } } })
+    const done = await backfillFields(gh, {
+      project: { owner: 'bogd3v', number: 1 },
+      milestone: CORTE,
+      config,
+      repositories: ['micelio-plugin-fediverse', 'micelio-themes'],
+    })
+    expect(done[0]).toBe(`bogd3v/micelio-themes: no milestone "${CORTE}"`)
+    expect(done).toContain('bogd3v/micelio-plugin-fediverse#6: Release line set to 0.7')
+    expect(done).toContain('bogd3v/micelio-plugin-fediverse#6: Front set to Fediverse')
+    expect(done).toContain('bogd3v/micelio-plugin-fediverse#5: Release line left as it is (0.6)')
+    expect(done.some((line) => line.includes('#9'))).toBe(false)
+    expect(fieldWrites(writes)).toHaveLength(11)
+    expect(fieldWrites(writes).filter((w) => w.startsWith('Front'))).toEqual(
+      Array.from({ length: 6 }, () => 'Front b66c961e')
+    )
+  })
+
+  it('a milestone with no entry, or a missing option, writes nothing', async () => {
+    const { gh, writes } = await world()
+    const params = {
+      project: { owner: 'bogd3v', number: 1 },
+      repositories: ['micelio-plugin-fediverse'],
+    }
+    await expect(backfillFields(gh, { ...params, milestone: 'Otra', config })).resolves.toEqual([
+      'nothing changed: the milestone "Otra" has no entry in .github/project-fields.json',
+    ])
+    const typo = { [CORTE]: { releaseLine: '0.8', front: 'Fediverse' } }
+    await expect(backfillFields(gh, { ...params, milestone: CORTE, config: typo })).rejects.toThrow(
+      'the Release line of project bogd3v/1 has no option "0.8"'
+    )
+    expect(writes).toEqual([])
+  })
+
+  it('runBackfill reads its arguments and the file, and rejects missing ones', async () => {
+    const { gh } = await world()
+    const ok = await runBackfill(
+      [
+        'project-fields-backfill',
+        '--milestone',
+        CORTE,
+        '--project',
+        'bogd3v/1',
+        '--project-fields',
+        'f.json',
+        '--repositories',
+        'micelio-themes',
+      ],
+      { gh, readText: async () => JSON.stringify(config) }
+    )
+    expect(ok).toEqual({
+      code: 0,
+      stdout: `bogd3v/micelio-themes: no milestone "${CORTE}"\n`,
+      stderr: '',
+    })
+    const bad = await runBackfill(['project-fields-backfill', '--milestone', CORTE], {
+      gh,
+      readText: async () => '',
+    })
+    expect(bad.code).toBe(2)
+    expect(bad.stderr).toContain('--project-fields and --repositories are required')
   })
 })

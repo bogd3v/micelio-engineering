@@ -1,6 +1,17 @@
 import { spawn } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { errorLine } from './errors.js'
+import {
+  at,
+  applyFields,
+  parseProjectFields,
+  planFields,
+  readIssueFields,
+  readProject,
+  SET_OPTION,
+  singleSelect,
+} from './fields.js'
+import type { FieldsPlan, ProjectFields, ProjectRead } from './fields.js'
 import { parseTarget } from './issue.js'
 import type { IssueRef } from './issue.js'
 
@@ -56,6 +67,11 @@ export interface ReadyParams {
   association: string
   /** `open` or `closed`. */
   state: string
+  /**
+   * `.github/project-fields.json`, read at `tools-ref`: after the Status, Release line and Front of
+   * the issue's item are set from its milestone's entry. Without it no other field is read or set.
+   */
+  fields?: ProjectFields
 }
 
 /** Who can put an issue in the "can start now" view: the people who work on the repository. */
@@ -79,7 +95,7 @@ interface StatusField {
  * Turns the result of `lint-issue` into a label, a comment and a project Status, and returns one
  * line per thing it did. Every step is idempotent, so editing an issue again changes nothing it
  * already changed (the report carries the date, so an unchanged comment holds within a day). It
- * never edits the issue body and never touches another field of the project.
+ * never edits the issue body and never touches a field of the project but these three.
  *
  * - Not trusted: an issue that is closed, or whose author is not an owner, member or collaborator,
  *   is skipped without a call that writes.
@@ -89,8 +105,12 @@ interface StatusField {
  *   of the project on the ready option, sets its Status to the not-ready option (Todo). It never adds an issue to the project.
  *   An issue In Progress or Done keeps its Status: moving it is not this workflow's job.
  *
- * The Status field and its options are found by name. A missing option fails before anything is
- * changed. `@` mentions and images in the report are neutralised in the comment.
+ * - Fields: with `params.fields`, after the Status, sets Release line and Front of the issue's item
+ *   from its milestone's entry when they have no value; a value set by hand is kept. A milestone
+ *   with no entry, an issue with no milestone and one not in the project change nothing, in one line.
+ *
+ * The fields and their options are found by name. A missing field or option fails before anything
+ * is changed. `@` mentions and images in the report are neutralised in the comment.
  */
 export async function applyReadiness(gh: Gh, params: ReadyParams): Promise<string[]> {
   const { ref, passed } = params
@@ -98,7 +118,9 @@ export async function applyReadiness(gh: Gh, params: ReadyParams): Promise<strin
   if (!TRUSTED_ASSOCIATIONS.includes(params.association))
     return [`skipped: the author is not a member (${params.association})`]
   const done: string[] = []
-  const status = await findStatus(gh, params)
+  const project = await readProject(gh, params.project)
+  const status = findStatus(project, params)
+  const fields = params.fields ? await findFields(gh, project, ref, params.fields) : null
 
   await ensureLabel(gh, ref.repo, done)
   const issues = `/repos/${ref.repo}/issues/${ref.number}`
@@ -125,6 +147,8 @@ export async function applyReadiness(gh: Gh, params: ReadyParams): Promise<strin
   }
 
   done.push(await setStatus(gh, params, status))
+  if (typeof fields === 'string') done.push(fields)
+  else if (fields) done.push(...(await applyFields(gh, ref.repo, ref.number, fields)))
   return done
 }
 
@@ -140,36 +164,21 @@ export function neutralise(text: string): string {
     .replace(/!\[/g, '!\u200d[')
 }
 
-/** Finds the project, its Status field and the two options by name; throws if one is missing. */
-async function findStatus(gh: Gh, params: ReadyParams): Promise<StatusField> {
-  const { owner, number } = params.project
-  const data = await gh.graphql(PROJECT_QUERY, { owner, number })
-  const project = at(data, 'organization', 'projectV2')
-  if (!isRecord(project)) throw new Error(`project ${owner}/${number} not found or not readable`)
-  const projectId = at(project, 'id')
-  const nodes = at(project, 'fields', 'nodes')
-  if (typeof projectId !== 'string' || !Array.isArray(nodes))
-    throw new Error(`project ${owner}/${number}: unexpected response`)
-  const field = nodes.find((node) => isRecord(node) && node.name === 'Status')
-  const fieldId = at(field, 'id')
-  const options = at(field, 'options')
-  if (typeof fieldId !== 'string' || !Array.isArray(options))
-    throw new Error(`project ${owner}/${number} has no single-select field named "Status"`)
-  const byName = new Map<string, string>()
-  for (const option of options) {
-    const id = at(option, 'id')
-    const name = at(option, 'name')
-    if (typeof id === 'string' && typeof name === 'string') byName.set(name, id)
-  }
-  for (const name of [params.readyStatus, params.notReadyStatus]) {
-    if (!byName.has(name)) {
-      const known = [...byName.keys()].join(', ')
-      throw new Error(
-        `the Status of project ${owner}/${number} has no option "${name}" (it has: ${known}); add it in the project settings`
-      )
-    }
-  }
-  return { projectId, fieldId, options: byName }
+/** Finds the Status field and the two options by name; throws if one is missing. */
+function findStatus(project: ProjectRead, params: ReadyParams): StatusField {
+  const field = singleSelect(project, 'Status', [params.readyStatus, params.notReadyStatus])
+  return { projectId: project.projectId, fieldId: field.fieldId, options: field.options }
+}
+
+/** What the milestone's entry sets on the issue, read before anything is written. */
+async function findFields(
+  gh: Gh,
+  project: ProjectRead,
+  ref: IssueRef,
+  fields: ProjectFields
+): Promise<FieldsPlan | string> {
+  const { milestone } = await readIssueFields(gh, ref.repo, ref.number, project.projectId)
+  return planFields(project, fields, ref.repo.split('/')[1] ?? '', milestone)
 }
 
 async function ensureLabel(gh: Gh, repo: string, done: string[]): Promise<void> {
@@ -243,7 +252,7 @@ async function setStatus(gh: Gh, params: ReadyParams, status: StatusField): Prom
     const current = await gh.graphql(ITEM_QUERY, { item: itemId })
     if (at(current, 'node', 'fieldValueByName', 'optionId') !== readyId)
       return `status left as it is (${String(at(current, 'node', 'fieldValueByName', 'name') ?? 'none')})`
-    await gh.graphql(SET_STATUS, {
+    await gh.graphql(SET_OPTION, {
       project: status.projectId,
       item: itemId,
       field: status.fieldId,
@@ -265,7 +274,7 @@ async function setStatus(gh: Gh, params: ReadyParams, status: StatusField): Prom
   if (optionId === readyId) return `status already ${params.readyStatus}`
   if (typeof optionId === 'string' && optionId !== from)
     return `status left as it is (${String(at(current, 'node', 'fieldValueByName', 'name'))})`
-  await gh.graphql(SET_STATUS, {
+  await gh.graphql(SET_OPTION, {
     project: status.projectId,
     item: itemId,
     field: status.fieldId,
@@ -273,17 +282,6 @@ async function setStatus(gh: Gh, params: ReadyParams, status: StatusField): Prom
   })
   return `status set to ${params.readyStatus}`
 }
-
-const PROJECT_QUERY = `query($owner: String!, $number: Int!) {
-  organization(login: $owner) {
-    projectV2(number: $number) {
-      id
-      fields(first: 50) {
-        nodes { ... on ProjectV2SingleSelectField { id name options { id name } } }
-      }
-    }
-  }
-}`
 
 const ISSUE_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
@@ -304,27 +302,6 @@ const ITEM_QUERY = `query($item: ID!) {
     }
   }
 }`
-
-const SET_STATUS = `mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
-  updateProjectV2ItemFieldValue(input: {
-    projectId: $project, itemId: $item, fieldId: $field,
-    value: { singleSelectOptionId: $option }
-  }) { projectV2Item { id } }
-}`
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-/** `value.a.b…` when every step is an object, otherwise `undefined`. */
-function at(value: unknown, ...keys: string[]): unknown {
-  let current = value
-  for (const key of keys) {
-    if (!isRecord(current)) return undefined
-    current = current[key]
-  }
-  return current
-}
 
 /** `gh api`, with the body on standard input so nothing from the issue reaches the command line. */
 function ghApi(args: string[], input: unknown): Promise<unknown> {
@@ -367,7 +344,7 @@ export const defaultGh: Gh = {
 const USAGE = `Usage:
   factory-tools issue-ready <owner/repo#n> --passed <true|false> --report <file>
     --project <owner/number> --author <login> --association <author_association> --state <open|closed>
-    [--ready-status <name>] [--not-ready-status <name>]
+    [--ready-status <name>] [--not-ready-status <name>] [--project-fields <file>]
 `
 
 /** The outcome of `issue-ready`, shaped like `lint-issue`'s. */
@@ -397,7 +374,14 @@ export async function runReady(
     return { code: 2, stdout: '', stderr: `error: ${parsed}\n${USAGE}` }
   try {
     const report = await deps.readText(parsed.reportPath)
-    const done = await applyReadiness(deps.gh, { ...parsed.params, report })
+    const fields = parsed.fieldsPath
+      ? parseProjectFields(await deps.readText(parsed.fieldsPath))
+      : undefined
+    const done = await applyReadiness(deps.gh, {
+      ...parsed.params,
+      report,
+      ...(fields ? { fields } : {}),
+    })
     return { code: 0, stdout: done.map((line) => `${line}\n`).join(''), stderr: '' }
   } catch (error) {
     return { code: 2, stdout: '', stderr: `error: ${errorLine(error)}\n` }
@@ -406,7 +390,7 @@ export async function runReady(
 
 function parseReadyArgs(
   args: string[]
-): { params: Omit<ReadyParams, 'report'>; reportPath: string } | string {
+): { params: Omit<ReadyParams, 'report'>; reportPath: string; fieldsPath?: string } | string {
   const values = new Map<string, string>()
   const positional: string[] = []
   const names = [
@@ -418,6 +402,7 @@ function parseReadyArgs(
     '--state',
     '--ready-status',
     '--not-ready-status',
+    '--project-fields',
   ]
   for (let i = 0; i < args.length; i++) {
     const arg = args[i] ?? ''
@@ -443,8 +428,10 @@ function parseReadyArgs(
   if (!association) return '--association is required'
   const state = values.get('--state')
   if (!state) return '--state is required'
+  const fieldsPath = values.get('--project-fields')
   return {
     reportPath,
+    ...(fieldsPath ? { fieldsPath } : {}),
     params: {
       ref,
       passed: passed === 'true',

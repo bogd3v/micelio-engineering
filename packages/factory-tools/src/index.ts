@@ -15,6 +15,23 @@ export {
   runReady,
 } from './ready.js'
 export type { Gh, ReadyDeps, ReadyParams, ReadyResult } from './ready.js'
+export {
+  FRONT_FIELD,
+  RELEASE_LINE_FIELD,
+  applyFields,
+  backfillFields,
+  parseProjectFields,
+  planFields,
+  runBackfill,
+} from './fields.js'
+export type {
+  BackfillDeps,
+  BackfillParams,
+  FieldsEntry,
+  FieldsPlan,
+  ProjectFields,
+  ProjectRead,
+} from './fields.js'
 export { metrics } from './metrics.js'
 export type { IssueRow, Metrics, MetricsOptions, PullRow, RoleTokens } from './metrics.js'
 export {

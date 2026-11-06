@@ -1,0 +1,10 @@
+{
+  "Micelio · Corte 0.7 — El sitio y el fediverso": {
+    "releaseLine": "0.7",
+    "front": "Plugin core",
+    "frontByRepository": { "micelio-plugin-fediverse": "Fediverse" }
+  },
+  "Micelio · Garantías medibles": { "releaseLine": "0.7", "front": "Foundations" },
+  "Micelio · Builder, fase 2 — Componer": { "releaseLine": "0.7", "front": "Builder" },
+  "Micelio · Builder, fase 3 — Personalizar": { "releaseLine": "0.7", "front": "Builder" }
+}

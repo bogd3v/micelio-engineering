@@ -1,7 +1,8 @@
 # @micelio/factory-tools
 
 The commands of the Micelio software factory: `lint-issue` (Gate 1, the Definition of Ready, as a
-script), [`issue-ready`](#issue-ready) (what the workflow does with its result),
+script), [`issue-ready`](#issue-ready) (what the workflow does with its result, and the project fields of
+`project-fields-backfill`),
 [`metrics`](#metrics) (the factory's numbers for a milestone) and [`lint-draft`](#lint-draft) (the
 shape of a draft's section "Instructions that were wrong or missing").
 
@@ -69,15 +70,37 @@ workflow (`docs/workflows.md`) runs it with the Micelio bot's token in `GH_TOKEN
 ```bash
 factory-tools issue-ready <owner/repo#n> --passed <true|false> --report <file> \
   --project <owner/number> --author <login> --association <author_association> --state <open|closed> \
-  [--ready-status Ready] [--not-ready-status Todo]
+  [--ready-status Ready] [--not-ready-status Todo] [--project-fields <file>]
 ```
 
 An issue that is closed, or whose author is not an `OWNER`, `MEMBER` or `COLLABORATOR`, is skipped
 (`skipped: …`, exit 0). A pass adds the issue to the project and sets Ready; a fail never adds it
 and only moves a Status that is Ready back to Todo.
 
+With `--project-fields` (the workflow passes `.github/project-fields.json` of this repository), it
+then sets the item's `Release line` and `Front` from the entry of the issue's milestone, only where
+the field has no value:
+
+```json
+{
+  "Micelio · Corte 0.7 — El sitio y el fediverso": {
+    "releaseLine": "0.7",
+    "front": "Plugin core",
+    "frontByRepository": { "micelio-plugin-fediverse": "Fediverse" }
+  }
+}
+```
+
+The key is the milestone title, compared exactly; `frontByRepository` maps a repository name,
+without the owner, to the Front it gets instead of `front`. A milestone with no entry, an issue with
+no milestone or one not in the project prints `fields left alone: …` and changes nothing.
+
+`factory-tools project-fields-backfill --milestone <title> --project <owner/number> --project-fields <file> --repositories <name,name,…>`
+applies the same rules to every open issue of the milestone in those repositories, after reading
+every field, option and issue; the `project-fields-backfill` workflow runs it (`docs/workflows.md`).
+
 It prints one line per change and exits 0, or 2 with the reason (for example a Status option the
-project does not have; nothing is changed then). The logic is tested against recorded API
+project does not have, or a Release line or Front option a milestone's entry names; nothing is changed then). The logic is tested against recorded API
 responses in `test/fixtures/ready/`, with no network.
 
 ## `lint-draft`
