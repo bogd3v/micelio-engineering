@@ -1,5 +1,13 @@
 import { spawnSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -12,6 +20,7 @@ import {
   loadFileHashes,
   loadHashes,
   readPin,
+  readProfiles,
   setPin,
   standardVersion,
 } from '../src/standard.js'
@@ -40,6 +49,35 @@ function repo(pin: string | null, copy: string | null): string {
 const STANDARD = '# Micelio engineering standard\n\nVersion 1.4 (2026-10-20). Rules.\n'
 const HASHES = { '1.4': hashOf(STANDARD), '1.3': hashOf('older') }
 
+/** The pin line of ADR-0001, point 3: the version and the profiles on one line. */
+const AGENTS_WITH_PROFILE = (version: string, profiles: string): string =>
+  `This repository follows standard version ${version} (\`standard: ${version}\`, \`profile: ${profiles}\`; the line \`lint:standard\` checks).\n`
+
+const CORE = '# Micelio engineering standard\n\nVersion 2.0 (2026-12-01). Core.\n'
+const PROFILES = { typescript: '# TypeScript profile\n', 'site-engine': '# Site engine profile\n' }
+/** A version in the new form next to one in the old form, as `standard-hashes.json` may hold them. */
+const SPLIT_HASHES = {
+  ...HASHES,
+  '2.0': {
+    core: hashOf(CORE),
+    profiles: {
+      typescript: hashOf(PROFILES.typescript),
+      'site-engine': hashOf(PROFILES['site-engine']),
+    },
+  },
+}
+
+/** A repository on 2.0 whose `AGENTS.md` pins `profiles` (none when `null`), with every profile file. */
+function splitRepo(profiles: string | null): string {
+  const dir = repo('2.0', CORE)
+  if (profiles) writeFileSync(join(dir, 'AGENTS.md'), AGENTS_WITH_PROFILE('2.0', profiles))
+  mkdirSync(join(dir, 'docs/standard'))
+  for (const [name, text] of Object.entries(PROFILES)) {
+    writeFileSync(join(dir, `docs/standard/${name}.md`), text)
+  }
+  return dir
+}
+
 describe('pins', () => {
   it('reads the pin and the version of a copy', () => {
     expect(readPin(AGENTS('1.4'))).toBe('1.4')
@@ -54,6 +92,39 @@ describe('pins', () => {
       `# Title\n\n${AGENTS('1.5')}\nOther text with standard 1.4 in prose.\n`
     )
     expect(setPin('no pin', '1.5')).toBeNull()
+  })
+
+  it('reads the profile pin, and no profile pin as typescript', () => {
+    expect(readProfiles(AGENTS_WITH_PROFILE('2.0', 'rust'))).toEqual(['rust'])
+    expect(readProfiles(AGENTS_WITH_PROFILE('2.0', 'typescript, site-engine'))).toEqual([
+      'typescript',
+      'site-engine',
+    ])
+    expect(readProfiles(AGENTS_WITH_PROFILE('2.0', 'typescript,site-engine'))).toEqual([
+      'typescript',
+      'site-engine',
+    ])
+    expect(readPin(AGENTS_WITH_PROFILE('2.0', 'rust'))).toBe('2.0')
+    expect(readProfiles(AGENTS('1.8'))).toEqual(['typescript'])
+    expect(readProfiles('profile: rust, outside backticks')).toEqual(['typescript'])
+    // only the line of the version pin is read
+    expect(readProfiles(`${AGENTS('1.8')}Later: \`profile: rust\`.\n`)).toEqual(['typescript'])
+  })
+
+  it('moves the version pin and leaves the profile pin', () => {
+    const agents = `# Title\n\n${AGENTS_WITH_PROFILE('2.0', 'typescript, site-engine')}`
+    expect(setPin(agents, '2.1')).toBe(
+      `# Title\n\n${AGENTS_WITH_PROFILE('2.1', 'typescript, site-engine')}`
+    )
+    const dir = repo('1.3', 'older')
+    writeFileSync(join(dir, 'AGENTS.md'), AGENTS_WITH_PROFILE('1.3', 'typescript, site-engine'))
+    const source = join(ROOT, STANDARD_PATH)
+    expect(spawnSync('node', [APPLY, dir, source], { encoding: 'utf8' }).stdout.trim()).toBe(
+      'changed'
+    )
+    expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toBe(
+      AGENTS_WITH_PROFILE(CURRENT, 'typescript, site-engine')
+    )
   })
 
   it('hashes bytes', () => {
@@ -85,6 +156,69 @@ describe('lintStandard', () => {
     expect(result.ok).toBe(false)
     expect(result.message).toContain('Standard 9.9')
     expect(result.message).toContain('upgrade the package')
+  })
+
+  it('checks the core and each pinned profile of a version in the new form', () => {
+    const both = lintStandard(splitRepo('typescript, site-engine'), SPLIT_HASHES)
+    expect(both).toEqual({
+      ok: true,
+      message:
+        'Standard 2.0 (typescript, site-engine): docs/engineering-standard.md, docs/standard/typescript.md, docs/standard/site-engine.md match the published copy.',
+    })
+    // no profile pin is read as typescript: the site engine file is not checked
+    const noPin = splitRepo(null)
+    writeFileSync(join(noPin, 'docs/standard/site-engine.md'), 'edited')
+    expect(lintStandard(noPin, SPLIT_HASHES)).toMatchObject({ ok: true })
+    expect(lintStandard(noPin, SPLIT_HASHES).message).toContain('(typescript)')
+    // the core is still checked
+    const core = splitRepo('typescript')
+    writeFileSync(join(core, STANDARD_PATH), CORE.replace('Core', 'Corr'))
+    expect(lintStandard(core, SPLIT_HASHES).message).toContain(
+      `${STANDARD_PATH} does not match standard 2.0`
+    )
+    // a pinned profile whose file is missing
+    const missing = splitRepo('typescript')
+    rmSync(join(missing, 'docs/standard/typescript.md'))
+    expect(lintStandard(missing, SPLIT_HASHES)).toEqual({
+      ok: false,
+      message:
+        'docs/standard/typescript.md is missing; AGENTS.md pins standard 2.0 with profile typescript.',
+    })
+  })
+
+  it('fails and names the profile file when it was edited', () => {
+    const dir = splitRepo('typescript, site-engine')
+    writeFileSync(join(dir, 'docs/standard/site-engine.md'), '# Site engine profile, edited\n')
+    const result = lintStandard(dir, SPLIT_HASHES)
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain(
+      'docs/standard/site-engine.md does not match profile site-engine of standard 2.0'
+    )
+    expect(result.message).not.toContain('typescript.md')
+  })
+
+  it('fails on a profile the pinned version does not have, naming the ones it has', () => {
+    const result = lintStandard(splitRepo('rust'), SPLIT_HASHES)
+    expect(result).toEqual({
+      ok: false,
+      message:
+        'AGENTS.md pins profile rust, which standard 2.0 does not have (it has typescript, site-engine): fix the profile pin.',
+    })
+    const old = repo('1.4', STANDARD)
+    writeFileSync(join(old, 'AGENTS.md'), AGENTS_WITH_PROFILE('1.4', 'typescript, rust'))
+    expect(lintStandard(old, SPLIT_HASHES).message).toBe(
+      'AGENTS.md pins profile rust, which standard 1.4 does not have (it has typescript, site-engine): fix the profile pin.'
+    )
+    // a malformed name is not read as no pin
+    writeFileSync(join(old, 'AGENTS.md'), AGENTS_WITH_PROFILE('1.4', 'Rust, rust_x'))
+    expect(lintStandard(old, SPLIT_HASHES).message).toBe(
+      'AGENTS.md pins profile Rust, rust_x, which standard 1.4 does not have (it has typescript, site-engine): fix the profile pin.'
+    )
+    writeFileSync(join(old, 'AGENTS.md'), AGENTS_WITH_PROFILE('1.4', 'typescript, site-engine'))
+    expect(lintStandard(old, SPLIT_HASHES)).toEqual({
+      ok: true,
+      message: `Standard 1.4: ${STANDARD_PATH} matches the published copy.`,
+    })
   })
 
   it('fails without AGENTS.md, without a pin and without the copy', () => {
@@ -141,6 +275,23 @@ describe('the synced files', () => {
 
   it('keeps versions and files apart in the hashes file', () => {
     expect(Object.keys(loadHashes()).every((key) => /^\d+\.\d+$/.test(key))).toBe(true)
+  })
+
+  it('reads a version in the new form, and leaves out an entry in neither form', () => {
+    const file = {
+      ...SPLIT_HASHES,
+      '2.1': { core: 'x' },
+      '2.2': { core: 'x', profiles: { typescript: 1 } },
+      files: { 'a/b.md': 'x' },
+    }
+    expect(loadHashes(file)).toEqual(SPLIT_HASHES)
+  })
+
+  it('keeps the 1.x entries as one hash each', () => {
+    const hashes = loadHashes()
+    for (const version of ['1.4', '1.5', '1.6', '1.7', '1.8']) {
+      expect(typeof hashes[version], version).toBe('string')
+    }
   })
 
   it('fails lint:standard when a synced file the repository has was edited, on the newest version', () => {
