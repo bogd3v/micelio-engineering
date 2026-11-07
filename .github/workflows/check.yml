@@ -11,36 +11,49 @@ name: Check
 #
 # typecheck, lint and test always run. The rest is an input, so skipping one is written down in
 # the caller instead of hidden by `--if-present`.
+#
+# `profile` picks the language: `typescript` (the default) or `rust`. Both run the same jobs and
+# steps, by name, and report the same single `Check` status; with `rust` the steps of the `Checks`
+# job install the toolchain, run `cargo audit` and the repository's check command instead of the
+# npm ones, and the others are skipped.
 
 on:
   workflow_call:
     inputs:
+      profile:
+        description: Language profile, typescript or rust (docs/workflows.md)
+        type: string
+        default: typescript
+      check-command:
+        description: rust only; the command that checks the project, by default the check line of the first Commands block of AGENTS.md
+        type: string
+        default: ''
       working-directory:
         description: Directory of the project to check, relative to the repository root
         type: string
         default: .
       package-manager:
-        description: npm or pnpm
+        description: typescript only; npm or pnpm
         type: string
         default: npm
       node-version-file:
-        description: File that holds the Node major (section 10 of the standard), relative to the repository root
+        description: typescript only; file that holds the Node major (section 10 of the standard), relative to the repository root
         type: string
         default: .nvmrc
       test-script:
-        description: Script that runs the tests; test:coverage where the repository has a coverage floor
+        description: typescript only; script that runs the tests, test:coverage where the repository has a coverage floor
         type: string
         default: test
       format:
-        description: Run format:check
+        description: typescript only; run format:check
         type: boolean
         default: true
       licenses:
-        description: Run lint:licenses against the allowlist
+        description: typescript only; run lint:licenses against the allowlist
         type: boolean
         default: true
       standard:
-        description: Run lint:standard (the copy of the standard matches the pinned version)
+        description: Run lint:standard (the copy of the standard matches the pinned version); not yet available with the rust profile
         type: boolean
         default: false
       reuse:
@@ -48,11 +61,11 @@ on:
         type: boolean
         default: false
       build:
-        description: Run the build in its own job
+        description: typescript only; run the build in its own job
         type: boolean
         default: true
       audit:
-        description: Fail on critical vulnerabilities
+        description: Fail on vulnerabilities (typescript - critical ones with the package manager's audit; rust - any advisory with cargo audit)
         type: boolean
         default: true
 
@@ -61,6 +74,7 @@ permissions:
 
 env:
   PM: ${{ inputs.package-manager }}
+  PROFILE: ${{ inputs.profile }}
 
 jobs:
   checks:
@@ -70,11 +84,26 @@ jobs:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
+      # Runs before the checkout, so before working-directory exists: it runs at the root.
       - name: Check the inputs
+        working-directory: .
+        env:
+          STANDARD: ${{ inputs.standard }}
         run: |
-          case "$PM" in
-            npm | pnpm) ;;
-            *) echo "::error::package-manager must be npm or pnpm, not '$PM'"; exit 1 ;;
+          case "$PROFILE" in
+            typescript)
+              case "$PM" in
+                npm | pnpm) ;;
+                *) echo "::error::package-manager must be npm or pnpm, not '$PM'"; exit 1 ;;
+              esac
+              ;;
+            rust)
+              if [ "$STANDARD" = true ]; then
+                echo "::error::standard is not available with profile rust yet (#163 runs lint:standard without npm); set it to false"
+                exit 1
+              fi
+              ;;
+            *) echo "::error::profile must be typescript or rust, not '$PROFILE'"; exit 1 ;;
           esac
 
       - name: Checkout
@@ -83,41 +112,74 @@ jobs:
           persist-credentials: false
 
       - name: Enable pnpm
-        if: ${{ inputs.package-manager == 'pnpm' }}
+        if: ${{ inputs.profile == 'typescript' && inputs.package-manager == 'pnpm' }}
         run: corepack enable
 
       - name: Setup Node.js
+        if: ${{ inputs.profile == 'typescript' }}
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: ${{ inputs.node-version-file }}
           cache: ${{ inputs.package-manager }}
           cache-dependency-path: ${{ inputs.working-directory }}/${{ inputs.package-manager == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json' }}
 
+      # rust: the toolchain that rust-toolchain.toml names (cargo fetches the crates when it builds).
       - name: Install dependencies
         run: |
-          if [ "$PM" = pnpm ]; then pnpm install --frozen-lockfile; else npm ci; fi
+          if [ "$PROFILE" = rust ]; then
+            if [ ! -f rust-toolchain.toml ]; then
+              echo "::error::rust-toolchain.toml not found in '$PWD'"
+              exit 1
+            fi
+            rustup toolchain install --profile minimal
+            rustc --version
+          elif [ "$PM" = pnpm ]; then pnpm install --frozen-lockfile; else npm ci; fi
 
       - name: Audit dependencies
         if: ${{ inputs.audit }}
-        run: $PM audit --audit-level=critical
+        run: |
+          if [ "$PROFILE" = rust ]; then
+            cargo install cargo-audit --locked --version 0.22.2
+            cargo audit --deny warnings
+          else
+            $PM audit --audit-level=critical
+          fi
 
       - name: Type check
+        if: ${{ inputs.profile == 'typescript' }}
         run: $PM run typecheck
 
       - name: Lint
+        if: ${{ inputs.profile == 'typescript' }}
         run: $PM run lint
 
       - name: Format
-        if: ${{ inputs.format }}
+        if: ${{ inputs.profile == 'typescript' && inputs.format }}
         run: $PM run format:check
 
+      # rust: the repository's check command, the check line of the first Commands block of AGENTS.md
+      # unless check-command is set.
       - name: Test
         env:
           TEST_SCRIPT: ${{ inputs.test-script }}
-        run: $PM run "$TEST_SCRIPT"
+          CHECK_COMMAND: ${{ inputs.check-command }}
+        run: |
+          if [ "$PROFILE" = rust ]; then
+            if [ -z "$CHECK_COMMAND" ]; then
+              CHECK_COMMAND=$(awk '/^## Commands/ { seen = 1; next } seen && /^```/ { if (inside) exit; inside = 1; next } inside && /^check:/ { sub(/^check:[ \t]*/, ""); print; exit }' AGENTS.md)
+            fi
+            if [ -z "$CHECK_COMMAND" ]; then
+              echo "::error::no check command: set check-command or add a check: line to the first Commands block of AGENTS.md"
+              exit 1
+            fi
+            echo "Check command: $CHECK_COMMAND"
+            bash -e -c "$CHECK_COMMAND"
+          else
+            $PM run "$TEST_SCRIPT"
+          fi
 
       - name: Licences
-        if: ${{ inputs.licenses }}
+        if: ${{ inputs.profile == 'typescript' && inputs.licenses }}
         run: $PM run lint:licenses
 
       - name: Copy of the standard
@@ -140,7 +202,7 @@ jobs:
 
   build:
     name: Build
-    if: ${{ inputs.build }}
+    if: ${{ inputs.profile == 'typescript' && inputs.build }}
     runs-on: ubuntu-latest
     defaults:
       run:

@@ -28,6 +28,16 @@ jobs:
       standard: true
       reuse: true
 
+  # The rust profile on a minimal Rust library; the root job above is the typescript profile.
+  check-rust:
+    if: ${{ github.event_name != 'schedule' && github.event_name != 'issues' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/check.yml
+    with:
+      profile: rust
+      working-directory: fixtures/rust-basic
+
   dco:
     if: ${{ github.event_name == 'pull_request' }}
     permissions:
