@@ -1,10 +1,10 @@
 # Standard sync
 
-The engineering standard has one canonical copy, `docs/engineering-standard.md` in this repository. Every other Micelio repository keeps a copy of it for its agents, and nobody edits that copy by hand: the Micelio bot carries it over, and `lint:standard` fails when a copy differs from the version a repository pins.
+The engineering standard has one canonical copy in this repository: the core, `docs/engineering-standard.md`, and the profiles, `docs/standard/<profile>.md` (since 2.0, ADR-0001). Every other Micelio repository keeps a copy of it for its agents, and nobody edits that copy by hand: the Micelio bot carries it over, and `lint:standard` fails when a copy differs from the version a repository pins.
 
 ## Releasing a new version of the standard
 
-1. Open a pull request titled `docs(standard): …` that changes `docs/engineering-standard.md`, raises its `Version X.Y` line, adds a row to the table of section 16, and adds the SHA-256 of the new file to `packages/eslint-config/standard-hashes.json` (`sha256sum docs/engineering-standard.md`). The tests fail when the hash and the file disagree, and a published version never changes: a fix is the next version. The pin in this repository's `AGENTS.md` moves in the same pull request.
+1. Open a pull request titled `docs(standard): …` that changes `docs/engineering-standard.md` (the core) or a profile file of `docs/standard/` (`typescript.md`, `site-engine.md`), raises the `Version X.Y` line of the core and the version line of each profile file, adds a row to the table of section 16, and adds the new version to `packages/eslint-config/standard-hashes.json` in the form `{ "core": "<sha256>", "profiles": { "<profile>": "<sha256>" } }`, with the SHA-256 of the core and of each profile file (`sha256sum docs/engineering-standard.md docs/standard/*.md`). Every profile file is in the version, changed or not. The tests fail when a hash and its file disagree, and a published version never changes: a fix is the next version. The pin in this repository's `AGENTS.md` moves in the same pull request.
 2. Merge it, raise `@micelio/eslint-config` in a `chore(release)` pull request and publish it (`eslint-config-vX.Y.Z`, `publish-packages.yml`), so that the new hash is on npm.
 3. Create a GitHub release of this repository, by hand or with the bot, whose notes contain a line `Standard: X.Y`. Publishing it starts `standard-sync.yml`.
 

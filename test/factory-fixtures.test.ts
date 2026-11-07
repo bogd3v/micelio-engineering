@@ -98,6 +98,10 @@ describe.each(['planted-coverage', 'never-fixes'])('the scratch repository of %s
     expect(base).toEqual(
       expect.arrayContaining(['AGENTS.md', 'ISSUE.md', 'docs/engineering-standard.md'])
     )
+    // the profiles the role prompts send a reviewer to for sections 4, 9 and 10
+    expect(base).toEqual(
+      expect.arrayContaining(['docs/standard/typescript.md', 'docs/standard/site-engine.md'])
+    )
     expect(readFileSync(join(dir, 'repo/AGENTS.md'), 'utf8')).toContain('npm test')
     expect(readdirSync(dir).sort()).toEqual(['draft.md', 'repo'])
     expect(git(join(dir, 'repo'), 'status', '--short')).not.toContain('draft.md')

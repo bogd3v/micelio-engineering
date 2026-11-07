@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Opens or updates `docs(standard): sync to $VERSION` in every repository of
-# .github/standard-sync.json (SYNC_LIST overrides the path). Needs GH_TOKEN (the bot's, or any token
+# .github/standard-sync.json (SYNC_LIST overrides the path). STANDARD_SOURCE is a test hook: the core
+# to carry instead of docs/engineering-standard.md, with its docs/standard/ next to it, so the tests
+# can carry a version in one file or one with a rust profile. Needs GH_TOKEN (the bot's, or any token
 # in a dry run), VERSION, DRY_RUN and, for a real run, APP_SLUG. Never merges.
 #
 # Each repository runs the steps of the profile its AGENTS.md pins (`typescript` when it pins none;
@@ -30,6 +32,7 @@ failed=0
 package=@micelio/eslint-config
 published=$(jq -r .version "$root/packages/eslint-config/package.json")
 list=${SYNC_LIST:-$root/.github/standard-sync.json}
+source=${STANDARD_SOURCE:-$root/docs/engineering-standard.md}
 node_dist=${NODE_DIST:-https://nodejs.org/dist}
 
 # Prints the directory of the Node toolchain (node and the npm bundled with it) for the version in
@@ -128,7 +131,7 @@ for entry in "${entries[@]}"; do
   if ! gh repo clone "$repo" "$dir" -- --depth 1 --quiet; then
     echo "::error::could not clone $repo"; failed=1; echo "::endgroup::"; continue
   fi
-  result=$(node "$root/scripts/apply-standard.mjs" "$dir") && profiles=$(pinned_profiles "$dir") || {
+  result=$(node "$root/scripts/apply-standard.mjs" "$dir" "$source") && profiles=$(pinned_profiles "$dir") || {
     if [ "$?" = 3 ]; then echo "::error::$repo: AGENTS.md has no pin to move"; else echo "::error::$repo: could not apply standard ${VERSION}"; fi
     failed=1; echo "::endgroup::"; continue
   }

@@ -1,6 +1,6 @@
 # Repository template
 
-`template/` is section 14 of the [engineering standard](engineering-standard.md) as files: a repository created from it starts with everything a file can give it, so nobody walks the checklist by hand. `npm run template` copies it.
+`template/` is section 14 of the [engineering standard](engineering-standard.md) as files, the checklist of its [TypeScript profile](standard/typescript.md): a repository created from it starts with everything a file can give it, so nobody walks the checklist by hand. `npm run template` copies it.
 
 ## Create a repository
 
@@ -20,7 +20,7 @@ npm run template -- ../micelio-example --description "One sentence about what it
 | `--ref <commit SHA>` | `HEAD` of this checkout | the commit the reusable workflows are called at                    |
 | `--no-install`       | installs                | skips writing `package-lock.json` (needs the registry)             |
 
-The script only creates a new directory: it refuses one that has files, and it never runs `git`. It adds two files that live once in this repository and are not copied into `template/`: `docs/engineering-standard.md` (pinned in `AGENTS.md` to the version it declares) and `scripts/check-licenses.mjs`. The `package-lock.json` it writes is what `npm ci` and the reusable `check.yml` need.
+The script only creates a new directory: it refuses one that has files, and it never runs `git`. It adds three files that live once in this repository and are not copied into `template/`: `docs/engineering-standard.md` (pinned in `AGENTS.md` to the version it declares), `docs/standard/typescript.md` (the profile `AGENTS.md` pins) and `scripts/check-licenses.mjs`. The `package-lock.json` it writes is what `npm ci` and the reusable `check.yml` need.
 
 The labels come with the first pull request: `pr-labels.yml` creates every label of `.github/labels.json` that the repository lacks, then adds the one of the title's prefix. `labels.json` is the set the title-to-label workflow, the release notes (`release.yml`) and the issue templates use; `test/template.test.ts` fails when one of them uses a label it does not define. A label that already exists is left as it is, colour and description included. A repository created before this file can copy `.github/labels.json` and `pr-labels.yml` from the template; nothing else changes for it.
 
