@@ -1,7 +1,8 @@
 name: CI
 
-# Runs the reusable workflows of this repository on itself, so a change to one is tried before a
-# repository calls it (the local `uses: ./` is replaced by the repository and a commit SHA there).
+# Runs the reusable workflows and the actions of this repository on itself, so a change to one is
+# tried before a repository calls it (the local `uses: ./` is replaced by the repository and a commit
+# SHA there).
 
 on:
   pull_request:
@@ -37,6 +38,64 @@ jobs:
     with:
       profile: rust
       working-directory: fixtures/rust-basic
+
+  # The lint-standard action on a repository without npm, the published tool at the version below.
+  lint-standard:
+    if: ${{ github.event_name != 'schedule' && github.event_name != 'issues' }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Copy of the standard without npm
+        uses: ./.github/actions/lint-standard
+        with:
+          version: 0.2.7
+          directory: fixtures/no-npm
+
+  # The same fixture with one character of its copy changed: green only when the action fails with
+  # the tool's "does not match".
+  lint-standard-mismatch:
+    if: ${{ github.event_name != 'schedule' && github.event_name != 'issues' }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Change one character of the copy
+        run: |
+          cp -R fixtures/no-npm "$RUNNER_TEMP/no-npm"
+          sed -i '1s/^# Micelio/# Micelia/' "$RUNNER_TEMP/no-npm/docs/engineering-standard.md"
+          head -n 1 "$RUNNER_TEMP/no-npm/docs/engineering-standard.md"
+
+      - name: Copy of the standard without npm
+        id: lint
+        continue-on-error: true
+        uses: ./.github/actions/lint-standard
+        with:
+          version: 0.2.7
+          directory: ${{ runner.temp }}/no-npm
+
+      - name: The action failed with does not match
+        env:
+          OUTCOME: ${{ steps.lint.outcome }}
+          MESSAGE: ${{ steps.lint.outputs.message }}
+        run: |
+          echo "Outcome: $OUTCOME"
+          echo "Line: $MESSAGE"
+          [ "$OUTCOME" = failure ]
+          case "$MESSAGE" in
+            *'does not match'*) ;;
+            *) echo "::error::the line does not say 'does not match'"; exit 1 ;;
+          esac
 
   dco:
     if: ${{ github.event_name == 'pull_request' }}

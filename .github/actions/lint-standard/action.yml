@@ -1,0 +1,78 @@
+name: Micelio lint-standard
+description: Checks a repository's copy of the engineering standard with micelio-lint-standard, for a repository without npm (ADR-0001, point 5)
+
+# Call it after the checkout, with the version of @micelio/eslint-config pinned by the caller:
+#
+#   - uses: bogd3v/micelio-engineering/.github/actions/lint-standard@<commit SHA> # <tag>
+#     with:
+#       version: 0.2.7
+#
+# It sets up Node and runs the published tool with npx from the runner's temporary directory, so it
+# installs nothing into the repository and writes no file there (npx keeps the package in the npm
+# cache of the runner), and an npm project around the directory is not used. It fails when the tool
+# does, and prints the tool's one line.
+
+inputs:
+  version:
+    description: Exact version of @micelio/eslint-config whose micelio-lint-standard runs (as 0.2.7); there is no default, the caller pins it
+    required: true
+  directory:
+    description: Directory of the repository to check, the one that holds AGENTS.md, relative to the workspace or absolute
+    required: false
+    default: .
+
+outputs:
+  message:
+    description: The tool's one line
+    value: ${{ steps.lint.outputs.message }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: 22
+
+    # Records the tool's line and status and exits 0, so the output is set when the tool fails; the
+    # next step fails the action.
+    - name: Run micelio-lint-standard
+      id: lint
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        DIRECTORY: ${{ inputs.directory }}
+        # npm's own notices would follow the tool's line.
+        npm_config_update_notifier: 'false'
+        npm_config_loglevel: error
+      run: |
+        if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+          echo "::error::version must be an exact version of @micelio/eslint-config, as 0.2.7, not '$VERSION'"
+          exit 1
+        fi
+        if [ ! -d "$DIRECTORY" ]; then
+          echo "::error::directory '$DIRECTORY' not found"
+          exit 1
+        fi
+        root=$(cd "$DIRECTORY" && pwd)
+        cd "$RUNNER_TEMP"
+        status=0
+        output=$(npx --yes --package "@micelio/eslint-config@$VERSION" micelio-lint-standard "$root" 2>&1) || status=$?
+        printf '%s\n' "$output"
+        delimiter="EOF_$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+        {
+          echo "message<<$delimiter"
+          printf '%s\n' "$output" | tail -n 1
+          echo "$delimiter"
+          echo "status=$status"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Fail on the tool's error
+      if: ${{ steps.lint.outputs.status != '0' }}
+      shell: bash
+      env:
+        MESSAGE: ${{ steps.lint.outputs.message }}
+        STATUS: ${{ steps.lint.outputs.status }}
+      run: |
+        echo "::error::micelio-lint-standard exited $STATUS: $MESSAGE"
+        exit 1

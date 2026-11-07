@@ -16,6 +16,10 @@ name: Check
 # steps, by name, and report the same single `Check` status; with `rust` the steps of the `Checks`
 # job install the toolchain, run `cargo audit` and the repository's check command instead of the
 # npm ones, and the others are skipped.
+#
+# `standard: true` runs `lint:standard` where the project has a package.json; where it has none (a
+# repository not on Node), it runs the lint-standard action of this repository at `tools-ref`, with
+# the version of @micelio/eslint-config in `lint-standard-version` (docs/workflows.md).
 
 on:
   workflow_call:
@@ -53,9 +57,17 @@ on:
         type: boolean
         default: true
       standard:
-        description: Run lint:standard (the copy of the standard matches the pinned version); not yet available with the rust profile
+        description: Run lint:standard (the copy of the standard matches the pinned version); without a package.json, the lint-standard action
         type: boolean
         default: false
+      lint-standard-version:
+        description: Without a package.json and with standard true; the exact version of @micelio/eslint-config the lint-standard action runs (as 0.2.7)
+        type: string
+        default: ''
+      tools-ref:
+        description: Without a package.json and with standard true; the commit SHA of bogd3v/micelio-engineering whose lint-standard action runs, the one check.yml is pinned at
+        type: string
+        default: ''
       reuse:
         description: Run reuse lint
         type: boolean
@@ -87,8 +99,6 @@ jobs:
       # Runs before the checkout, so before working-directory exists: it runs at the root.
       - name: Check the inputs
         working-directory: .
-        env:
-          STANDARD: ${{ inputs.standard }}
         run: |
           case "$PROFILE" in
             typescript)
@@ -97,12 +107,7 @@ jobs:
                 *) echo "::error::package-manager must be npm or pnpm, not '$PM'"; exit 1 ;;
               esac
               ;;
-            rust)
-              if [ "$STANDARD" = true ]; then
-                echo "::error::standard is not available with profile rust yet (#163 runs lint:standard without npm); set it to false"
-                exit 1
-              fi
-              ;;
+            rust) ;;
             *) echo "::error::profile must be typescript or rust, not '$PROFILE'"; exit 1 ;;
           esac
 
@@ -182,9 +187,47 @@ jobs:
         if: ${{ inputs.profile == 'typescript' && inputs.licenses }}
         run: $PM run lint:licenses
 
+      # With a package.json, its lint:standard script; without one, the two steps after this one
+      # run the lint-standard action of this repository at tools-ref.
       - name: Copy of the standard
+        id: standard
         if: ${{ inputs.standard }}
-        run: $PM run lint:standard
+        env:
+          LINT_STANDARD_VERSION: ${{ inputs.lint-standard-version }}
+          TOOLS_REF: ${{ inputs.tools-ref }}
+        run: |
+          if [ -f package.json ]; then
+            $PM run lint:standard
+            exit 0
+          fi
+          if [ -z "$LINT_STANDARD_VERSION" ]; then
+            echo "::error::no package.json in '$PWD': set lint-standard-version, the version of @micelio/eslint-config the lint-standard action runs"
+            exit 1
+          fi
+          if [[ ! "$TOOLS_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::no package.json in '$PWD': set tools-ref to the commit SHA check.yml is pinned at, not '$TOOLS_REF'"
+            exit 1
+          fi
+          echo "No package.json: the lint-standard action runs."
+          echo "action=true" >> "$GITHUB_OUTPUT"
+
+      # Into the workspace, which `uses: ./` needs; the caller's checkout is not touched.
+      - name: Checkout the lint-standard action
+        if: ${{ steps.standard.outputs.action == 'true' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: bogd3v/micelio-engineering
+          ref: ${{ inputs.tools-ref }}
+          path: .micelio-engineering
+          sparse-checkout: .github/actions
+          persist-credentials: false
+
+      - name: Copy of the standard without npm
+        if: ${{ steps.standard.outputs.action == 'true' }}
+        uses: ./.micelio-engineering/.github/actions/lint-standard
+        with:
+          version: ${{ inputs.lint-standard-version }}
+          directory: ${{ inputs.working-directory }}
 
   # Needs no dependencies, so it runs beside the others from the start.
   reuse:
