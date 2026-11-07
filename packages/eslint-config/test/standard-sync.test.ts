@@ -19,8 +19,16 @@ import { loadFileHashes, standardVersion } from '../src/standard.js'
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url))
 const WORKFLOW = readFileSync(`${ROOT}.github/workflows/standard-sync.yml`, 'utf8')
 const SCRIPT = readFileSync(`${ROOT}scripts/standard-sync.sh`, 'utf8')
-const TARGETS = JSON.parse(readFileSync(`${ROOT}.github/standard-sync.json`, 'utf8')) as {
-  repositories: string[]
+const APPLY = `${ROOT}scripts/apply-standard.mjs`
+/** An entry of `repositories`: `owner/name`, or an object that also lists its profile. */
+type Target = string | { repository: string; profile?: string }
+/** The repositories of `.github/standard-sync.json`, as `owner/name`. */
+const TARGETS = {
+  repositories: (
+    JSON.parse(readFileSync(`${ROOT}.github/standard-sync.json`, 'utf8')) as {
+      repositories: Target[]
+    }
+  ).repositories.map((entry) => (typeof entry === 'string' ? entry : entry.repository)),
 }
 /** The version of the canonical copy, which the sync carries. */
 const CURRENT = standardVersion(readFileSync(`${ROOT}docs/engineering-standard.md`, 'utf8')) ?? ''
@@ -105,6 +113,8 @@ interface Repository {
   workspaces?: boolean
   /** Whether the root `package.json` declares the package (it does not when a workspace does). */
   declared?: boolean
+  /** The `profile:` pin of `AGENTS.md`, on the line of the version pin; no profile pin when unset. */
+  profile?: string
 }
 
 /** A repository whose lockfile already installs the published version: nothing to raise. */
@@ -138,9 +148,10 @@ function world(pin: string, existingPr = '', spec: Repository = CURRENT_REPOSITO
     git(seed, 'config', 'user.email', 'seed@example.test')
     mkdirSync(join(seed, 'docs'))
     writeFileSync(join(seed, 'docs/engineering-standard.md'), 'older\n')
+    const profilePin = spec.profile === undefined ? '' : `, \`profile: ${spec.profile}\``
     writeFileSync(
       join(seed, 'AGENTS.md'),
-      `follows standard version ${pin} (\`standard: ${pin}\`)\n`
+      `follows standard version ${pin} (\`standard: ${pin}\`${profilePin})\n`
     )
     if (spec.range !== undefined) {
       const section = spec.section ?? 'devDependencies'
@@ -566,6 +577,209 @@ describe('standard-sync.sh raising the package', () => {
     const result = sync(w, false)
     expect(result.status).toBe(1)
     expect(result.output).toContain('is not a Node version')
+  })
+})
+
+/** A canonical copy of a version in the new form: the core and `docs/standard/<profile>.md`. */
+function splitSource(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'micelio-split-'))
+  mkdirSync(join(dir, 'docs/standard'), { recursive: true })
+  const core = join(dir, 'docs/engineering-standard.md')
+  writeFileSync(core, '# Micelio engineering standard\n\nVersion 2.0 (2026-12-01). Core.\n')
+  for (const profile of ['typescript', 'site-engine', 'rust']) {
+    writeFileSync(join(dir, `docs/standard/${profile}.md`), `# ${profile} profile\n`)
+  }
+  return core
+}
+
+/** A repository whose AGENTS.md carries `pins` (the backticked pins) and an older standard. */
+function pinned(pins: string): string {
+  const dir = mkdtempSync(join(tmpdir(), 'micelio-apply-'))
+  mkdirSync(join(dir, 'docs'))
+  writeFileSync(join(dir, 'docs/engineering-standard.md'), 'older\n')
+  writeFileSync(join(dir, 'AGENTS.md'), `follows standard version 1.8 (${pins})\n`)
+  return dir
+}
+
+/** Runs apply-standard on `dir` with the standard file `source`. */
+function apply(
+  dir: string,
+  source: string
+): { status: number | null; stdout: string; stderr: string } {
+  return spawnSync('node', [APPLY, dir, source], { encoding: 'utf8' })
+}
+
+describe('apply-standard and the profile pin', () => {
+  it('copies the core and the file of each pinned profile', () => {
+    const source = splitSource()
+    const dir = pinned('`standard: 1.8`, `profile: rust, site-engine`')
+    const result = apply(dir, source)
+    expect(result.status, result.stderr).toBe(0)
+    expect(result.stdout.trim()).toBe('changed')
+    expect(readFileSync(join(dir, 'docs/engineering-standard.md'), 'utf8')).toBe(
+      readFileSync(source, 'utf8')
+    )
+    for (const profile of ['rust', 'site-engine']) {
+      expect(readFileSync(join(dir, `docs/standard/${profile}.md`), 'utf8')).toBe(
+        `# ${profile} profile\n`
+      )
+      expect(result.stderr).toContain(`synced docs/standard/${profile}.md`)
+    }
+    expect(existsSync(join(dir, 'docs/standard/typescript.md'))).toBe(false)
+    expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain(
+      '`standard: 2.0`, `profile: rust, site-engine`'
+    )
+    expect(apply(dir, source).stdout.trim()).toBe('unchanged')
+  })
+
+  it('copies the file of typescript for a repository with no profile pin', () => {
+    const dir = pinned('`standard: 1.8`')
+    expect(apply(dir, splitSource()).status).toBe(0)
+    expect(readFileSync(join(dir, 'docs/standard/typescript.md'), 'utf8')).toBe(
+      '# typescript profile\n'
+    )
+    expect(existsSync(join(dir, 'docs/standard/rust.md'))).toBe(false)
+  })
+
+  it('removes a profile file the repository no longer pins', () => {
+    const source = splitSource()
+    const dir = pinned('`standard: 2.0`, `profile: rust`')
+    mkdirSync(join(dir, 'docs/standard'))
+    writeFileSync(join(dir, 'docs/standard/typescript.md'), '# typescript profile\n')
+    writeFileSync(join(dir, 'docs/standard/notes.md'), 'not a profile\n')
+    const result = apply(dir, source)
+    expect(result.status, result.stderr).toBe(0)
+    expect(result.stdout.trim()).toBe('changed')
+    expect(result.stderr).toContain('removed docs/standard/typescript.md')
+    expect(existsSync(join(dir, 'docs/standard/typescript.md'))).toBe(false)
+    expect(existsSync(join(dir, 'docs/standard/rust.md'))).toBe(true)
+    expect(readFileSync(join(dir, 'docs/standard/notes.md'), 'utf8')).toBe('not a profile\n')
+  })
+
+  it('refuses a pinned profile the version has no file for, and writes nothing', () => {
+    const dir = pinned('`standard: 1.8`, `profile: rust, go`')
+    const result = apply(dir, splitSource())
+    expect(result.status).toBe(4)
+    expect(result.stderr).toContain('pins profile go, which standard 2.0 does not have')
+    expect(readFileSync(join(dir, 'docs/engineering-standard.md'), 'utf8')).toBe('older\n')
+    expect(existsSync(join(dir, 'docs/standard'))).toBe(false)
+  })
+
+  it('copies no profile file for a version that is one file', () => {
+    const dir = pinned('`standard: 1.3`, `profile: rust`')
+    const result = apply(dir, `${ROOT}docs/engineering-standard.md`)
+    expect(result.status, result.stderr).toBe(0)
+    expect(existsSync(join(dir, 'docs/standard'))).toBe(false)
+  })
+})
+
+describe('standard-sync.sh and the profile pin', () => {
+  it('the dry run for a typescript repository prints what it printed before', () => {
+    const synced = Object.keys(loadFileHashes())
+    const group = (repository: string): string[] => [
+      `::group::${repository}`,
+      ' M AGENTS.md',
+      ' M docs/engineering-standard.md',
+      ...[...synced].sort().map((path) => `?? ${path}`),
+      `Dry run: would raise ${PACKAGE} from 0.1.2 to ${PUBLISHED} (^${PUBLISHED} in package.json, ${PUBLISHED} in package-lock.json).`,
+      `Dry run: would open 'docs(standard): sync to ${CURRENT}' in ${repository}.`,
+      '::endgroup::',
+    ]
+    const expected = [
+      ...TARGETS.repositories.flatMap(group),
+      ...TARGETS.repositories.flatMap(() => synced.map((path) => `synced ${path}`)),
+      '',
+    ].join('\n')
+    for (const profile of [undefined, 'typescript', 'typescript, site-engine']) {
+      const w = world('1.3', '', { range: '^0.1.2', nvmrc: '22\n', profile })
+      const result = sync(w, true)
+      expect(result.status, result.output).toBe(0)
+      expect(result.output, `profile ${profile ?? 'not pinned'}`).toBe(expected)
+    }
+  })
+
+  it('skips the package step for a profile that is not typescript and says so', () => {
+    const w = world('1.3', '', { range: '^0.1.2', nvmrc: '22\n', profile: 'rust' })
+    const result = sync(w, true)
+    expect(result.status, result.output).toBe(0)
+    expect(result.output).not.toContain('would raise')
+    const line = `pins profile rust: the ${PACKAGE} step (package.json, package-lock.json, .nvmrc) does not apply.`
+    for (const repository of TARGETS.repositories) {
+      expect(result.output).toContain(`${repository} ${line}`)
+    }
+    expect(result.output.split(line).length - 1).toBe(TARGETS.repositories.length)
+    expect(readFileSync(w.log, 'utf8')).not.toContain('npm install')
+  })
+
+  it('a repository with no package.json and a rust pin is synced, not failed', () => {
+    const w = world('1.3', '', { profile: 'rust' })
+    const result = sync(w, false)
+    expect(result.status, result.output).toBe(0)
+    const log = readFileSync(w.log, 'utf8')
+    const branch = `docs/standard-sync-${CURRENT}`
+    for (const repository of TARGETS.repositories) {
+      expect(log).toContain(`pr create --repo ${repository} --base main --head ${branch}`)
+      const remote = join(w.remotes, `${repository.split('/')[1]}.git`)
+      expect(git(remote, 'diff', '--name-only', `main..${branch}`).split('\n')).toEqual(
+        expect.arrayContaining(['AGENTS.md', 'docs/engineering-standard.md'])
+      )
+      expect(git(remote, 'show', `${branch}:AGENTS.md`)).toContain(
+        `\`standard: ${CURRENT}\`, \`profile: rust\``
+      )
+    }
+    expect(log).toContain('The repository pins profile `rust` in `AGENTS.md`.')
+    expect(log).toContain(`The \`${PACKAGE}\` step`)
+    expect(log).not.toContain('npm run lint:standard')
+  })
+
+  it('names the profile in the body of a typescript pull request too', () => {
+    const w = world('1.3')
+    expect(sync(w, false).status).toBe(0)
+    const log = readFileSync(w.log, 'utf8')
+    expect(log).toContain('The repository pins profile `typescript` in `AGENTS.md`.')
+    expect(log).toContain('If `npm run lint:standard` says the version is unknown')
+  })
+
+  it('warns when standard-sync.json lists another profile than the pin, and runs the pin', () => {
+    const w = world('1.3', '', { profile: 'rust' })
+    const list = join(dirname(w.log), 'standard-sync.json')
+    const [first = '', ...rest] = TARGETS.repositories
+    const repositories = [
+      { repository: first, profile: 'typescript' },
+      ...rest.map((repository) => ({ repository, profile: 'rust' })),
+    ]
+    writeFileSync(list, JSON.stringify({ repositories }))
+    const result = sync({ ...w, env: { ...w.env, SYNC_LIST: list } }, true)
+    expect(result.status, result.output).toBe(0)
+    expect(result.output).toContain(
+      `::warning::${first}: standard-sync.json lists profile 'typescript', AGENTS.md pins 'rust'; the pin decides.`
+    )
+    expect(result.output.split('::warning::').length - 1).toBe(1)
+    expect(result.output.split('pins profile rust: the').length - 1).toBe(
+      TARGETS.repositories.length
+    )
+  })
+
+  it('says the standard could not be applied, not that the pin is missing, for another failure', () => {
+    const w = world('1.3')
+    const first = TARGETS.repositories[0]?.split('/')[1] ?? ''
+    const work = mkdtempSync(join(tmpdir(), 'micelio-sync-work-'))
+    git(work, 'clone', '-q', join(w.remotes, `${first}.git`), '.')
+    git(work, 'config', 'user.name', 'Seed')
+    git(work, 'config', 'user.email', 'seed@example.test')
+    git(work, 'rm', '-q', 'AGENTS.md')
+    mkdirSync(join(work, 'AGENTS.md'))
+    writeFileSync(join(work, 'AGENTS.md/README.md'), 'a folder, not a file\n')
+    git(work, 'add', '-A')
+    git(work, 'commit', '-qm', 'folder')
+    git(work, 'push', '-q', 'origin', 'main')
+    const result = sync(w, true)
+    expect(result.status).toBe(1)
+    expect(result.output).toContain(`::error::bogd3v/${first}: could not apply standard ${CURRENT}`)
+    expect(result.output).not.toContain('has no pin to move')
+    expect(result.output.split('Dry run: would open').length - 1).toBe(
+      TARGETS.repositories.length - 1
+    )
   })
 })
 
