@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -26,6 +27,10 @@ import {
 } from '../src/standard.js'
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url))
+/** Where the canonical copy keeps its profile files. */
+const PROFILE_DIR = 'docs/standard'
+/** The published standard 1.8, the last version in one file, byte for byte. */
+const STANDARD_1_8 = fileURLToPath(new URL('./fixtures/standard-1.8.md', import.meta.url))
 const LINT_BIN = `${ROOT}packages/eslint-config/dist/lint-standard.js`
 const APPLY = `${ROOT}scripts/apply-standard.mjs`
 /** The version of the canonical copy, so the tests that use the real file follow its bumps. */
@@ -236,10 +241,62 @@ describe('the canonical copy of this repository', () => {
 
   it('has the hash published for its own version', () => {
     expect(version).not.toBeNull()
-    expect(
-      loadHashes()[version ?? ''],
-      `${STANDARD_PATH} is not the published copy of standard ${version}: restore it, or raise the version and add its hash`
-    ).toBe(hashOf(copy))
+    const published = loadHashes()[version ?? '']
+    const message = `is not the published copy of standard ${version}: restore it, or raise the version and add its hash`
+    if (typeof published !== 'object') {
+      expect(published, `${STANDARD_PATH} ${message}`).toBe(hashOf(copy))
+      return
+    }
+    // a version in the new form: the core, and every profile file of docs/standard/, each with its hash
+    expect(published.core, `${STANDARD_PATH} ${message}`).toBe(hashOf(copy))
+    const files = readdirSync(join(ROOT, PROFILE_DIR)).filter((name) => name.endsWith('.md'))
+    expect(Object.keys(published.profiles).sort()).toEqual(
+      files.map((name) => name.slice(0, -'.md'.length)).sort()
+    )
+    for (const [profile, hash] of Object.entries(published.profiles)) {
+      const path = `${PROFILE_DIR}/${profile}.md`
+      expect(hash, `${path} ${message}`).toBe(hashOf(readFileSync(join(ROOT, path))))
+    }
+  })
+
+  it('every must and should of 1.8 is in the core or in exactly one profile of 2.0', () => {
+    const old = readFileSync(STANDARD_1_8)
+    // the fixture is the published 1.8, byte for byte
+    expect(hashOf(old)).toBe(loadHashes()['1.8'])
+    const files = [STANDARD_PATH, `${PROFILE_DIR}/typescript.md`, `${PROFILE_DIR}/site-engine.md`]
+    const texts = files.map((path) => readFileSync(join(ROOT, path), 'utf8'))
+    const lines = old.toString('utf8').split('\n')
+    const rules = lines.filter((line) => /\*\*(must|should)\b/i.test(line))
+    expect(rules.length).toBeGreaterThan(0)
+    for (const rule of rules) {
+      const found = texts.reduce(
+        (count, text) => count + text.split('\n').filter((line) => line === rule).length,
+        0
+      )
+      expect(found, rule).toBe(1)
+    }
+    // every other line of 1.8 (headings, table separators and short code lines aside) is kept word
+    // for word in one file, except the three lines 2.0 rewrites
+    const rewritten = [/^Version 1\.8 /, /^These are the rules shared/, /^\| `AGENTS\.md` \|/]
+    const kept = lines.filter(
+      (line) =>
+        line.trim().length >= 12 &&
+        !line.startsWith('#') &&
+        !/^\|(?:\s*-+\s*\|)+$/.test(line) &&
+        !rewritten.some((pattern) => pattern.test(line))
+    )
+    for (const line of kept) {
+      const holders = files.filter((_, index) => texts[index]?.split('\n').includes(line))
+      expect(holders, line).toHaveLength(1)
+    }
+  })
+
+  it('the core names no npm script, TSDoc or .nvmrc outside the Micelio only section', () => {
+    const [core = '', micelioOnly] = copy.toString('utf8').split('\n## Micelio only\n')
+    expect(micelioOnly, 'the core has a "## Micelio only" section').toBeDefined()
+    expect(micelioOnly).not.toMatch(/^## /m)
+    const tools = /\bnpm (?:run|ci|test|install|audit|exec)\b|TSDoc|\.nvmrc/g
+    expect(core.match(tools) ?? []).toEqual([])
   })
 
   it('is what AGENTS.md pins', () => {
@@ -319,6 +376,9 @@ describe('micelio-lint-standard', () => {
   it('exits 0 on a matching copy and 1 with the pinned version when it was edited', () => {
     const dir = repo(CURRENT, readFileSync(join(ROOT, STANDARD_PATH), 'utf8'))
     writeFileSync(join(dir, 'AGENTS.md'), AGENTS(CURRENT))
+    // a version in the new form: the profile it reads with no pin, typescript, is part of the copy
+    mkdirSync(join(dir, PROFILE_DIR))
+    cpSync(join(ROOT, PROFILE_DIR, 'typescript.md'), join(dir, PROFILE_DIR, 'typescript.md'))
     expect(spawnSync('node', [LINT_BIN, dir], { encoding: 'utf8' }).status).toBe(0)
     const edited = readFileSync(join(dir, STANDARD_PATH), 'utf8').replace('Micelio', 'Micelia')
     writeFileSync(join(dir, STANDARD_PATH), edited)
@@ -344,6 +404,9 @@ describe('apply-standard', () => {
     mkdirSync(join(dir, 'docs'))
     cpSync(source, join(dir, STANDARD_PATH))
     writeFileSync(join(dir, 'AGENTS.md'), AGENTS(CURRENT))
+    // a version in the new form: the profile it reads with no pin, typescript, is part of the copy
+    mkdirSync(join(dir, PROFILE_DIR))
+    cpSync(join(ROOT, PROFILE_DIR, 'typescript.md'), join(dir, PROFILE_DIR, 'typescript.md'))
     for (const path of Object.keys(loadFileHashes())) {
       mkdirSync(dirname(join(dir, path)), { recursive: true })
       cpSync(join(ROOT, 'template', path), join(dir, path))

@@ -4,9 +4,10 @@
 //   npm run template -- <target-dir> [--name <repo>] [--title <text>] [--package <npm name>]
 //                       [--description <text>] [--ref <commit SHA>] [--no-install]
 //
-// Copies `template/`, replaces its `{{placeholders}}`, adds the canonical copy of the standard and the
-// licence check from this repository, and (unless --no-install) writes the lockfile that `npm ci` and the
-// reusable workflows need. It never touches git: initialising and pushing is the human's step.
+// Copies `template/`, replaces its `{{placeholders}}`, adds the canonical copy of the standard (the core
+// and the TypeScript profile) and the licence check from this repository, and (unless --no-install)
+// writes the lockfile that `npm ci` and the reusable workflows need. It never touches git: initialising
+// and pushing is the human's step.
 import { execFileSync } from 'node:child_process'
 import {
   copyFileSync,
@@ -136,7 +137,12 @@ export function createRepository(options) {
   }
 
   // Single sources: copied from this repository so the template never holds a second copy.
-  for (const file of ['docs/engineering-standard.md', 'scripts/check-licenses.mjs']) {
+  // The standard is the core and the TypeScript profile, the one `template/AGENTS.md` pins.
+  for (const file of [
+    'docs/engineering-standard.md',
+    'docs/standard/typescript.md',
+    'scripts/check-licenses.mjs',
+  ]) {
     const destination = join(target, file)
     mkdirSync(dirname(destination), { recursive: true })
     copyFileSync(join(ROOT, file), destination)

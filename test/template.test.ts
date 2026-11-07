@@ -28,9 +28,12 @@ const CHECKLIST = JSON.parse(
   readFileSync(join(ROOT, 'scripts/template-checklist.json'), 'utf8')
 ) as Entry[]
 
-/** The boxes of section 14 that every repository needs: the list above "A plugin repository". */
+/**
+ * The boxes of section 14 that every repository needs: the list above "A plugin repository". Since
+ * 2.0 the list is in the TypeScript profile, the one the template pins.
+ */
 function sectionFourteenBoxes(): string[] {
-  const standard = readFileSync(join(ROOT, 'docs/engineering-standard.md'), 'utf8')
+  const standard = readFileSync(join(ROOT, 'docs/standard/typescript.md'), 'utf8')
   const section = standard.split('## 14. Starting a new repository')[1]?.split('## 15.')[0] ?? ''
   const general = section.split('A plugin repository also needs')[0] ?? ''
   return [...general.matchAll(/^- \[ \] (.+)$/gm)].map((match) => match[1] as string)

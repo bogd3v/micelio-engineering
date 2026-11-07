@@ -4,14 +4,21 @@
   "1.6": "ea74875d30586378a64d90feb59ce197d3efa7f07e867108f3849f5308cc1f92",
   "1.7": "8a185de1a7a2dd16579d7ab4d3eceed17a935c25a1c67570561fbdbbcbe84496",
   "1.8": "bbdbd8b0f7d394ba24471a3b65dbcf7a82b9899a221a39e78ffe819ebbc79249",
+  "2.0": {
+    "core": "0675351fc73c3a24a23bbb87ef3100bbf265796339f3ad9bc8bfc55b99dab040",
+    "profiles": {
+      "typescript": "3cae53a8cefdf41b115dc76fc4931d0a1c0999e74298a01ea5361197e6fcd3ab",
+      "site-engine": "4a67073bf657245cddf90ed0301cab74b50a9025b237ec4ed443088b21de3c2a"
+    }
+  },
   "files": {
     ".claude/agents/master.md": "35e9ce4cc637ca814352916dd24e64f25da66f0c3c36fb492e2172c40e6d6416",
     ".claude/agents/planner.md": "7bb5a71f7ff8ebf97a6e775c1e85744d668c7ef2601cd8dc52599b9a60c851e5",
-    ".claude/agents/reviewer.md": "8edcd83631b191013217eb9f309b108f54e988708496182877077b65a9b6f1cf",
+    ".claude/agents/reviewer.md": "a4764fdcfd9ec5ca318595bee5afdf12c20d0c065f020621660df2509c08c8c0",
     ".claude/agents/verifier.md": "12af503892295de5da0496344b7760c5a349aa81ab7b61db4e9b9b7e1dd757e8",
-    ".claude/agents/worker.md": "e2faeb86c51418373978a15dd025f7800ad12a053c962fdb0c58b79251fd8290",
+    ".claude/agents/worker.md": "fc5b347a656ac71c872feb1385e8265507635641bcaf76a5fc54aacdca2c6e90",
     ".claude/skills/ship-pr/SKILL.md": "ced49dbd6ab9c4513afa2c3afb0350810d3693c4a758612512f9ecadab66f045",
-    ".claude/skills/blind-review/SKILL.md": "62f43d0ccd762ad7197bb48e31e7041689cc1d07e16678dffd9c8e2715be7980",
+    ".claude/skills/blind-review/SKILL.md": "c04ac8fb2ea26af595905701ba99d638e94a3a329f876bd4a4a3ea078642241d",
     ".claude/skills/verify-pr/SKILL.md": "3e284973a3c54f5c19de43282307060b876816701112ddc8e922be2773f7469f",
     ".github/pull_request_template.md": "8ce62f8b6d59f14562e6d962d87491c2c3b1c9a8f640afe673f23eced6642ba7",
     "CLAUDE.md": "2fe9efbc0c4a6e0cbd446afb506911ba28b0068a42f8686676635986d968cefd"

@@ -4,7 +4,7 @@ Instructions for coding agents working in this repository. {{description}}
 
 ## Engineering standard
 
-The rules shared by every Micelio repository live in [`docs/engineering-standard.md`](docs/engineering-standard.md). This repository follows standard version {{standard}} (`standard: {{standard}}`; `npm run lint:standard` checks the copy against the hashes bundled in `@micelio/eslint-config`). This file adds what is specific to this repository and never relaxes the standard. The copy is kept in step by the Micelio bot's `docs(standard): sync to X.Y` pull requests: review and merge them, do not edit the file by hand.
+The rules shared by every Micelio repository live in [`docs/engineering-standard.md`](docs/engineering-standard.md), the core, and in the TypeScript profile, [`docs/standard/typescript.md`](docs/standard/typescript.md). This repository follows standard version {{standard}} with that profile (`standard: {{standard}}`, `profile: typescript`; `npm run lint:standard` checks both copies against the hashes bundled in `@micelio/eslint-config`). This file adds what is specific to this repository and never relaxes the standard. The copy is kept in step by the Micelio bot's `docs(standard): sync to X.Y` pull requests: review and merge them, do not edit the files by hand.
 
 ## Commands
 
