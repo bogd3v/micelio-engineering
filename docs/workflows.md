@@ -24,7 +24,47 @@ jobs:
 
 **`typescript`.** `typecheck`, `lint` and the test script always run. Everything else is an input, so a skipped check is written down in the caller: `format`, `licenses`, `standard`, `reuse`, `build` and `audit`. `test-script` names the script (`test:coverage` where there is a coverage floor), `lint:licenses` is each repository's script over `@micelio/eslint-config/licenses.json` (this repository's is `scripts/check-licenses.mjs`), `working-directory` points at a project below the root, and `package-manager` is `npm` or `pnpm`. The Node version comes from `.nvmrc`. Sharding or repository-specific jobs (end to end, contract, performance) stay in the repository's own workflow.
 
-**`rust`.** The same jobs and steps run, by name, in `working-directory`, with these differences. `Install dependencies` installs the toolchain `rust-toolchain.toml` names (the file must be there). `Audit dependencies` (`audit`, on by default) runs `cargo audit --deny warnings`: any advisory fails it, unmaintained and yanked crates included, and it needs the `Cargo.lock`. `Test` runs the check command: the `check:` line of the first `## Commands` block of `AGENTS.md` (ADR-0001, point 7), or the input `check-command` when it is set; it runs with `bash -e`, so the repository decides what it holds (`cargo fmt --check`, `cargo clippy`, `cargo test`). `Type check`, `Lint`, `Format`, `Licences`, `Setup Node.js` and the `Build` job are skipped. `package-manager`, `node-version-file`, `test-script`, `format`, `licenses` and `build` are for `typescript` and ignored here. `standard: true` stops the run in `Check the inputs` and names the gap until #163 runs `lint:standard` without npm. `reuse` is shared by both profiles. The `Check` status is the same single status, and the caller still grants only `contents: read`. `fixtures/rust-basic/` is the minimal library `ci.yml` calls it on (job `check-rust`); the root `check` job is the `typescript` run.
+**`rust`.** The same jobs and steps run, by name, in `working-directory`, with these differences. `Install dependencies` installs the toolchain `rust-toolchain.toml` names (the file must be there). `Audit dependencies` (`audit`, on by default) runs `cargo audit --deny warnings`: any advisory fails it, unmaintained and yanked crates included, and it needs the `Cargo.lock`. `Test` runs the check command: the `check:` line of the first `## Commands` block of `AGENTS.md` (ADR-0001, point 7), or the input `check-command` when it is set; it runs with `bash -e`, so the repository decides what it holds (`cargo fmt --check`, `cargo clippy`, `cargo test`). `Type check`, `Lint`, `Format`, `Licences`, `Setup Node.js` and the `Build` job are skipped. `package-manager`, `node-version-file`, `test-script`, `format`, `licenses` and `build` are for `typescript` and ignored here. `standard: true` runs the `lint-standard` action where the project has no `package.json`, as below. `reuse` is shared by both profiles. The `Check` status is the same single status, and the caller still grants only `contents: read`. `fixtures/rust-basic/` is the minimal library `ci.yml` calls it on (job `check-rust`); the root `check` job is the `typescript` run.
+
+**`standard`, with and without a `package.json`.** With `standard: true`, the step `Copy of the standard` runs the project's `lint:standard` script when `working-directory` holds a `package.json`, as before. When it holds none (a repository not on Node, of either profile), the same step checks two inputs and the job runs the `lint-standard` action below instead: `Checkout the lint-standard action` checks out `.github/actions` of this repository at `tools-ref` into `.micelio-engineering` in the workspace, and `Copy of the standard without npm` runs it on `working-directory` with `lint-standard-version`. Both inputs are required there and neither has a default that floats: `tools-ref` is the commit SHA the caller pins `check.yml` at, and `lint-standard-version` the exact version of `@micelio/eslint-config`. A missing one fails the step and names it.
+
+```yaml
+jobs:
+  ci:
+    uses: bogd3v/micelio-engineering/.github/workflows/check.yml@<commit SHA> # <tag>
+    with:
+      profile: rust
+      standard: true
+      tools-ref: <the same commit SHA>
+      lint-standard-version: <version of @micelio/eslint-config, as 0.2.7>
+```
+
+## The `lint-standard` action
+
+`.github/actions/lint-standard/action.yml` runs `lint:standard` in a repository without npm (ADR-0001, point 5). The check keeps one implementation: the action sets up Node 22 and runs the published `micelio-lint-standard` of `@micelio/eslint-config` with `npx`, from the runner's temporary directory, against the repository's copy. It installs nothing into the repository and writes no file there. When the tool exits 1 the action fails, and it prints the tool's one line either way. Call it after the checkout, pinned by commit SHA:
+
+```yaml
+steps:
+  - uses: actions/checkout@<commit SHA> # <tag>
+    with:
+      persist-credentials: false
+  - uses: bogd3v/micelio-engineering/.github/actions/lint-standard@<commit SHA> # <tag>
+    with:
+      version: 0.2.7
+```
+
+| Input       | Required | Default | Is                                                                                                                                                 |
+| ----------- | -------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`   | yes      | none    | The exact version of `@micelio/eslint-config` whose tool runs (`0.2.7`); a range, a tag such as `latest` or an empty value fails before `npx` runs |
+| `directory` | no       | `.`     | The directory that holds `AGENTS.md` and the copy, relative to the workspace or absolute                                                           |
+
+Its output `message` is the tool's line. To run the same check locally, a repository without npm documents this one line in its `AGENTS.md` (with the version its CI pins) and runs it from its root:
+
+```bash
+npx --yes --package @micelio/eslint-config@<version> micelio-lint-standard
+```
+
+Run inside an npm project that installs `@micelio/eslint-config`, `npx` takes the package from that project instead of the pinned one. Where that copy has no `micelio-lint-standard` linked, as in this repository after a fresh `npm ci` (the workspace package is not built when it is installed), the command fails with exit 127 and `sh: 1: micelio-lint-standard: not found`. The action therefore runs `npx` from `$RUNNER_TEMP` and passes the directory to the tool as its argument, never from the caller's directory. `fixtures/no-npm/` is a repository without npm that pins 1.8: `ci.yml` runs the action on it (job `lint-standard`), and on a copy with one character of its standard changed (job `lint-standard-mismatch`, green only when the action's outcome is `failure` and its line says `does not match`).
 
 ## `issue-ready.yml`
 
@@ -68,7 +108,7 @@ The repository keeps what is its own: a script that prints the plan as JSON (`ta
 
 `standard-sync.yml` is this repository's own, not a reusable one: it opens the pull requests that keep the copies of the standard in step, together with the factory's agent prompts, skills, pull request template and `CLAUDE.md` (`docs/standard-sync.md`). `dco.yml` skips the commits of the Micelio bot, like Dependabot's.
 
-`.github/workflows/ci.yml` runs all five on this repository, with a dry-run release over `fixtures/basic`. `publish-packages.yml` is what publishes the packages of this repository: one tag per package.
+`.github/workflows/ci.yml` runs all five on this repository, with a dry-run release over `fixtures/basic`, and the `lint-standard` action over `fixtures/no-npm`. `publish-packages.yml` is what publishes the packages of this repository: one tag per package.
 
 ## Required check names
 
