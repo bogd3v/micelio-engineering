@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
 # Opens or updates `docs(standard): sync to $VERSION` in every repository of
-# .github/standard-sync.json. Needs GH_TOKEN (the bot's, or any token in a dry run), VERSION,
-# DRY_RUN and, for a real run, APP_SLUG. Never merges.
+# .github/standard-sync.json (SYNC_LIST overrides the path). Needs GH_TOKEN (the bot's, or any token
+# in a dry run), VERSION, DRY_RUN and, for a real run, APP_SLUG. Never merges.
 #
-# When the version of @micelio/eslint-config that a repository's package-lock.json installs is older
-# than the one published from packages/eslint-config (a patch too: it carries the new hashes), the
-# same commit raises it (package.json and package-lock.json), so nobody pushes to the bot's pull
-# request (a person's push makes dco.yml check the bot's unsigned commit). A repository that cannot
-# be raised correctly (no package.json or lockfile, the package not in the root package.json, npm
-# workspaces, a broken toolchain) fails with an error and gets no pull request.
+# Each repository runs the steps of the profile its AGENTS.md pins (`typescript` when it pins none;
+# ADR-0001, point 6). An entry of the list may be
+# `{"repository": "<owner/name>", "profile": "<name>"}` instead of `"<owner/name>"`: its profile is
+# for the report, and a pin that differs is a warning, never the profile the run uses. For any
+# profile the standard files, the synced files and the pin are replaced; only `typescript` also has
+# the package step below. For another profile the run says in one line that the step does not apply.
+#
+# The package step, for `typescript`: when the version of @micelio/eslint-config that a
+# repository's package-lock.json installs is older than the one published from
+# packages/eslint-config (a patch too: it carries the new hashes), the same commit raises it
+# (package.json and package-lock.json), so nobody pushes to the bot's pull request (a person's push
+# makes dco.yml check the bot's unsigned commit). A repository that cannot be raised correctly (no
+# package.json or lockfile, the package not in the root package.json, npm workspaces, a broken
+# toolchain) fails with an error and gets no pull request.
 # The lockfile is made by the Node and npm of the repository's own .nvmrc, downloaded from
 # NODE_DIST (default https://nodejs.org/dist) and checked against its SHASUMS256.txt, never by the
 # npm of this runner.
@@ -21,6 +29,7 @@ title="docs(standard): sync to ${VERSION}"
 failed=0
 package=@micelio/eslint-config
 published=$(jq -r .version "$root/packages/eslint-config/package.json")
+list=${SYNC_LIST:-$root/.github/standard-sync.json}
 node_dist=${NODE_DIST:-https://nodejs.org/dist}
 
 # Prints the directory of the Node toolchain (node and the npm bundled with it) for the version in
@@ -98,18 +107,46 @@ if [ "$DRY_RUN" != true ]; then
   git config --global user.email "${bot_id}+${APP_SLUG}[bot]@users.noreply.github.com"
 fi
 
-for repo in $(jq -r '.repositories[]' "$root/.github/standard-sync.json"); do
+# Prints the profiles the AGENTS.md of $1 pins, comma-separated (`typescript` when it pins none).
+pinned_profiles() {
+  node --input-type=module -e '
+    import { readFileSync } from "node:fs"
+    import { pathToFileURL } from "node:url"
+    const [standard, agents] = process.argv.slice(1)
+    const { readProfiles } = await import(pathToFileURL(standard).href)
+    console.log(readProfiles(readFileSync(agents, "utf8")).join(", "))
+  ' "$root/packages/eslint-config/dist/standard.js" "$1/AGENTS.md"
+}
+
+# One line per entry of the list: the repository, a tab, and the profile it lists (or nothing).
+mapfile -t entries < <(jq -r '.repositories[] | if type == "string" then [., ""] else [.repository, (.profile // "")] end | @tsv' "$list")
+
+for entry in "${entries[@]}"; do
+  IFS=$'\t' read -r repo listed <<< "$entry"
   echo "::group::$repo"
   dir="$work/${repo#*/}"
   if ! gh repo clone "$repo" "$dir" -- --depth 1 --quiet; then
     echo "::error::could not clone $repo"; failed=1; echo "::endgroup::"; continue
   fi
-  result=$(node "$root/scripts/apply-standard.mjs" "$dir") || { echo "::error::$repo: AGENTS.md has no pin to move"; failed=1; echo "::endgroup::"; continue; }
+  result=$(node "$root/scripts/apply-standard.mjs" "$dir") && profiles=$(pinned_profiles "$dir") || {
+    if [ "$?" = 3 ]; then echo "::error::$repo: AGENTS.md has no pin to move"; else echo "::error::$repo: could not apply standard ${VERSION}"; fi
+    failed=1; echo "::endgroup::"; continue
+  }
+  if [ -n "$listed" ] && [ "$listed" != "$profiles" ]; then
+    echo "::warning::$repo: standard-sync.json lists profile '$listed', AGENTS.md pins '$profiles'; the pin decides."
+  fi
   if [ "$result" = unchanged ]; then
     echo "$repo is already on standard ${VERSION}."
     echo "::endgroup::"; continue
   fi
-  if ! raised=$(raise_package "$dir"); then
+  case ", $profiles, " in
+    *", typescript, "*) typescript=true ;;
+    *) typescript=false ;;
+  esac
+  if [ "$typescript" = false ]; then
+    raised=none
+    echo "$repo pins profile $profiles: the $package step (package.json, package-lock.json, .nvmrc) does not apply."
+  elif ! raised=$(raise_package "$dir"); then
     echo "::error::$repo: could not raise $package to ^$published"; failed=1; echo "::endgroup::"; continue
   fi
   git -C "$dir" status --short --untracked-files=all
@@ -133,11 +170,16 @@ for repo in $(jq -r '.repositories[]' "$root/.github/standard-sync.json"); do
   fi
   git -C "$dir" commit --quiet -m "$title" -m "Replaces docs/engineering-standard.md, moves the pin in AGENTS.md to ${VERSION}${upgrade} and copies the agent prompts, skills, pull request template and CLAUDE.md listed in standard-sync.json, from ${SOURCE}."
   git -C "$dir" push --quiet --force origin "$branch"
-  body="Replaces the local copy of the engineering standard with version ${VERSION}, moves the pin in \`AGENTS.md\` and copies the factory's agent prompts, skills, pull request template and \`CLAUDE.md\` (the \`files\` of \`.github/standard-sync.json\`), from ${SOURCE}.
+  if [ "$typescript" = true ]; then
+    closing="If \`npm run lint:standard\` says the version is unknown, or that a synced file does not match, \`@micelio/eslint-config\` must be upgraded to the release that publishes the new hashes. This pull request does it when the lockfile installs an older release; if it does not and the error persists, upgrade it in a separate pull request. A repository may stay on an older version on purpose: close this pull request."
+  else
+    closing="The \`${package}\` step (\`package.json\`, \`package-lock.json\`, \`.nvmrc\`) is for the \`typescript\` profile and was not run. A repository may stay on an older version on purpose: close this pull request."
+  fi
+  body="Replaces the local copy of the engineering standard with version ${VERSION}, moves the pin in \`AGENTS.md\` and copies the factory's agent prompts, skills, pull request template and \`CLAUDE.md\` (the \`files\` of \`.github/standard-sync.json\`), from ${SOURCE}. The repository pins profile \`${profiles}\` in \`AGENTS.md\`.
 
 Review it like any other change and merge it by hand: the Micelio bot never merges.
 
-${upgrade_body}If \`npm run lint:standard\` says the version is unknown, or that a synced file does not match, \`@micelio/eslint-config\` must be upgraded to the release that publishes the new hashes. This pull request does it when the lockfile installs an older release; if it does not and the error persists, upgrade it in a separate pull request. A repository may stay on an older version on purpose: close this pull request."
+${upgrade_body}${closing}"
   existing=$(gh pr list --repo "$repo" --head "$branch" --state open --json number --jq '.[0].number // empty')
   if [ -n "$existing" ]; then
     gh pr edit "$existing" --repo "$repo" --title "$title" --body "$body"
