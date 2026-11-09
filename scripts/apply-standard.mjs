@@ -12,6 +12,14 @@
 // longer pins. It fails with 4 when a pinned profile has no file in that folder; 3 when AGENTS.md
 // has no pin.
 //
+// For such a version it also keeps `npm run format:check` from checking the profile files: when the
+// repository has a `.prettierignore` with no line that ignores `docs/standard/` (trimmed, one of
+// `docs/standard/`, `docs/standard`, `/docs/standard/`, `/docs/standard`), it appends the line
+// `docs/standard/` (after a newline, if the file does not end with one), prints `updated
+// .prettierignore` on stderr and counts it as changed. A repository with no `.prettierignore` gets
+// none, a file that already ignores the folder is left byte for byte, and a version in one file
+// never touches it.
+//
 //   node scripts/apply-standard.mjs <repository directory> [standard file]
 import {
   copyFileSync,
@@ -104,6 +112,26 @@ for (const [profile, from] of versionProfiles) {
   profilesChanged = true
 }
 
+/** The lines of `.prettierignore` that ignore the profile folder, trimmed. */
+const IGNORES_PROFILES = new Set([
+  'docs/standard/',
+  'docs/standard',
+  '/docs/standard/',
+  '/docs/standard',
+])
+
+let prettierChanged = false
+const prettierPath = join(target, '.prettierignore')
+if (versionProfiles.size > 0 && existsSync(prettierPath)) {
+  const text = readFileSync(prettierPath, 'utf8')
+  if (!text.split(/\r?\n/).some((line) => IGNORES_PROFILES.has(line.trim()))) {
+    const separator = text === '' || text.endsWith('\n') ? '' : '\n'
+    writeFileSync(prettierPath, `${text}${separator}${PROFILE_DIR}/\n`)
+    console.error('updated .prettierignore')
+    prettierChanged = true
+  }
+}
+
 let filesChanged = false
 for (const path of syncedFiles()) {
   if (!copyTo(path, join(ROOT, 'template', path))) continue
@@ -111,4 +139,8 @@ for (const path of syncedFiles()) {
   console.error(`synced ${path}`)
 }
 
-console.log(copyChanged || pinChanged || profilesChanged || filesChanged ? 'changed' : 'unchanged')
+console.log(
+  copyChanged || pinChanged || profilesChanged || prettierChanged || filesChanged
+    ? 'changed'
+    : 'unchanged'
+)

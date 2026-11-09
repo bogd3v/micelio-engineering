@@ -115,6 +115,8 @@ interface Repository {
   declared?: boolean
   /** The `profile:` pin of `AGENTS.md`, on the line of the version pin; no profile pin when unset. */
   profile?: string
+  /** The text of `.prettierignore`; no file when unset. */
+  prettierignore?: string
 }
 
 /** A repository whose lockfile already installs the published version: nothing to raise. */
@@ -175,6 +177,9 @@ function world(pin: string, existingPr = '', spec: Repository = CURRENT_REPOSITO
       }
     }
     if (spec.nvmrc !== undefined) writeFileSync(join(seed, '.nvmrc'), spec.nvmrc)
+    if (spec.prettierignore !== undefined) {
+      writeFileSync(join(seed, '.prettierignore'), spec.prettierignore)
+    }
     git(seed, 'add', '-A')
     git(seed, 'commit', '-q', '-m', 'seed')
     git(base, 'clone', '-q', '--bare', seed, join(remotes, `${name}.git`))
@@ -685,6 +690,123 @@ describe('apply-standard and the profile pin', () => {
     const result = apply(dir, oneFileSource())
     expect(result.status, result.stderr).toBe(0)
     expect(existsSync(join(dir, 'docs/standard'))).toBe(false)
+  })
+})
+
+describe('apply-standard and .prettierignore', () => {
+  /** A repository like `pinned` that also has a `.prettierignore` with `text`. */
+  function withIgnore(pins: string, text?: string): string {
+    const dir = pinned(pins)
+    if (text !== undefined) writeFileSync(join(dir, '.prettierignore'), text)
+    return dir
+  }
+
+  it('adds docs/standard/ to a .prettierignore that does not list it', () => {
+    const source = splitSource()
+    for (const [before, after] of [
+      [
+        'docs/engineering-standard.md\ndist\n',
+        'docs/engineering-standard.md\ndist\ndocs/standard/\n',
+      ],
+      [
+        'docs/engineering-standard.md\ndist',
+        'docs/engineering-standard.md\ndist\ndocs/standard/\n',
+      ],
+      ['', 'docs/standard/\n'],
+    ]) {
+      const dir = withIgnore('`standard: 1.8`', before)
+      const result = apply(dir, source)
+      expect(result.status, result.stderr).toBe(0)
+      expect(result.stdout.trim()).toBe('changed')
+      expect(result.stderr).toContain('updated .prettierignore')
+      expect(readFileSync(join(dir, '.prettierignore'), 'utf8')).toBe(after)
+      const again = apply(dir, source)
+      expect(again.stdout.trim()).toBe('unchanged')
+      expect(again.stderr).not.toContain('.prettierignore')
+      expect(readFileSync(join(dir, '.prettierignore'), 'utf8')).toBe(after)
+    }
+  })
+
+  it('changes only .prettierignore when the rest is already on the version', () => {
+    const source = splitSource()
+    const dir = withIgnore('`standard: 1.8`', 'dist\n')
+    expect(apply(dir, source).stdout.trim()).toBe('changed')
+    writeFileSync(join(dir, '.prettierignore'), 'dist\n')
+    const result = apply(dir, source)
+    expect(result.stdout.trim()).toBe('changed')
+    expect(result.stderr.trim()).toBe('updated .prettierignore')
+  })
+
+  it('leaves a .prettierignore that already ignores docs/standard/ as it is', () => {
+    const source = splitSource()
+    for (const line of ['docs/standard/', 'docs/standard', '/docs/standard/', '/docs/standard']) {
+      const text = `dist\n  ${line}  \r\n# kept\nbuild`
+      const dir = withIgnore('`standard: 1.8`', text)
+      expect(apply(dir, source).status).toBe(0)
+      expect(readFileSync(join(dir, '.prettierignore'), 'utf8'), line).toBe(text)
+      const again = apply(dir, source)
+      expect(again.stdout.trim(), line).toBe('unchanged')
+      expect(again.stderr).not.toContain('.prettierignore')
+    }
+  })
+
+  it('creates no .prettierignore in a repository that has none', () => {
+    const dir = withIgnore('`standard: 1.8`')
+    const result = apply(dir, splitSource())
+    expect(result.status, result.stderr).toBe(0)
+    expect(existsSync(join(dir, '.prettierignore'))).toBe(false)
+    expect(result.stderr).not.toContain('.prettierignore')
+  })
+
+  it('touches no .prettierignore for a version that is one file', () => {
+    const dir = withIgnore('`standard: 1.3`, `profile: rust`', 'dist\n')
+    const result = apply(dir, oneFileSource())
+    expect(result.status, result.stderr).toBe(0)
+    expect(readFileSync(join(dir, '.prettierignore'), 'utf8')).toBe('dist\n')
+    expect(result.stderr).not.toContain('.prettierignore')
+  })
+})
+
+describe('standard-sync.sh and .prettierignore', () => {
+  it('lists .prettierignore in a dry run when it would add docs/standard/', () => {
+    const w = world('1.3', '', { range: '^0.1.2', nvmrc: '22\n', prettierignore: 'dist\n' })
+    const result = sync(w, true)
+    expect(result.status, result.output).toBe(0)
+    const lines = result.output.split('\n')
+    expect(lines.filter((line) => line === ' M .prettierignore')).toHaveLength(
+      TARGETS.repositories.length
+    )
+    expect(lines.filter((line) => line === 'updated .prettierignore')).toHaveLength(
+      TARGETS.repositories.length
+    )
+  })
+
+  it('adds docs/standard/ to .prettierignore in the one commit and says so in the pull request', () => {
+    const w = world('1.3', '', { range: `^${PUBLISHED}`, nvmrc: '22\n', prettierignore: 'dist\n' })
+    const result = sync(w, false)
+    expect(result.status, result.output).toBe(0)
+    const log = readFileSync(w.log, 'utf8')
+    for (const repository of TARGETS.repositories) {
+      const remote = join(w.remotes, `${repository.split('/')[1]}.git`)
+      const branch = `docs/standard-sync-${CURRENT}`
+      expect(git(remote, 'rev-list', '--count', `main..${branch}`)).toBe('1')
+      expect(git(remote, 'diff-tree', '--no-commit-id', '--name-only', '-r', branch)).toContain(
+        '.prettierignore'
+      )
+      expect(git(remote, 'show', `${branch}:.prettierignore`)).toBe('dist\ndocs/standard/')
+      expect(git(remote, 'log', '-1', '--format=%b', branch)).toContain('.prettierignore')
+    }
+    const creates = log.split('\n').filter((line) => line.startsWith('gh pr create'))
+    expect(creates).toHaveLength(TARGETS.repositories.length)
+    expect(log.match(/It also adds `docs\/standard\/` to `\.prettierignore`/g)).toHaveLength(
+      TARGETS.repositories.length
+    )
+  })
+
+  it('says nothing of .prettierignore when the sync does not change it', () => {
+    const w = world('1.3', '', { range: `^${PUBLISHED}`, nvmrc: '22\n' })
+    expect(sync(w, false).status).toBe(0)
+    expect(readFileSync(w.log, 'utf8')).not.toContain('prettierignore')
   })
 })
 

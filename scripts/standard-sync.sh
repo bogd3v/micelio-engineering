@@ -12,6 +12,10 @@
 # profile the standard files, the synced files and the pin are replaced; only `typescript` also has
 # the package step below. For another profile the run says in one line that the step does not apply.
 #
+# When the commit changes the target's .prettierignore (apply-standard.mjs appends `docs/standard/`
+# for a version in the new form), the commit message and the pull request body say so, so that
+# `npm run format:check` does not check the profile files the standard carries.
+#
 # The package step, for `typescript`: when the version of @micelio/eslint-config that a
 # repository's package-lock.json installs is older than the one published from
 # packages/eslint-config (a patch too: it carries the new hashes), the same commit raises it
@@ -171,7 +175,14 @@ for entry in "${entries[@]}"; do
 
 "
   fi
-  git -C "$dir" commit --quiet -m "$title" -m "Replaces docs/engineering-standard.md, moves the pin in AGENTS.md to ${VERSION}${upgrade} and copies the agent prompts, skills, pull request template and CLAUDE.md listed in standard-sync.json, from ${SOURCE}."
+  prettier=; prettier_body=
+  if ! git -C "$dir" diff --cached --quiet -- .prettierignore; then
+    prettier=" Adds docs/standard/ to .prettierignore so npm run format:check does not check the profile files the standard carries."
+    prettier_body="It also adds \`docs/standard/\` to \`.prettierignore\`, so \`npm run format:check\` does not check the profile files the standard carries.
+
+"
+  fi
+  git -C "$dir" commit --quiet -m "$title" -m "Replaces docs/engineering-standard.md, moves the pin in AGENTS.md to ${VERSION}${upgrade} and copies the agent prompts, skills, pull request template and CLAUDE.md listed in standard-sync.json, from ${SOURCE}.${prettier}"
   git -C "$dir" push --quiet --force origin "$branch"
   if [ "$typescript" = true ]; then
     closing="If \`npm run lint:standard\` says the version is unknown, or that a synced file does not match, \`@micelio/eslint-config\` must be upgraded to the release that publishes the new hashes. This pull request does it when the lockfile installs an older release; if it does not and the error persists, upgrade it in a separate pull request. A repository may stay on an older version on purpose: close this pull request."
@@ -182,7 +193,7 @@ for entry in "${entries[@]}"; do
 
 Review it like any other change and merge it by hand: the Micelio bot never merges.
 
-${upgrade_body}${closing}"
+${upgrade_body}${prettier_body}${closing}"
   existing=$(gh pr list --repo "$repo" --head "$branch" --state open --json number --jq '.[0].number // empty')
   if [ -n "$existing" ]; then
     gh pr edit "$existing" --repo "$repo" --title "$title" --body "$body"
