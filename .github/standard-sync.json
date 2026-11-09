@@ -1,5 +1,10 @@
 {
-  "repositories": ["bogd3v/micelio", "bogd3v/micelio-cms", "bogd3v/micelio-plugin-core"],
+  "repositories": [
+    "bogd3v/micelio",
+    "bogd3v/micelio-cms",
+    "bogd3v/micelio-plugin-core",
+    "bogd3v/micelio-plugin-fediverse"
+  ],
   "files": [
     ".claude/agents",
     ".claude/skills/ship-pr",

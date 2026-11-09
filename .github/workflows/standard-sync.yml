@@ -109,6 +109,7 @@ jobs:
             micelio
             micelio-cms
             micelio-plugin-core
+            micelio-plugin-fediverse
           # A dry run only reads the repositories
           permission-contents: ${{ steps.version.outputs.dry_run == 'true' && 'read' || 'write' }}
           permission-pull-requests: ${{ steps.version.outputs.dry_run == 'true' && 'read' || 'write' }}
