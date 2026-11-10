@@ -39,7 +39,9 @@ An issue that fails the by-hand read is set back to Todo (the `ready` label stay
 
 `<N>` is the issue number. Names match `[a-z][a-z0-9_-]{0,31}` and must be unique among live agents.
 
-**At most 3 workers at once.** A fourth ready issue waits. Reviewers and verifiers are short-lived and do not count.
+**At most `FACTORY_WORKER_SLOTS` workers on the machine (6 by default), across every master.** Another ready issue waits. Reviewers and verifiers are short-lived and take no lease.
+
+The lease's `--agent` is the agent's name in herdr-core (`hc run --name <name>`). Before each worker, `herdr/factory-slot.sh reap`, then `herdr/factory-slot.sh acquire --pool workers --agent worker-<N>`; on exit 75 the issue waits. When the issue leaves the pipeline, `herdr/factory-slot.sh release --agent worker-<N>` and `docker compose -p <project> down -v` for its stack. Start workers with `nice -n 10`; reviewers and verifiers keep normal priority so the gates run first. `factory-slot.sh status` shows the slots and leases in use and any `orphan`; raise an `orphan` with the maintainer, never kill it. The budget is explained in `docs/factory.md`, "Machine budget".
 
 ## Starting an agent
 
