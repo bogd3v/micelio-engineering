@@ -55,6 +55,13 @@ const STEPS: Record<string, string[]> = {
     'docs/factory.md',
     'template/.claude/TEAM.md',
   ],
+  'factory-slot.sh': [
+    `${AGENTS}master.md`,
+    `${AGENTS}verifier.md`,
+    `${AGENTS}worker.md`,
+    'herdr/master.md',
+    'docs/factory.md',
+  ],
   'production or staging': [
     `${AGENTS}master.md`,
     `${AGENTS}planner.md`,
