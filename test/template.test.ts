@@ -167,10 +167,11 @@ describe('the repository template', () => {
       const matches = text.matchAll(/uses: bogd3v\/micelio-engineering\/.*$/gm)
       calls.push(...Array.from(matches, (match) => match[0]))
     }
-    const called = calls.map((call) => /workflows\/(\w+)\.yml@(\w+) # main$/.exec(call))
+    const called = calls.map((call) => /workflows\/([\w-]+)\.yml@(\w+) # main$/.exec(call))
     expect(called.map((match) => match?.[1]).sort()).toEqual([
       'check',
       'dco',
+      'issue-ready',
       'release',
       'scorecard',
     ])
