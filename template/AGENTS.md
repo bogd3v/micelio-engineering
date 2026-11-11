@@ -19,7 +19,7 @@ npm run build            # compiles src/ to dist/
 
 - `src/` — the code; `test/` — its tests.
 - `scripts/` — `check-licenses.mjs` (`npm run lint:licenses`) and `release/version.mjs` (the release plan, read by the Release workflow).
-- `.github/workflows/` — `ci.yml`, `release.yml` and `pr-labels.yml`; CI calls the reusable workflows of `micelio-engineering`.
+- `.github/workflows/` — `ci.yml`, `release.yml`, `pr-labels.yml` and `issue-ready.yml`; CI calls the reusable workflows of `micelio-engineering`.
 
 ## Rules
 

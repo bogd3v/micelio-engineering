@@ -63,6 +63,7 @@
       ".github/ISSUE_TEMPLATE/proposal.yml",
       ".github/ISSUE_TEMPLATE/task.md",
       ".github/workflows/pr-labels.yml",
+      ".github/workflows/issue-ready.yml",
       ".github/release.yml"
     ]
   },
