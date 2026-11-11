@@ -31,6 +31,8 @@ function check(
   writeFileSync(join(base, 'package.json'), JSON.stringify(pkg))
   const result = spawnSync('bash', ['-e', '-c', CHECK], {
     cwd: base,
+    // stdin ignored: a bash with SSH_SOURCE_BASHRC reads ~/.bashrc when stdin is a socket.
+    stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       PATH: `${bin}:${process.env.PATH ?? ''}`,
       GITHUB_STEP_SUMMARY: join(base, 'summary.md'),
@@ -92,6 +94,7 @@ describe('release.yml', () => {
     ] as const) {
       const result = spawnSync('bash', ['-e', '-c', script], {
         env: { PATH: process.env.PATH ?? '', NPM_TOKEN: token },
+        stdio: ['ignore', 'pipe', 'pipe'],
         encoding: 'utf8',
       })
       expect(result.status, result.stdout + result.stderr).toBe(status)
