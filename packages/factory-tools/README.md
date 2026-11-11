@@ -123,6 +123,11 @@ or a file cannot be read.
 - A line that ends `fixed in <path>` fails when `git diff --name-only <ref>` lacks the path. In
   `micelio-engineering` a synced file is fixed under `template/<path>`, which is in the diff, so it
   passes.
+- A line whose subject is `issue` or `standard` (case ignored) fails when it ends `fixed in <path>`,
+  whatever the diff holds: they are reported to the master.
+- A line whose subject is a synced file fails when it ends `fixed in <path>` and the path is not
+  `template/<subject>`: outside `micelio-engineering` it is reported, inside it the fix is under
+  `template/`.
 - A line whose subject is an own file, `AGENTS.md` or a skill under `.claude/skills/` that
   `standard-sync.json` does not list, fails when it ends `reported to the master`. The standard, the
   issue and a synced file (outside `micelio-engineering`) end `reported to the master` and pass.

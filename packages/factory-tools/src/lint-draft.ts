@@ -63,6 +63,21 @@ export function lintDraft(draft: string, context: DraftContext): DraftProblem[] 
     const fixed = FIXED.exec(line)
     if (fixed?.groups) {
       const path = unquote(fixed.groups['path'] ?? '')
+      const subject = unquote(fixed.groups['subject'] ?? '')
+      if (/^(?:issue|standard)$/i.test(subject)) {
+        problems.push({
+          line,
+          problem: 'the issue and the standard are reported to the master, not fixed on the branch',
+        })
+        continue
+      }
+      if (isSynced(subject, context.synced) && path !== `template/${subject}`) {
+        problems.push({
+          line,
+          problem: `${subject} is a synced file: outside micelio-engineering it ends "reported to the master", inside it ends "fixed in template/${subject}"`,
+        })
+        continue
+      }
       if (!context.changed.includes(path)) {
         problems.push({ line, problem: `ends "fixed in ${path}", which the diff does not touch` })
       }
