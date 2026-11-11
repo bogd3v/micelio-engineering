@@ -148,7 +148,7 @@ run2() {
     lg=" Logs: $P/logs/."
   fi
   start "$a" "$p1" verifier sonnet || return 1
-  herdr agent prompt "$a" "Use the verify-pr skill (.claude/skills/verify-pr/SKILL.md). Worktree: $P/repo. Branch: main. Issue: $P/repo/ISSUE.md. Draft without its Answers to review: $P/draft.md.$lg Maintainer's decisions: $P/packets/1/r1/decisions.md. Write report.md and summary.md in $P/packets/1/r1/verify/." --wait --timeout 1800000 > /dev/null
+  herdr agent prompt "$a" "Use the verify-pr skill (.claude/skills/verify-pr/SKILL.md). Worktree: $P/repo. Branch: main. Issue: $P/repo/ISSUE.md. Draft without its Answers to review: $P/draft.md.$lg Maintainer's decisions: $P/packets/1/r1/decisions.md. factory-slot.sh: $SRC/herdr/factory-slot.sh. Write report.md and summary.md in $P/packets/1/r1/verify/." --wait --timeout 1800000 > /dev/null
   finish "$a"
   cp -r "$P/packets/1/r1/verify" "$OUT/pages/verify" || { bad "run2: no verify directory"; return 1; }
   v=$(line1 "$OUT/pages/verify/summary.md")
