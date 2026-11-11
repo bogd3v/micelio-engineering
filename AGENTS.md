@@ -25,6 +25,7 @@ What the commands need besides Node 22: the `node:22` image has `git` but not `j
 `npm run verify:template` also needs `reuse` 6.2.0, the version CI pins (an older `reuse` does not
 read `REUSE.toml`); `gh`, logged in, is for `scripts/standard-sync.sh`, its dry run included, and
 for the live forms of `lint-issue` and `metrics`; the tests stub it.
+Start the `node:22` container with `--init` (`docker run --init` or `podman run --init`): `test/factory-slot.test.ts` kills a process group and expects it reaped, and a PID 1 that is not an init process (`npm` run as the container's command, or behind an `exec`) leaves the killed group's zombies, so that test fails.
 In the container, `apt-get update && apt-get install -y jq python3-pip` and `pip install --break-system-packages reuse==6.2.0` supply `jq` and `reuse`, not `gh`: install it from the host or skip the commands that need it.
 In a git worktree, Docker also needs the main repository's `.git` mounted at the same path (the worktree's `.git` is a file that points to it), and on an SELinux host `--security-opt label=disable`.
 In the container, run `git config --global --add safe.directory <worktree path>` first, or git refuses the mounted worktree as owned by another user.
