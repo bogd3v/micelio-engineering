@@ -40,6 +40,33 @@ describe('lint-draft', () => {
     ).toEqual([])
   })
 
+  it('fails a line about the issue or the standard that ends fixed in, even in a file the diff touches', () => {
+    const changed = context(['AGENTS.md'])
+    const issue = lintDraft(
+      section('issue: the test file it names has no Strapi - fixed in AGENTS.md'),
+      changed
+    )
+    expect(issue).toHaveLength(1)
+    expect(issue[0]?.problem).toContain('reported to the master, not fixed on the branch')
+    const standard = lintDraft(
+      section('`Standard`: section 8 is wrong - fixed in AGENTS.md'),
+      changed
+    )
+    expect(standard).toHaveLength(1)
+    expect(standard[0]?.problem).toContain('reported to the master, not fixed on the branch')
+  })
+
+  it('fails a synced file fixed anywhere but under template/', () => {
+    const changed = context(['AGENTS.md', 'template/CLAUDE.md'])
+    const elsewhere = lintDraft(section('CLAUDE.md: a rule is wrong - fixed in AGENTS.md'), changed)
+    expect(elsewhere).toHaveLength(1)
+    expect(elsewhere[0]?.problem).toContain('reported to the master')
+    expect(elsewhere[0]?.problem).toContain('fixed in template/CLAUDE.md')
+    expect(
+      lintDraft(section('CLAUDE.md: a rule is wrong - fixed in template/CLAUDE.md'), changed)
+    ).toEqual([])
+  })
+
   it('passes a synced file reported from another repository', () => {
     const reported = section('.claude/agents/worker.md: a rule is wrong - reported to the master')
     expect(lintDraft(reported, context([]))).toEqual([])
