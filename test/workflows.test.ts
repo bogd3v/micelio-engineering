@@ -26,7 +26,11 @@ function stepScript(jobId: string, name: string): string {
   return (step.split('run: |\n')[1] ?? '').replace(/^ {10}/gm, '')
 }
 
-/** Runs a step script as Actions does (`bash -e`) with `env` and returns its status and output. */
+/**
+ * Runs a step script as Actions does (`bash -e`) with `env` and returns its status and output. stdin
+ * is `ignore`: with a socket as stdin, a bash built with `SSH_SOURCE_BASHRC` reads the host's
+ * `~/.bashrc`, and the step scripts read nothing from stdin.
+ */
 function run(
   script: string,
   env: Record<string, string>,
@@ -35,6 +39,7 @@ function run(
   const result = spawnSync('bash', ['-e', '-c', script], {
     cwd,
     env: { PATH: process.env.PATH ?? '', ...env },
+    stdio: ['ignore', 'pipe', 'pipe'],
     encoding: 'utf8',
   })
   return { status: result.status, output: result.stdout + result.stderr }
@@ -108,6 +113,16 @@ function jobIds(): string[] {
 function stepNames(id: string): string[] {
   return [...job(id).matchAll(/^ {6}- name: (.*)$/gm)].map((m) => m[1] ?? '')
 }
+
+describe('run()', () => {
+  it('a step script does not read the .bashrc of HOME', () => {
+    const home = mkdtempSync(join(tmpdir(), 'bashrc-'))
+    writeFileSync(join(home, '.bashrc'), 'echo BASHRC-MARKER >&2\n')
+    const result = run('echo ok', { HOME: home })
+    expect(result.output).not.toContain('BASHRC-MARKER')
+    expect(result.output.trim()).toBe('ok')
+  })
+})
 
 describe('check.yml', () => {
   it('defaults to the typescript profile and keeps the Check status name', () => {
