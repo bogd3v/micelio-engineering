@@ -62,6 +62,13 @@ const STEPS: Record<string, string[]> = {
     'herdr/master.md',
     'docs/factory.md',
   ],
+  'herdr/factory-slot.sh': [
+    `${AGENTS}master.md`,
+    `${AGENTS}verifier.md`,
+    `${AGENTS}worker.md`,
+    'herdr/master.md',
+    'docs/factory.md',
+  ],
   '## Depends on': [
     'template/.github/ISSUE_TEMPLATE/task.md',
     'template/.claude/agents/planner.md',
