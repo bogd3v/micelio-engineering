@@ -191,6 +191,35 @@ describe('lintStandard', () => {
     })
   })
 
+  it('a repository that pins 2.0 is still checked against 2.0', () => {
+    // the published hashes now hold 2.1 as well, with a rust profile that 2.0 does not have
+    const hashes = {
+      ...SPLIT_HASHES,
+      '2.1': {
+        core: hashOf('# Micelio engineering standard\n\nVersion 2.1 (2026-12-02). Core.\n'),
+        profiles: { ...SPLIT_HASHES['2.0'].profiles, rust: hashOf('# Rust profile\n') },
+      },
+    }
+    expect(lintStandard(splitRepo('typescript, site-engine'), hashes)).toEqual({
+      ok: true,
+      message:
+        'Standard 2.0 (typescript, site-engine): docs/engineering-standard.md, docs/standard/typescript.md, docs/standard/site-engine.md match the published copy.',
+    })
+    // 2.0 has no rust profile, whatever 2.1 adds
+    expect(lintStandard(splitRepo('rust'), hashes).message).toBe(
+      'AGENTS.md pins profile rust, which standard 2.0 does not have (it has typescript, site-engine): fix the profile pin.'
+    )
+    // and the core of 2.1 is not accepted for a pin of 2.0
+    const dir = splitRepo('typescript')
+    writeFileSync(
+      join(dir, STANDARD_PATH),
+      '# Micelio engineering standard\n\nVersion 2.1 (2026-12-02). Core.\n'
+    )
+    expect(lintStandard(dir, hashes).message).toContain(
+      `${STANDARD_PATH} does not match standard 2.0`
+    )
+  })
+
   it('fails and names the profile file when it was edited', () => {
     const dir = splitRepo('typescript, site-engine')
     writeFileSync(join(dir, 'docs/standard/site-engine.md'), '# Site engine profile, edited\n')
@@ -256,6 +285,19 @@ describe('the canonical copy of this repository', () => {
     for (const [profile, hash] of Object.entries(published.profiles)) {
       const path = `${PROFILE_DIR}/${profile}.md`
       expect(hash, `${path} ${message}`).toBe(hashOf(readFileSync(join(ROOT, path))))
+    }
+  })
+
+  it('every profile of a language has the same headings', () => {
+    /** The `## ` headings of a profile: the sections of the core it follows. */
+    const sections = (profile: string): string[] =>
+      readFileSync(join(ROOT, PROFILE_DIR, `${profile}.md`), 'utf8')
+        .split('\n')
+        .filter((line) => line.startsWith('## '))
+    const reference = sections('typescript')
+    expect(reference.length).toBeGreaterThan(0)
+    for (const language of ['rust']) {
+      expect(sections(language), language).toEqual(reference)
     }
   })
 

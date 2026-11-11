@@ -854,6 +854,8 @@ describe('standard-sync.sh and the profile pin', () => {
     const w = world('1.3', '', { profile: 'rust' })
     const result = sync({ ...w, env: { ...w.env, STANDARD_SOURCE: splitSource() } }, false)
     expect(result.status, result.output).toBe(0)
+    // the branch follows the canonical copy; the pin follows splitSource(), a copy of 2.0
+    const pinned = '2.0'
     const log = readFileSync(w.log, 'utf8')
     const branch = `docs/standard-sync-${CURRENT}`
     for (const repository of TARGETS.repositories) {
@@ -863,7 +865,7 @@ describe('standard-sync.sh and the profile pin', () => {
         expect.arrayContaining(['AGENTS.md', 'docs/engineering-standard.md'])
       )
       expect(git(remote, 'show', `${branch}:AGENTS.md`)).toContain(
-        `\`standard: ${CURRENT}\`, \`profile: rust\``
+        `\`standard: ${pinned}\`, \`profile: rust\``
       )
     }
     expect(log).toContain('The repository pins profile `rust` in `AGENTS.md`.')
@@ -932,14 +934,14 @@ describe('standard-sync.sh and the profile pin', () => {
     }
   })
 
-  it('fails a repository that pins rust on 2.0, which has no rust profile, and opens nothing', () => {
-    const w = world('1.3', '', { range: '^0.1.2', nvmrc: '22\n', profile: 'rust' })
+  it('fails a repository that pins a profile the standard does not have, and opens nothing', () => {
+    const w = world('1.3', '', { range: '^0.1.2', nvmrc: '22\n', profile: 'go' })
     const result = sync(w, true)
     expect(result.status).toBe(1)
     for (const repository of TARGETS.repositories) {
       expect(result.output).toContain(`::error::${repository}: could not apply standard ${CURRENT}`)
     }
-    expect(result.output).toContain(`pins profile rust, which standard ${CURRENT} does not have`)
+    expect(result.output).toContain(`pins profile go, which standard ${CURRENT} does not have`)
     expect(result.output).not.toContain('Dry run: would open')
   })
 
