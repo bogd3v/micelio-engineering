@@ -492,6 +492,16 @@ exit 0
     expect(result.read('results.txt')).toContain('FAILED: run1: not red')
   })
 
+  it('gives the verifier the path of factory-slot.sh', () => {
+    const { run, home } = setup(red)
+    const result = run('slot', { ONLY3: '' })
+    expect(result.code, result.text).toBe(0)
+    const prompt = readFileSync(join(home, 'prompts'), 'utf8')
+      .split('\n')
+      .find((line) => line.includes('verify-pr'))
+    expect(prompt).toContain(`${ROOT.replace(/\/$/, '')}/herdr/factory-slot.sh`)
+  })
+
   it('exits 1 when run 2 does not report one mismatch', () => {
     const { run } = setup(red, '{"result":{}}', 'Verdict: Green\n')
     const result = run('ver', { ONLY3: '' })

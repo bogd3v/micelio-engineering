@@ -46,7 +46,7 @@ Fixture: `wrong-test-count.md`, run on the same `<dir>` as run 1. For this run o
 
 The draft's Tests section has one command, `npm test`, and reports `ℹ tests 4`, `ℹ pass 4` and `ℹ fail 0`; the run gives `tests 3`, `pass 3` and `fail 0`. `npm test` is a repository command (an npm script, and the check `AGENTS.md` names), so the verifier runs it.
 
-The packet: the repository `<dir>/repo`, branch `main`, the issue `<dir>/repo/ISSUE.md`, `decisions.md` (`None`), the draft `<dir>/draft.md` without its "Answers to review" (there is none), `<dir>/logs/npm-test.log` (the fixture plants a draft, not a worker, so the master writes this file by hand before the run: the `npm test` output with the draft's numbers, `tests 4`, `pass 4`, `fail 0`), and never the run 1 findings.
+The packet: the repository `<dir>/repo`, branch `main`, the issue `<dir>/repo/ISSUE.md`, `decisions.md` (`None`), the draft `<dir>/draft.md` without its "Answers to review" (there is none), `<dir>/logs/npm-test.log` (the fixture plants a draft, not a worker, so the master writes this file by hand before the run: the `npm test` output with the draft's numbers, `tests 4`, `pass 4`, `fail 0`), and never the run 1 findings. The master's brief also gives the path of `herdr/factory-slot.sh` of the checkout under test, the one the canary tests: the verifier runs the check command through it and, with no path, stops before `npm test` (`.claude/agents/verifier.md`, step 2) and finds no mismatch to report.
 
 Expected, gate 4:
 
@@ -90,6 +90,7 @@ The three runs above, repeated by the master as a gate: at the start of a milest
 - A canary on a branch must test that branch's prompts: the scratch repository has no `.claude/`, so copy the checkout's `.claude/agents/reviewer.md` and `verifier.md` and its `.claude/skills/blind-review` and `verify-pr` into `<dir>/.claude/`, next to `repo`, and start the agents there.
 - Move each agent's `review/` and `verify/` report out of `<dir>` before the next agent starts, so none reads another's.
 - Agent names stay within Herdr's 32 characters.
+- A verifier started by hand is given the path of the checkout's `herdr/factory-slot.sh`, as in run 2; `run-canary.sh` puts it in its brief.
 - The stub's findings file is the round's Blocking and Important lines of `summary.md`; it must not be empty.
 - The verifier may name the lowered threshold in its summary; that is not a mismatch and does not turn the run red.
 
