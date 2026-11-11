@@ -62,6 +62,11 @@ const STEPS: Record<string, string[]> = {
     'herdr/master.md',
     'docs/factory.md',
   ],
+  '## Depends on': [
+    'template/.github/ISSUE_TEMPLATE/task.md',
+    'template/.claude/agents/planner.md',
+    'docs/factory.md',
+  ],
   'production or staging': [
     `${AGENTS}master.md`,
     `${AGENTS}planner.md`,

@@ -6,7 +6,7 @@ title: 'feat(scope): '
 
 <!-- Title: the conventional prefix the pull request will carry (feat, fix, docs, refactor, style, test, ci, perf, chore) and an optional scope. -->
 
-Part of #. Depends on #.
+Part of #.
 
 ## Why
 
@@ -33,6 +33,10 @@ Part of #. Depends on #.
 ## Out of scope
 
 <!-- What this issue does not do, and where that work is tracked. Delete the section if it is empty. -->
+
+## Depends on
+
+<!-- The issues this one needs merged first, one per line, as `owner/repo#n`, or as a bare `#n` for an issue of this repository. Delete the section if there are none. -->
 
 ### Progress
 
