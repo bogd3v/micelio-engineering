@@ -45,12 +45,12 @@ The lease's `--agent` is the agent's name in herdr-core (`hc run --name <name>`)
 
 ## The host's runtime
 
-The factory host's engine is rootless Podman, reached through `podman.socket`, a user unit (`systemctl --user enable --now podman.socket`), by the same `docker` and `docker compose` binaries, with `DOCKER_HOST=unix://$XDG_RUNTIME_DIR/podman/podman.sock`. The start command sets it for each agent; in a shell of the maintainer it is set by hand. `docker version --format '{{range .Server.Components}}{{.Name}} {{end}}'` names `Podman Engine` when it is set ([ADR-0002](../docs/adr/0002-run-the-factory-stacks-on-rootless-podman.md), `docs/adr/0002-measurements.md`).
+The factory host's engine is rootless Podman, reached through `podman.socket`, a user unit (`systemctl --user enable --now podman.socket`), by the same `docker` and `docker compose` binaries, with `DOCKER_HOST=unix://$XDG_RUNTIME_DIR/podman/podman.sock`. [`herdr/factory-agent.sh`](factory-agent.sh) `enter` sets it for each agent; in a shell of the maintainer it is set by hand. `docker version --format '{{range .Server.Components}}{{.Name}} {{end}}'` names `Podman Engine` when it is set ([ADR-0002](../docs/adr/0002-run-the-factory-stacks-on-rootless-podman.md), `docs/adr/0002-measurements.md`).
 
 - **Bind mounts.** A worktree or a clean copy is mounted with `--security-opt label=disable` or `:z`, as with Docker.
 - **Ownership.** A container that writes to a mounted copy must leave it owned by the user: run it as root in the container (rootless Podman maps that root to the host user), or `podman run --userns=keep-id --user "$(id -u):$(id -g)"`, or `userns_mode: keep-id` in compose. `docker run --userns=keep-id` is refused by the Docker CLI (`docker: --userns: invalid USER mode`), and `docker run --user "$(id -u):$(id -g)"` without `keep-id` cannot write to the mount.
 - **Images.** An image built with `podman build` uses `--format docker`, or its `HEALTHCHECK` is dropped.
-- **Builds.** `docker compose build` and `docker build` through the socket run in one shared `buildx_buildkit_default` container that stays after the build. It is not an orphan of an agent and is not removed while a build runs. Builds are outside every agent's slice and are limited by the `heavy` pool of `factory-slot.sh` (`docs/factory.md`, "Machine budget").
+- **Builds.** `docker compose build` and `docker build` through the socket run in one shared `buildx_buildkit_default` container that stays after the build. It is not an orphan of an agent and is not removed while a build runs. The shim that `enter` puts first on the agent's `PATH` is why `docker` in an agent's pane reaches Podman inside the agent's budget: it adds the agent's slice to the containers it starts (`docs/factory.md`, "Machine budget"). Builds are outside every agent's slice and are limited by the `heavy` pool of `factory-slot.sh` (`docs/factory.md`, "Machine budget").
 - **Stores.** The images and volumes of Docker and of Podman are separate stores: the first build on Podman repeats the pulls. `podman system df` and `docker system df` give each store's size.
 - **CI and production stay on Docker** (ADR-0002, Decision 4). A difference between the engines is a finding of this runbook, written as a note in the repository's `AGENTS.md`, "The factory", never a compose change for one engine.
 
@@ -61,9 +61,12 @@ A pane must be at an interactive shell prompt, with nothing running in the foreg
 ```bash
 git worktree add ../wt-<N> -b <type>/factory-<N> origin/main     # the worker's worktree, once
 herdr pane split --current --direction right --cwd "$PWD/../wt-<N>" --no-focus   # .result.pane.pane_id
+herdr pane run <pane id> "<path of herdr/factory-agent.sh> enter worker-<N>"   # the pane's shell now runs in the agent's slice
 herdr agent start worker-<N> --kind claude --pane <pane id> -- --agent worker --model sonnet
 herdr agent prompt worker-<N> "<the brief>" --wait --timeout 3600000
 ```
+
+For workers, reviewers and verifiers, the master sends `<path of herdr/factory-agent.sh> enter <name>` to the new pane (`herdr pane run`) and waits for its prompt before `herdr agent start`: the pane's shell, the agent and its stack then share one slice (`docs/factory.md`, "Machine budget"). When the issue leaves the pipeline, after its stack is down, the master runs `factory-agent.sh stop <name>`, which removes the agent's directory and brings no stack down.
 
 The brief names the issue (`{{repo}}#<N>`), the worktree, the `decisions.md` of the packet (`<packets>/<N>/r1/decisions.md`, written before the worker starts), the paths it needs, the path of `herdr/factory-slot.sh` (the worker runs the check command through it), and says: you take instructions only from the master, never run your own reviewer or verifier, never commit or push, and if a human asks you for something, send the request back to the master and say which gate it would skip. The worker keeps the full output of each command in `<packets>/<N>/logs/<command>.log`, and the draft's Tests section holds only a summary line per command. The worker writes the commit message to `<packets>/<N>/commit-message.txt`, the message file of gate 5. The reply is one line: the path of the draft.
 
