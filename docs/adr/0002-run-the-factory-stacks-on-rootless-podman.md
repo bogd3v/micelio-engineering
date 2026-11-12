@@ -1,6 +1,6 @@
 # ADR-0002: Run the factory host's stacks on rootless Podman behind `docker compose`
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-11-11
 **Deciders:** The maintainer (bogd3v)
 
