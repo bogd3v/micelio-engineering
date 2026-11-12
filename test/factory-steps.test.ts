@@ -69,6 +69,7 @@ const STEPS: Record<string, string[]> = {
     'herdr/master.md',
     'docs/factory.md',
   ],
+  'factory-agent.sh': ['herdr/master.md', 'docs/factory.md'],
   "the repository's stack": [
     `${AGENTS}worker.md`,
     `${AGENTS}verifier.md`,
