@@ -4,7 +4,7 @@ Instructions for coding agents working in this repository. It holds Micelio's sh
 
 ## Engineering standard
 
-The rules shared by every Micelio repository live in [`docs/engineering-standard.md`](docs/engineering-standard.md), the core, and in the profiles of [`docs/standard/`](docs/standard/). This repository follows standard version 2.1 with the TypeScript profile (`standard: 2.1`, `profile: typescript`; `npm run lint:standard` checks the core and `docs/standard/typescript.md` against the hashes bundled in `@micelio/eslint-config`). This file adds what is specific to this repository and never relaxes the standard. This is the canonical copy of the core and of the three profiles (`typescript.md`, `rust.md`, `site-engine.md`): a change to the standard is a pull request here titled `docs(standard): …` (section 16), and `.github/workflows/standard-sync.yml` carries it to the other repositories (`docs/standard-sync.md`).
+The rules shared by every Micelio repository live in [`docs/engineering-standard.md`](docs/engineering-standard.md), the core, and in the profiles of [`docs/standard/`](docs/standard/). This repository follows standard version 2.2 with the TypeScript profile (`standard: 2.2`, `profile: typescript`; `npm run lint:standard` checks the core and `docs/standard/typescript.md` against the hashes bundled in `@micelio/eslint-config`). This file adds what is specific to this repository and never relaxes the standard. This is the canonical copy of the core and of the three profiles (`typescript.md`, `rust.md`, `site-engine.md`): a change to the standard is a pull request here titled `docs(standard): …` (section 16), and `.github/workflows/standard-sync.yml` carries it to the other repositories (`docs/standard-sync.md`).
 
 ## Commands
 
