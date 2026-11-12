@@ -7,5 +7,6 @@
   "Micelio · Garantías medibles": { "releaseLine": "0.7", "front": "Foundations" },
   "Micelio · Builder, fase 2 — Componer": { "releaseLine": "0.7", "front": "Builder" },
   "Micelio · Builder, fase 3 — Personalizar": { "releaseLine": "0.7", "front": "Builder" },
-  "Micelio · Fábrica en otros lenguajes": { "releaseLine": "later", "front": "Foundations" }
+  "Micelio · Fábrica en otros lenguajes": { "releaseLine": "later", "front": "Foundations" },
+  "Micelio · Fábrica sobre Podman": { "releaseLine": "later", "front": "Foundations" }
 }
