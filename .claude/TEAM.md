@@ -14,7 +14,7 @@ This repository's work runs through the Micelio factory ([`docs/factory.md`](../
 
 The model is chosen when the agent is started; the prompts do not fix it.
 
-## What stands in for Docker
+## What stands in for the stack
 
 This repository has no Docker image; [`AGENTS.md`](../AGENTS.md) names the run that stands in for it and who runs it where.
 
