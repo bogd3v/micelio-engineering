@@ -709,9 +709,9 @@ describe('the backfill', () => {
     await expect(backfillFields(gh, { ...params, milestone: 'Otra', config })).resolves.toEqual([
       'nothing changed: the milestone "Otra" has no entry in .github/project-fields.json',
     ])
-    const typo = { [CORTE]: { releaseLine: '0.8', front: 'Fediverse' } }
+    const typo = { [CORTE]: { releaseLine: '0.9', front: 'Fediverse' } }
     await expect(backfillFields(gh, { ...params, milestone: CORTE, config: typo })).rejects.toThrow(
-      'the Release line of project bogd3v/1 has no option "0.8"'
+      'the Release line of project bogd3v/1 has no option "0.9"'
     )
     expect(writes).toEqual([])
   })
