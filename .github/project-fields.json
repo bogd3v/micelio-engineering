@@ -10,5 +10,6 @@
   "Micelio · Corte 0.8 — El núcleo 0.4": { "releaseLine": "0.8", "front": "Plugin core" },
   "Micelio · Catálogo de bloques": { "releaseLine": "later", "front": "Plugin core" },
   "Micelio · Fábrica en otros lenguajes": { "releaseLine": "later", "front": "Foundations" },
-  "Micelio · Fábrica sobre Podman": { "releaseLine": "later", "front": "Foundations" }
+  "Micelio · Fábrica sobre Podman": { "releaseLine": "later", "front": "Foundations" },
+  "Micelio · Fábrica por carriles": { "releaseLine": "later", "front": "Foundations" }
 }
