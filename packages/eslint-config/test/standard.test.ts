@@ -318,8 +318,14 @@ describe('the canonical copy of this repository', () => {
       expect(found, rule).toBe(1)
     }
     // every other line of 1.8 (headings, table separators and short code lines aside) is kept word
-    // for word in one file, except the three lines 2.0 rewrites
-    const rewritten = [/^Version 1\.8 /, /^These are the rules shared/, /^\| `AGENTS\.md` \|/]
+    // for word in one file, except the three lines 2.0 rewrites and the rule of section 13 that 2.2
+    // rewords (the verifier re-creates the repository's stack, on any engine)
+    const rewritten = [
+      /^Version 1\.8 /,
+      /^These are the rules shared/,
+      /^\| `AGENTS\.md` \|/,
+      /^- \*\*Review and verify by others\.\*\*/,
+    ]
     const kept = lines.filter(
       (line) =>
         line.trim().length >= 12 &&
@@ -339,6 +345,11 @@ describe('the canonical copy of this repository', () => {
     expect(micelioOnly).not.toMatch(/^## /m)
     const tools = /\bnpm (?:run|ci|test|install|audit|exec)\b|TSDoc|\.nvmrc/g
     expect(core.match(tools) ?? []).toEqual([])
+  })
+
+  it('the core names no container engine outside the Micelio only section', () => {
+    const [core = ''] = copy.toString('utf8').split('\n## Micelio only\n')
+    expect(core.match(/\b(?:Docker|Podman)\b/gi) ?? []).toEqual([])
   })
 
   it('is what AGENTS.md pins', () => {
