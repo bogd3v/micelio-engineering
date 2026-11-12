@@ -169,7 +169,7 @@ The stack is the repository's images and compose files, on the container engine 
 - **The worker** proves its acceptance criteria on the repository's stack before gate 2.
 - **The verifier** re-creates that stack from scratch from a clean copy of the worktree (nothing is committed before gate 5) and runs the check command and the suites again there, at gate 4.
 - **The maintainer** tests on the stack only what an operator or an editor sees: the admin UI, variables, migrations, Compose. The rest is covered by the worker's and the verifier's runs and by the integration test on the stack when a milestone closes.
-- **What it runs on, by machine.** On the factory host: rootless Podman, reached by the same `docker compose` through `podman.socket` ([ADR-0002](adr/0002-run-the-factory-stacks-on-rootless-podman.md)). In CI and production: Docker, and CI is the contract (ADR-0002, Decision 4).
+- **What it runs on, by machine.** On the factory host: rootless Podman, reached by the same `docker compose` through `podman.socket` ([ADR-0002](adr/0002-run-the-factory-stacks-on-rootless-podman.md); the host's rules are in [`herdr/master.md`](../herdr/master.md), "The host's runtime"). In CI and production: Docker, and CI is the contract (ADR-0002, Decision 4).
 - A repository without a stack of its own names in its `AGENTS.md` the run that stands in for it.
 
 ## The learning loop

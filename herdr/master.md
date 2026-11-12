@@ -43,6 +43,17 @@ An issue that fails the by-hand read is set back to Todo (the `ready` label stay
 
 The lease's `--agent` is the agent's name in herdr-core (`hc run --name <name>`). Before each worker, `herdr/factory-slot.sh reap`, then `herdr/factory-slot.sh acquire --pool workers --agent worker-<N>`; on exit 75 the issue waits. When the issue leaves the pipeline, `herdr/factory-slot.sh release --agent worker-<N>` and `docker compose -p <project> down -v` for its stack. Start workers with `nice -n 10`; reviewers and verifiers keep normal priority so the gates run first. `factory-slot.sh status` shows the slots and leases in use and any `orphan`; raise an `orphan` with the maintainer, never kill it. The budget is explained in `docs/factory.md`, "Machine budget".
 
+## The host's runtime
+
+The factory host's engine is rootless Podman, reached through `podman.socket`, a user unit (`systemctl --user enable --now podman.socket`), by the same `docker` and `docker compose` binaries, with `DOCKER_HOST=unix://$XDG_RUNTIME_DIR/podman/podman.sock`. The start command sets it for each agent; in a shell of the maintainer it is set by hand. `docker version --format '{{range .Server.Components}}{{.Name}} {{end}}'` names `Podman Engine` when it is set ([ADR-0002](../docs/adr/0002-run-the-factory-stacks-on-rootless-podman.md), `docs/adr/0002-measurements.md`).
+
+- **Bind mounts.** A worktree or a clean copy is mounted with `--security-opt label=disable` or `:z`, as with Docker.
+- **Ownership.** A container that writes to a mounted copy must leave it owned by the user: run it as root in the container (rootless Podman maps that root to the host user), or `podman run --userns=keep-id --user "$(id -u):$(id -g)"`, or `userns_mode: keep-id` in compose. `docker run --userns=keep-id` is refused by the Docker CLI (`docker: --userns: invalid USER mode`), and `docker run --user "$(id -u):$(id -g)"` without `keep-id` cannot write to the mount.
+- **Images.** An image built with `podman build` uses `--format docker`, or its `HEALTHCHECK` is dropped.
+- **Builds.** `docker compose build` and `docker build` through the socket run in one shared `buildx_buildkit_default` container that stays after the build. It is not an orphan of an agent and is not removed while a build runs. Builds are outside every agent's slice and are limited by the `heavy` pool of `factory-slot.sh` (`docs/factory.md`, "Machine budget").
+- **Stores.** The images and volumes of Docker and of Podman are separate stores: the first build on Podman repeats the pulls. `podman system df` and `docker system df` give each store's size.
+- **CI and production stay on Docker** (ADR-0002, Decision 4). A difference between the engines is a finding of this runbook, written as a note in the repository's `AGENTS.md`, "The factory", never a compose change for one engine.
+
 ## Starting an agent
 
 A pane must be at an interactive shell prompt, with nothing running in the foreground. Read ids from the JSON each command returns; never guess them.
