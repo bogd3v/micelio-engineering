@@ -240,19 +240,19 @@ describe('the repository template', () => {
     }
   })
 
-  it('asks the pull request for the learning, the commands, their output and the Docker', () => {
+  it('asks the pull request for the learning, the commands, their output and the stack', () => {
     const template = readFileSync(join(project, '.github/pull_request_template.md'), 'utf8')
     expect(template.match(/Instructions that were wrong or missing/g)).toHaveLength(1)
     const tests = template.slice(template.indexOf('## Tests'), template.indexOf('## Instructions'))
     expect(tests).toMatch(/command/)
     expect(tests).toMatch(/real output/)
-    expect(tests).toMatch(/Docker/)
+    expect(tests).toMatch(/stack/)
   })
 
-  it('ships ship-pr with the Docker-by-risk rule, the maintainer-run commit and the time line', () => {
+  it('ships ship-pr with the stack-by-risk rule, the maintainer-run commit and the time line', () => {
     const skill = readFileSync(join(project, '.claude/skills/ship-pr/SKILL.md'), 'utf8')
     expect(skill).toMatch(/^name: ship-pr$/m)
-    expect(skill).toContain('## Docker by risk')
+    expect(skill).toContain('## The stack by risk')
     expect(skill).toContain('git commit -s -F <message file>')
     expect(skill).toContain('--force-with-lease=<branch>:<sha>')
     expect(skill).toContain('time: <minutes>m diff|report')

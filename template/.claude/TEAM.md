@@ -10,7 +10,7 @@ The main session acts as **tech lead**: it reads the issue, does the work or han
 | `master`   | One per milestone, run as the main session: gate 1, one worker per ready issue, the reviewer and the verifier after it |
 | `worker`   | One per issue, in its own worktree: the change, its evidence and the pull request draft                                |
 | `reviewer` | Gate 3: a new agent that reviews the diff with no context from the worker                                              |
-| `verifier` | Gate 4: a new agent that re-creates the repository's Docker and reruns every reported command                          |
+| `verifier` | Gate 4: a new agent that re-creates the repository's stack and reruns every reported command                           |
 
 ## Workflow
 
