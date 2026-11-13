@@ -1,6 +1,6 @@
 # ADR-0003: Route each issue through a lane set by its risk
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-11-12
 **Deciders:** The maintainer
 
