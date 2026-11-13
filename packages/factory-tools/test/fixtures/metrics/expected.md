@@ -17,7 +17,7 @@
 | #9052 | 0 | 2 | 0 | 1 | 0 | 0 |
 | Total | 5 | 21 | 9 | 5 | 2 | 1 |
 
-| Pull request | Issue | Changed lines | Maintainer corrections | Red required checks | Findings without a log row | Defects after merge | Minutes, diff | Minutes, report | Minutes, Docker or test | Silent approvals | Reports read first | Tokens, by role |
+| Pull request | Issue | Changed lines | Maintainer corrections | Red required checks | Findings with no log row (any kind) | Defects after merge | Minutes, diff | Minutes, report | Minutes, Docker or test | Silent approvals | Reports read first | Tokens, by role |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | #46 | #35 | 18 | 0 | 0 | 0 | 0 | 2 | 0 | — | 0 | 0 | worker 225000 (cache 1400000), reviewer 89000 (cache 400000) |
 | #47 | #35 | 405 | 0 | 0 | 0 | 0 | 10 | 0 | — | 0 | 0 | worker 225000 (cache 1400000), reviewer 89000 (cache 400000) |

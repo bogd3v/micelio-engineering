@@ -177,7 +177,7 @@ The master sends the worker only the Blocking and Important findings, as a file,
 
 ## Correction log
 
-Each correction the maintainer, the reviewer or the verifier sends back is one line in a comment on the issue, posted at once:
+Each correction the maintainer, the reviewer or the verifier sends back that could become a check, a skill or a rule (a wrong instruction, a missing test, a step done by hand twice, an issue that named the wrong thing) is one line in a comment on the issue, posted at once; a correction of the change itself stays in the gate's comment:
 
 ```text
 factory-log | 2026-10-24 | #39 | the reviewer found a retry loop that never stops when `maxAttempts` is 0 | test | -
@@ -187,7 +187,7 @@ The format is `factory-log | <date> | <issue> | <what> | <category> | <destinati
 
 ### The `scribe` step
 
-At milestone close, or when the maintainer asks, the master starts `scribe` (sonnet) in `../wt-scribe`. The scribe collects every `factory-log |` line posted since the last sync, with the parser `factory-tools metrics` uses (`parseLogLines`), skips the rows already in `docs/factory-log.md`, appends the rest in the order they were posted (a `|` inside a cell is written `\|`, and a `-` destination is an empty cell) and prepares a `chore(factory): log the corrections of {{milestone}}` pull request. It follows the same delivery rule as any change: the scribe never commits, and the master ships it under the sign-off rule below. That pull request has no issue of its own: it says `Refs #{{epic}}`, its `N` is the epic, and the phrase is `approved, sign off #{{epic}}`.
+When an issue's pull request is merged, or when the maintainer asks, the master starts `scribe` (sonnet) in `../wt-scribe`; a milestone's close runs it once more for what is left. The scribe collects the `factory-log |` lines of that issue (every line posted since the last sync, when the maintainer asks or at close), with the parser `factory-tools metrics` uses (`parseLogLines`), skips the rows already in `docs/factory-log.md`, appends the rest in the order they were posted (a `|` inside a cell is written `\|`, and a `-` destination is an empty cell) and prepares a `chore(factory): log the corrections of #{{issue}} or {{milestone}}` pull request. It follows the same delivery rule as any change: the scribe never commits, and the master ships it under the sign-off rule below. That pull request has no issue of its own: it says `Refs #{{epic}}`, its `N` is the epic, and the phrase is `approved, sign off #{{epic}}`.
 
 ## Gate 5 — delivery
 

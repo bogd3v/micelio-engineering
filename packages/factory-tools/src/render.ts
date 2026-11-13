@@ -9,7 +9,7 @@ import type { Metrics, PullRow, RoleTokens } from './metrics.js'
  * role (the `master` and `canary` records included, cache reads shown) and two summary lines, the
  * tokens per merged pull request without a later fix without and with cache reads; a pull request's
  * issue record is counted once in them, however many pull requests repeat its cell. The same holds
- * for `Findings without a log row` in the totals row.
+ * for `Findings with no log row (any kind)` in the totals row.
  *
  * @param date - The day of the run, `YYYY-MM-DD`.
  */
@@ -70,7 +70,7 @@ export function renderMetrics(result: Metrics, date: string): string {
       'Changed lines',
       'Maintainer corrections',
       'Red required checks',
-      'Findings without a log row',
+      'Findings with no log row (any kind)',
       'Defects after merge',
       'Minutes, diff',
       'Minutes, report',
