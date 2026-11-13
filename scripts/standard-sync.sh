@@ -30,6 +30,11 @@ set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 work=$(mktemp -d)
+# The work directory (four clones, a Node toolchain and its tarball) goes when the script ends: after
+# a success, after a failure and, through the exit the two signals force, after SIGINT or SIGTERM.
+trap 'rm -rf "$work"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 branch="docs/standard-sync-${VERSION}"
 title="docs(standard): sync to ${VERSION}"
 failed=0

@@ -6,7 +6,7 @@
 //
 // The reusable workflows can only be run by GitHub; docs/template.md says how to prove them.
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readdirSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -24,27 +24,32 @@ function run(command, args, cwd) {
   execFileSync(command, args, { cwd, stdio: 'inherit' })
 }
 
-run('npm', ['run', 'build'], root)
-for (const name of ['eslint-config', 'prettier-config', 'tsconfig']) {
-  run('npm', ['pack', '--pack-destination', tarballs, '-w', `@micelio/${name}`], root)
+try {
+  run('npm', ['run', 'build'], root)
+  for (const name of ['eslint-config', 'prettier-config', 'tsconfig']) {
+    run('npm', ['pack', '--pack-destination', tarballs, '-w', `@micelio/${name}`], root)
+  }
+
+  // The commit only has to look like one: nothing here calls the workflows.
+  const files = createRepository({
+    target: project,
+    description: 'A repository created from the template, to prove it passes its own checks.',
+    ref: '0'.repeat(40),
+    install: false,
+  })
+  console.log(`Created ${files.length} files in ${project}`)
+
+  const packed = readdirSync(tarballs).map((file) => join(tarballs, file))
+  run('npm', ['install', '--save-dev', ...packed], project)
+  // lint:ee scans the files git tracks, as in a real repository, and reuse reads .gitignore only inside
+  // one; without it node_modules is scanned.
+  run('git', ['init', '--quiet'], project)
+  run('git', ['add', '--all'], project)
+  run('npm', ['run', 'check'], project)
+  run('npm', ['run', 'build'], project)
+  run('reuse', ['lint'], project)
+  console.log('A repository created from the template passes npm run check, build and reuse lint.')
+} finally {
+  // The work directory (node_modules included) goes whether the run passes or fails.
+  rmSync(work, { recursive: true, force: true })
 }
-
-// The commit only has to look like one: nothing here calls the workflows.
-const files = createRepository({
-  target: project,
-  description: 'A repository created from the template, to prove it passes its own checks.',
-  ref: '0'.repeat(40),
-  install: false,
-})
-console.log(`Created ${files.length} files in ${project}`)
-
-const packed = readdirSync(tarballs).map((file) => join(tarballs, file))
-run('npm', ['install', '--save-dev', ...packed], project)
-// lint:ee scans the files git tracks, as in a real repository, and reuse reads .gitignore only inside
-// one; without it node_modules is scanned.
-run('git', ['init', '--quiet'], project)
-run('git', ['add', '--all'], project)
-run('npm', ['run', 'check'], project)
-run('npm', ['run', 'build'], project)
-run('reuse', ['lint'], project)
-console.log('A repository created from the template passes npm run check, build and reuse lint.')

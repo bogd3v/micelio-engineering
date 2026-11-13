@@ -1,9 +1,9 @@
 import { spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { tempDir } from './support/temp.js'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const CHECK = readFileSync(join(ROOT, '.github/workflows/check.yml'), 'utf8')
@@ -116,7 +116,7 @@ function stepNames(id: string): string[] {
 
 describe('run()', () => {
   it('a step script does not read the .bashrc of HOME', () => {
-    const home = mkdtempSync(join(tmpdir(), 'bashrc-'))
+    const home = tempDir('bashrc-')
     writeFileSync(join(home, '.bashrc'), 'echo BASHRC-MARKER >&2\n')
     const result = run('echo ok', { HOME: home })
     expect(result.output).not.toContain('BASHRC-MARKER')
@@ -206,7 +206,7 @@ describe('check.yml', () => {
     const env = { PM: 'echo', LINT_STANDARD_VERSION: '0.2.7', TOOLS_REF: sha }
 
     // With a package.json: its lint:standard, and no output, so the action's steps are skipped.
-    const npm = mkdtempSync(join(tmpdir(), 'micelio-standard-'))
+    const npm = tempDir('micelio-standard-')
     writeFileSync(join(npm, 'package.json'), '{}\n')
     writeFileSync(join(npm, 'out'), '')
     const withPackage = run(script, { ...env, GITHUB_OUTPUT: join(npm, 'out') }, npm)
@@ -215,8 +215,8 @@ describe('check.yml', () => {
     expect(readFileSync(join(npm, 'out'), 'utf8')).toBe('')
 
     // Without one: the output that runs the action, and no npm.
-    const bare = mkdtempSync(join(tmpdir(), 'micelio-standard-'))
-    const out = join(tmpdir(), `micelio-standard-out-${String(process.pid)}`)
+    const bare = tempDir('micelio-standard-')
+    const out = join(tempDir('micelio-standard-out-'), 'out')
     writeFileSync(out, '')
     const withoutPackage = run(script, { ...env, GITHUB_OUTPUT: out }, bare)
     expect(withoutPackage.status).toBe(0)
@@ -243,8 +243,8 @@ describe('check.yml', () => {
     const script = stepScript('checks', 'Copy of the standard')
     const sha = 'a'.repeat(40)
     const env = { PM: 'echo', LINT_STANDARD_VERSION: '0.2.7', TOOLS_REF: sha }
-    const bare = mkdtempSync(join(tmpdir(), 'micelio-standard-'))
-    const out = `${bare}.out`
+    const bare = tempDir('micelio-standard-')
+    const out = join(tempDir('micelio-standard-out-'), 'out')
     for (const [name, value, says] of [
       ['LINT_STANDARD_VERSION', '', 'set lint-standard-version'],
       ['TOOLS_REF', '', 'set tools-ref'],
@@ -269,7 +269,7 @@ describe('check.yml', () => {
   it('the rust profile runs the check line of AGENTS.md, or the input when it is set', () => {
     const script = stepScript('checks', 'Test')
     const rust = { PROFILE: 'rust' }
-    const dir = mkdtempSync(join(tmpdir(), 'micelio-check-'))
+    const dir = tempDir('micelio-check-')
     const agents = [
       '# AGENTS.md',
       '',
@@ -346,7 +346,7 @@ function runAction(
   env: Record<string, string>,
   stub: { line: string; exit: number } = { line: 'Standard 1.8 matches.', exit: 0 }
 ): { status: number | null; output: string; outputs: string; temp: string; repo: string } {
-  const dir = mkdtempSync(join(tmpdir(), 'micelio-action-'))
+  const dir = tempDir('micelio-action-')
   const bin = join(dir, 'bin')
   const temp = join(dir, 'temp')
   const repo = join(dir, 'repo')

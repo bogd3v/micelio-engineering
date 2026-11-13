@@ -1,9 +1,9 @@
 import { spawnSync } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { tempDir } from './support/temp.js'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const WORKFLOW = readFileSync(join(ROOT, '.github/workflows/release.yml'), 'utf8')
@@ -22,7 +22,7 @@ function check(
   pkg: object,
   env: Record<string, string>
 ): { status: number | null; output: string } {
-  const base = mkdtempSync(join(tmpdir(), 'micelio-release-'))
+  const base = tempDir('micelio-release-')
   const bin = join(base, 'bin')
   mkdirSync(bin)
   // No tag exists: the stub answers every `gh api` call with a failure.

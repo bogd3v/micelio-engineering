@@ -21,6 +21,8 @@ npm run build && node packages/factory-tools/dist/cli.js lint-lane <owner/repo#n
 npm run metrics --workspace packages/factory-tools -- --milestone "<title>" # the factory's numbers for a milestone (needs gh; --fixtures <dir> reads a recording instead)
 ```
 
+The tests and the verify scripts write only under `TMPDIR` and remove what they write: `test/setup/tmpdir.ts` (the `globalSetup` of `vitest.config.ts`) gives each run its own `TMPDIR` and fails the run that leaves an entry in it. Node's `node-compile-cache` is the one entry it ignores.
+
 What the commands need besides Node 22: the `node:22` image has `git` but not `jq`, `gh` or `reuse`.
 `npm run check` needs `git` and `jq` (`scripts/standard-sync.sh` calls `jq`);
 `npm run verify:template` also needs `reuse` 6.2.0, the version CI pins (an older `reuse` does not

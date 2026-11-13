@@ -1,16 +1,9 @@
 import { spawnSync } from 'node:child_process'
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-} from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { beforeAll, describe, expect, it } from 'vitest'
+import { tempDir } from './support/temp.js'
 import { lintStandard, readPin } from '../packages/eslint-config/src/standard.js'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
@@ -76,7 +69,7 @@ describe('the repository template', () => {
   let created: string[]
 
   beforeAll(() => {
-    project = join(mkdtempSync(join(tmpdir(), 'template-test-')), 'micelio-example')
+    project = join(tempDir('template-test-'), 'micelio-example')
     const result = generate(project, '--description', 'An example project.')
     if (result.status !== 0) throw new Error(result.stderr)
     created = filesOf(project)
@@ -260,14 +253,14 @@ describe('the repository template', () => {
   })
 
   it('only creates a new repository, and rejects names and descriptions it cannot use', () => {
-    const occupied = join(mkdtempSync(join(tmpdir(), 'template-test-')), 'taken')
+    const occupied = join(tempDir('template-test-'), 'taken')
     mkdirSync(occupied)
     writeFileSync(join(occupied, 'README.md'), 'mine')
     expect(generate(occupied)).toMatchObject({ status: 1 })
     expect(generate(occupied).stderr).toContain('not empty')
     expect(readFileSync(join(occupied, 'README.md'), 'utf8')).toBe('mine')
 
-    const parent = mkdtempSync(join(tmpdir(), 'template-test-'))
+    const parent = tempDir('template-test-')
     expect(generate(join(parent, 'Bad_Name')).stderr).toContain('not a repository name')
     expect(generate(join(parent, 'ok-name'), '--description', 'say "hi"').stderr).toContain(
       'may not contain'

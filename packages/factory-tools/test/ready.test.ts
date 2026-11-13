@@ -1,7 +1,7 @@
-import { chmod, mkdtemp, readFile, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { chmod, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { tempDir } from '../../../test/support/temp.js'
 import { GhError, MARKER, applyReadiness, defaultGh, neutralise, runReady } from '../src/ready.js'
 import type { Gh, ReadyParams } from '../src/ready.js'
 import { backfillFields, parseProjectFields, runBackfill } from '../src/fields.js'
@@ -335,7 +335,7 @@ describe('the gh adapter', () => {
   })
 
   it('turns "gh: Not Found (HTTP 404)" on stderr into a GhError with status 404', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'fake-gh-'))
+    const dir = tempDir('fake-gh-')
     const script = join(dir, 'gh')
     await writeFile(
       script,

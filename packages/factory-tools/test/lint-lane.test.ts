@@ -1,9 +1,9 @@
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { tempDir } from '../../../test/support/temp.js'
 import { createDeps, issuePaths, matchGlob, parseLanes, runLintLane } from '../src/lane.js'
 import type { LintLaneDeps } from '../src/lane.js'
 
@@ -129,7 +129,7 @@ describe('lint-lane', () => {
   })
 
   it('--diff counts untracked files', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'lint-lane-'))
+    const dir = tempDir('lint-lane-')
     const git = (...args: string[]): string => execFileSync('git', args, { cwd: dir }).toString()
     git('init', '-q', '-b', 'main')
     git('config', 'user.email', 'a@example.com')
@@ -154,7 +154,7 @@ describe('lint-lane', () => {
   })
 
   it('--diff lists the old name of a rename and unquoted non-ASCII paths', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'lint-lane-'))
+    const dir = tempDir('lint-lane-')
     const git = (...args: string[]): string => execFileSync('git', args, { cwd: dir }).toString()
     git('init', '-q', '-b', 'main')
     git('config', 'user.email', 'a@example.com')
