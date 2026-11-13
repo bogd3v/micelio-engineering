@@ -33,7 +33,7 @@ In the container, run `git config --global --add safe.directory <worktree path>`
 
 ## Structure
 
-- `packages/` — the configuration packages `@micelio/eslint-config`, `@micelio/tsconfig` and `@micelio/prettier-config`, each with its own version and published by `.github/workflows/publish-packages.yml` from a tag `<package>-vX.Y.Z`; and `@micelio/factory-tools`, the factory's commands (`lint-issue`, `lint-lane`, `issue-ready`, `project-fields-backfill` and `metrics`, their rules and columns in `packages/factory-tools/README.md`), not published yet.
+- `packages/` — the configuration packages `@micelio/eslint-config`, `@micelio/tsconfig` and `@micelio/prettier-config`, each with its own version and published by `.github/workflows/publish-packages.yml` from a tag `<package>-vX.Y.Z`; and `@micelio/factory-tools`, the factory's commands (`lint-issue`, `lint-lane`, `issue-ready`, `verify-draft`, `project-fields-backfill` and `metrics`, their rules and columns in `packages/factory-tools/README.md`), not published yet.
 - `fixtures/basic/` — a project that uses only the three configuration packages; their tests run against it.
 - `fixtures/rust-basic/` — a minimal Rust library that `ci.yml` checks through `check.yml` with `profile: rust`.
 - `fixtures/no-npm/` — a repository without npm (`AGENTS.md` pinning 1.8 and a copy of the standard) that `ci.yml` checks with the `lint-standard` action.

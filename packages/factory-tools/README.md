@@ -4,8 +4,10 @@ The commands of the Micelio software factory: `lint-issue` (Gate 1, the Definiti
 script), [`issue-ready`](#issue-ready) (what the workflow does with its result, and the project fields of
 `project-fields-backfill`),
 [`metrics`](#metrics) (the factory's numbers for a milestone), [`lint-draft`](#lint-draft) (the
-shape of a draft's section "Instructions that were wrong or missing") and
-[`lint-lane`](#lint-lane) (an issue's lane, and a diff checked against it).
+shape of a draft's section "Instructions that were wrong or missing"),
+[`lint-lane`](#lint-lane) (an issue's lane, and a diff checked against it) and
+[`verify-draft`](#verify-draft) (gate 4 of the `normal` lane: a draft's commands rerun and their
+numbers compared).
 
 ## lint-issue
 
@@ -135,6 +137,70 @@ or a file cannot be read.
 - A line in neither shape, a missing section and an empty one fail.
 
 It does not judge whether a "Nothing" is true.
+
+## `verify-draft`
+
+Gate 4 of the `normal` lane (ADR-0003, D7, `docs/adr/0003-route-each-issue-through-a-lane-set-by-its-risk.md`)
+is this script instead of the verifier agent: it reruns the commands of a draft's Tests section and
+compares their numbers. The `full` lane keeps the verifier (`docs/factory.md`, gate 4).
+
+```bash
+node <checkout>/packages/factory-tools/dist/cli.js verify-draft --draft <draft> --logs <packet>/logs --cwd <clean copy>
+```
+
+Nothing is committed before gate 5, so `--cwd` is a clean copy: a fresh clone at the merge base with
+the worktree's diff applied (`.claude/skills/verify-pr/SKILL.md`, "Build a clean copy"), and the
+master runs the command through `herdr/factory-slot.sh run`. `--cwd` defaults to the current
+directory. The script never builds or starts a stack and never names an engine: a draft whose
+commands need the stack belongs to `full`.
+
+**What it reads.** The bullets of the draft's `## Tests` section, up to the next heading of the same
+or a higher level. A bullet that starts with a command in backticks is a command, and the rest of
+the line is its summary:
+
+```text
+- `npm test`: exit 0, 23 test files, 482 passed (`logs/npm-test.log`)
+```
+
+- `exit <n>` is the expected exit code.
+- Each `<n> <word>` is a figure: the output of the run must hold the same `<n> <word>` (`482 passed`
+  matches `Tests  482 passed (482)`; a label before the number counts too: `23 test files` matches
+  `Test Files  23 passed (23)`, `482 tests` matches `Tests  482 passed (482)`). Thousands may be written with a space or a comma. `round <n>`
+  and anything in backticks are not figures.
+- `<k> failed of <n>` marks a figure the repository does not reproduce: the command runs `n` times,
+  the number of runs with a non-zero exit is compared as `variance`, and the exit code is not; with
+  no log it is a mismatch, as any command.
+- `logs/<file>` names the file of `--logs` that holds the full output; a command with no such file
+  is a mismatch.
+- A bullet that is under a line, or contains words, `without the change`, and does not report
+  `exit 0`, is a run shown failing without the change: it is skipped (a run that reports `exit 0`
+  is rerun whatever it says).
+- A bullet that does not start with a command (and is not `no test: …`) is a criterion for the
+  master.
+
+**What it runs.** Only a repository command, without a shell, in `--cwd`: a line of the first
+`## Commands` block of the `AGENTS.md` at the merge base (`git show HEAD:AGENTS.md` in the clean
+copy, never the file the diff may have changed; `--cwd` must be a git clean copy) (the words before the first `<placeholder>`, plus the
+arguments the draft gives), or `npm test` / `npm run <script>` for a script of its `package.json`.
+Any other command, and any with a pipe, `;`, `&&`, a redirection, `$(…)`, a backtick, a URL or a
+path outside the copy, is not run.
+
+**What it prints**, one line per bullet, then a verdict line in the words of the `verify-pr` skill:
+
+| Line                                   | Meaning                                                               |
+| -------------------------------------- | --------------------------------------------------------------------- |
+| `match: <command>`                     | the exit code and every figure agree with the draft                   |
+| `mismatch: <command>: <what>; …`       | a different exit code or figure, a figure with no counterpart, no log |
+| `variance: <command>: draft …, got …`  | a `k failed of n` figure; never a mismatch                            |
+| `skipped: <command> (shown failing …)` | a run shown failing without the change                                |
+| `not run: <command>`                   | not a repository command; for the master, not a mismatch              |
+| `not checked: <criterion>`             | a bullet that is not a command; for the master                        |
+| `Verdict: Pass · 0 mismatches`         | no command mismatches (`Verdict: Red · K mismatches` otherwise)       |
+
+A mismatch counts commands, not figures. Exit 0 when nothing mismatches, 1 otherwise, 2 when the
+arguments are wrong or a file cannot be read, or the draft has no Tests section. It does not rerun
+the tests the draft names as failing without the change, and it does not check the acceptance
+criteria: the master reads the `skipped` and `not checked` lines.
 
 ## metrics
 

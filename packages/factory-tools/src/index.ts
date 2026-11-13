@@ -55,3 +55,12 @@ export { SECTION, createDeps, lintDraft, runLintDraft } from './lint-draft.js'
 export type { DraftContext, DraftProblem, LintDraftDeps, LintDraftResult } from './lint-draft.js'
 export { LANES, NORMATIVE, issueLane, diffLane, parseLanes, runLintLane } from './lane.js'
 export type { Lane, LaneGlobs, LaneResult, LintLaneDeps, LintLaneResult } from './lane.js'
+export {
+  TESTS_SECTION,
+  agentsCommands,
+  defaultVerifyDeps,
+  runVerifyDraft,
+  tokenize,
+  verifyDraft,
+} from './verify-draft.js'
+export type { EntryOutcome, VerifyDraftDeps, VerifyDraftResult } from './verify-draft.js'
