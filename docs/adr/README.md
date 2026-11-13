@@ -6,4 +6,4 @@ Decisions about the Micelio engineering standard and the shared tooling, the one
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------ | -------- |
 | [0001](0001-split-the-standard-into-a-core-and-language-profiles.md) | Split the standard into a core and language profiles                     | Accepted |
 | [0002](0002-run-the-factory-stacks-on-rootless-podman.md)            | Run the factory host's stacks on rootless Podman behind `docker compose` | Accepted |
-| [0003](0003-route-each-issue-through-a-lane-set-by-its-risk.md)      | Route each issue through a lane set by its risk                          | Proposed |
+| [0003](0003-route-each-issue-through-a-lane-set-by-its-risk.md)      | Route each issue through a lane set by its risk                          | Accepted |
