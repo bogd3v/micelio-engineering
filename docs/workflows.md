@@ -112,7 +112,7 @@ jobs:
 
 **What it does.** It checks out the pull request with its history and the tools at `tools-ref`, builds the tools and moves them out of the workspace (the commands `verify-draft` runs, such as `prettier --check .`, read the whole workspace), then runs `lint-lane --diff <the pull request's base SHA> --lane normal` (`packages/factory-tools/README.md`). Then:
 
-- exit 0, the diff fits `normal` (or `express`): it sets up Node from `.nvmrc` as `check.yml` does for `typescript`, runs the `install:` line of the first `## Commands` block of `AGENTS.md`, and runs `verify-draft --draft <file> --cwd .` on the pull request's description. The job fails when `verify-draft` exits non-zero. There is no `logs/` directory in CI, so it runs without `--logs`: a command with no log is not a mismatch and the output says `logs: not checked`;
+- exit 0, the diff fits `normal` (or `express`): it sets up Node from `.nvmrc` as `check.yml` does for `typescript`, runs the `install:` line of the first `## Commands` block of `AGENTS.md`, and runs `verify-draft --draft <file> --cwd .` on the pull request's description. The job fails when `verify-draft` exits non-zero, which includes a description whose Tests section names no command it can run (`no command ran`, exit 1). There is no `logs/` directory in CI, so it runs without `--logs`: a command with no log is not a mismatch and the output says `logs: not checked`;
 - exit 1, the diff does not fit: it prints `full lane: gate 4 is the verifier` and the job passes;
 - exit 2: the job fails.
 

@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import { runVerifyDraft, tokenize, verifyDraft } from '../src/verify-draft.js'
 import type { VerifyDraftDeps } from '../src/verify-draft.js'
@@ -251,7 +252,17 @@ describe('verify-draft', () => {
     ])
     const result = await runVerifyDraft(
       ['verify-draft', '--draft', '/d.md', '--logs', '/l', '--cwd', '/c'],
-      fake({ ...BASE, '/d.md': draft('- The fixed criterion is read by the maintainer') }).deps
+      fake(
+        {
+          ...BASE,
+          '/d.md': draft(
+            '- The fixed criterion is read by the maintainer',
+            '- `npm test`: exit 0 (`logs/a.log`)'
+          ),
+          '/l/a.log': '',
+        },
+        { 'npm test': [[0, VITEST]] }
+      ).deps
     )
     expect(result.stdout).toContain('not checked: The fixed criterion is read by the maintainer')
     expect(result.code).toBe(0)
@@ -279,7 +290,17 @@ describe('verify-draft', () => {
     expect(outcomes).toEqual(commands.map((command) => ({ kind: 'not-run', command })))
     const result = await runVerifyDraft(
       ['verify-draft', '--draft', '/d.md', '--logs', '/l', '--cwd', '/c'],
-      fake({ ...BASE, '/d.md': draft('- `rm -rf x`: exit 0 (`logs/a.log`)'), '/l/a.log': '' }).deps
+      fake(
+        {
+          ...BASE,
+          '/d.md': draft(
+            '- `rm -rf x`: exit 0 (`logs/a.log`)',
+            '- `npm test`: exit 0 (`logs/a.log`)'
+          ),
+          '/l/a.log': '',
+        },
+        { 'npm test': [[0, VITEST]] }
+      ).deps
     )
     expect(result.stdout).toContain('not run: rm -rf x')
     expect(result.code).toBe(0)
@@ -369,6 +390,124 @@ describe('verify-draft', () => {
     )
     expect(ran).toEqual([])
     expect(outcomes).toEqual([{ kind: 'not-run', command: 'rm -rf x' }])
+  })
+
+  it('a numbered item of the Tests section is an entry, as a bullet is', async () => {
+    const { deps, ran } = fake(BASE, {
+      'npm test': [
+        [0, VITEST],
+        [0, VITEST],
+      ],
+    })
+    const outcomes = await verifyDraft(
+      '# feat: x\n\n## Tests\n\nCommands as run:\n\n1. `npm test`: exit 0\n   and 482 passed\n2) `npm test`: exit 0\n10. The criterion for the master\n- `rm -rf x`: exit 0\n',
+      undefined,
+      '/c',
+      deps
+    )
+    expect(ran).toEqual(['npm test', 'npm test'])
+    expect(outcomes).toEqual([
+      { kind: 'match', command: 'npm test' },
+      { kind: 'match', command: 'npm test' },
+      { kind: 'not-checked', criterion: 'The criterion for the master' },
+      { kind: 'not-run', command: 'rm -rf x' },
+    ])
+    const intro = await verifyDraft(
+      '# feat: x\n\n## Tests\n\nRuns without the change:\n\n1. `npm test`: exit 1\n',
+      undefined,
+      '/c',
+      fake(BASE).deps
+    )
+    expect(intro).toEqual([{ kind: 'skipped', command: 'npm test' }])
+  })
+
+  it('a command run through factory-slot.sh run -- is run without the prefix', async () => {
+    const slot = '/home/me/micelio-engineering/herdr/factory-slot.sh'
+    const { deps, ran } = fake(BASE, { 'npm test': [[0, VITEST]], 'npm run check': [[0, VITEST]] })
+    const outcomes = await verifyDraft(
+      draft(
+        `- \`${slot} run -- npm test\`: exit 0, 482 passed`,
+        '- `factory-slot.sh run -- npm run check`: exit 0, 23 test files'
+      ),
+      undefined,
+      '/c',
+      deps
+    )
+    expect(ran).toEqual(['npm test', 'npm run check'])
+    expect(outcomes).toEqual([
+      { kind: 'match', command: `${slot} run -- npm test` },
+      { kind: 'match', command: 'factory-slot.sh run -- npm run check' },
+    ])
+  })
+
+  it('the factory-slot.sh prefix does not make a command that is not a repository command run', async () => {
+    const { deps, ran } = fake(BASE)
+    const commands = [
+      '/x/herdr/factory-slot.sh run -- rm -rf node_modules',
+      '/x/herdr/factory-slot.sh run -- npm test && rm -rf x',
+      '/x/herdr/factory-slot.sh run -- npm run not-a-script',
+      '/x/herdr/factory-slot.sh run -- /bin/sh -c id',
+      '/x/herdr/factory-slot.sh status',
+      '/x/herdr/factory-slot.sh acquire --pool workers -- npm test',
+      'not-factory-slot.sh.sh run -- npm test',
+    ]
+    const outcomes = await verifyDraft(
+      draft(...commands.map((command) => `- \`${command}\`: exit 0`)),
+      undefined,
+      '/c',
+      deps
+    )
+    expect(ran).toEqual([])
+    expect(outcomes).toEqual(commands.map((command) => ({ kind: 'not-run', command })))
+  })
+
+  it('a Tests section in which no command runs is Red with exit 1 and says no command ran', async () => {
+    const no =
+      'no command ran: gate 4 of the normal lane needs at least one repository command in the Tests section\n'
+    for (const bullets of [
+      ['- The fixed criterion is read by the maintainer'],
+      ['- `rm -rf x`: exit 0'],
+      ['- `npm test`: exit 1 (without the change)'],
+      ['- no test: not code'],
+      [],
+    ]) {
+      const result = await runVerifyDraft(
+        ['verify-draft', '--draft', '/d.md', '--cwd', '/c'],
+        fake({ ...BASE, '/d.md': draft(...bullets) }).deps
+      )
+      expect(result.code).toBe(1)
+      expect(result.stdout).toMatch(
+        new RegExp(`${no}Verdict: Red · 0 mismatches\\n$`.replace(/[()]/g, '\\$&'))
+      )
+      expect(result.stdout).toContain(`logs: not checked\n${no}`)
+    }
+    const withLogs = await runVerifyDraft(
+      ['verify-draft', '--draft', '/d.md', '--logs', '/l', '--cwd', '/c'],
+      fake({ ...BASE, '/d.md': draft('- `rm -rf x`: exit 0 (`logs/a.log`)'), '/l/a.log': '' }).deps
+    )
+    expect(withLogs.code).toBe(1)
+    expect(withLogs.stdout).toBe(`not run: rm -rf x\n${no}Verdict: Red · 0 mismatches\n`)
+  })
+
+  it('the Tests section of pull request #264 runs its repository commands', async () => {
+    const manifest = JSON.stringify({
+      scripts: { check: 'x', 'verify:template': 'y', 'verify:isolated': 'z' },
+    })
+    const section = await readFile(new URL('./fixtures/pr-264-tests.md', import.meta.url), 'utf8')
+    const { deps, ran } = fake(
+      { ...BASE, '/c/package.json': manifest },
+      {
+        'npm run check': [[0, VITEST]],
+        'npm run verify:template': [[0, 'ok\n']],
+        'npm run verify:isolated': [[0, 'ok\n']],
+      }
+    )
+    const outcomes = await verifyDraft(section, undefined, '/c', deps)
+    expect(ran).toEqual(['npm run check', 'npm run verify:template', 'npm run verify:isolated'])
+    expect(outcomes?.filter((o) => o.kind === 'match' || o.kind === 'mismatch')).toHaveLength(3)
+    expect(
+      outcomes?.flatMap((o) => (o.kind === 'not-run' ? [o.command.split(' ')[0]] : []))
+    ).toEqual(['npx', 'npm', 'run.ts', 'failingReport', 'parseEvent', 'docs/'])
   })
 
   it('reports the usage and read errors with exit 2', async () => {

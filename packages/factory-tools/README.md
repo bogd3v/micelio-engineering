@@ -163,8 +163,9 @@ master runs the command through `herdr/factory-slot.sh run`. `--cwd` defaults to
 directory. The script never builds or starts a stack and never names an engine: a draft whose
 commands need the stack belongs to `full`.
 
-**What it reads.** The bullets of the draft's `## Tests` section, up to the next heading of the same
-or a higher level. A bullet that starts with a command in backticks is a command, and the rest of
+**What it reads.** The items of the draft's `## Tests` section, bullets (`- `, `* `) and numbered
+items (`1. `, `1) `, any number), up to the next heading of the same or a higher level. An item that
+starts with a command in backticks is a command, and the rest of
 the line is its summary:
 
 ```text
@@ -183,10 +184,14 @@ the line is its summary:
   is a mismatch. `--logs` is optional: without it (a pull request's CI has no `logs/` directory) a
   command with no log is not a mismatch, and the output has a line `logs: not checked` before the
   verdict.
+- A command run through the slot script, `<path>/factory-slot.sh run -- <command>` (the way a worker
+  reports the check command), is read as `<command>`: only that prefix, a first word that ends
+  `factory-slot.sh` followed by `run --`, is removed, and the rest goes through the same rules as
+  any command (below). The prefix is never run.
 - A bullet that is under a line, or contains words, `without the change`, and does not report
   `exit 0`, is a run shown failing without the change: it is skipped (a run that reports `exit 0`
   is rerun whatever it says).
-- A bullet that does not start with a command (and is not `no test: …`) is a criterion for the
+- An item that does not start with a command (and is not `no test: …`) is a criterion for the
   master.
 
 **What it runs.** Only a repository command, without a shell, in `--cwd`: a line of the first
@@ -196,19 +201,23 @@ arguments the draft gives), or `npm test` / `npm run <script>` for a script of i
 Any other command, and any with a pipe, `;`, `&&`, a redirection, `$(…)`, a backtick, a URL or a
 path outside the copy, is not run.
 
-**What it prints**, one line per bullet, then a verdict line in the words of the `verify-pr` skill:
+**What it prints**, one line per item, then a verdict line in the words of the `verify-pr` skill:
 
-| Line                                   | Meaning                                                               |
-| -------------------------------------- | --------------------------------------------------------------------- |
-| `match: <command>`                     | the exit code and every figure agree with the draft                   |
-| `mismatch: <command>: <what>; …`       | a different exit code or figure, a figure with no counterpart, no log |
-| `variance: <command>: draft …, got …`  | a `k failed of n` figure; never a mismatch                            |
-| `skipped: <command> (shown failing …)` | a run shown failing without the change                                |
-| `not run: <command>`                   | not a repository command; for the master, not a mismatch              |
-| `not checked: <criterion>`             | a bullet that is not a command; for the master                        |
-| `Verdict: Pass · 0 mismatches`         | no command mismatches (`Verdict: Red · K mismatches` otherwise)       |
+| Line                                                | Meaning                                                                                          |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `match: <command>`                                  | the exit code and every figure agree with the draft                                              |
+| `mismatch: <command>: <what>; …`                    | a different exit code or figure, a figure with no counterpart, no log                            |
+| `variance: <command>: draft …, got …`               | a `k failed of n` figure; never a mismatch                                                       |
+| `skipped: <command> (shown failing …)`              | a run shown failing without the change                                                           |
+| `not run: <command>`                                | not a repository command; for the master, not a mismatch                                         |
+| `not checked: <criterion>`                          | a bullet that is not a command; for the master                                                   |
+| `no command ran: gate 4 of the normal lane needs …` | no entry is a `match`, `mismatch` or `variance`; printed before the verdict, which is then `Red` |
+| `Verdict: Pass · 0 mismatches`                      | a command ran and none mismatches (`Verdict: Red · K mismatches` otherwise)                      |
 
-A mismatch counts commands, not figures. Exit 0 when nothing mismatches, 1 otherwise, 2 when the
+A mismatch counts commands, not figures. Exit 0 when a command ran and nothing mismatches, 1 when a
+command mismatches or no command ran (the line `no command ran: gate 4 of the normal lane needs at least one repository command in the
+Tests section`, then `Verdict: Red · 0 mismatches`: a draft that `verify-draft` cannot check does
+not pass), 2 when the
 arguments are wrong or a file cannot be read, or the draft has no Tests section. It does not rerun
 the tests the draft names as failing without the change, and it does not check the acceptance
 criteria: the master reads the `skipped` and `not checked` lines.

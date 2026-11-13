@@ -13,7 +13,7 @@ export interface VerifyDraftDeps {
   exec: (file: string, args: string[], cwd: string) => Promise<{ code: number; output: string }>
 }
 
-/** The outcome of `runVerifyDraft`: 0 when nothing mismatches, 1 when a command does, 2 on a usage or read error. */
+/** The outcome of `runVerifyDraft`: 0 when nothing mismatches and a command ran, 1 when a command mismatches or none ran, 2 on a usage or read error. */
 export interface VerifyDraftResult {
   code: 0 | 1 | 2
   stdout: string
@@ -32,10 +32,10 @@ export type EntryOutcome =
 /** The heading of the section the command reads, without the `#`s. */
 export const TESTS_SECTION = 'Tests'
 
-/** One bullet of the Tests section. */
+/** One item of the Tests section: a bullet (`- `, `* `) or a numbered item (`1. `, `1) `). */
 interface Entry {
   text: string
-  /** The nearest line above it that is not a bullet. */
+  /** The nearest line above it that is not an item. */
   intro: string
 }
 
@@ -46,7 +46,7 @@ const LOG = /\blogs\/([^\s`),;]+)/
 const NUMBER = String.raw`\d{1,3}(?:[ ,]\d{3})+|\d+`
 const MAX_BUFFER = 256 * 1024 * 1024
 
-/** The bullets of the Tests section, each with its continuation lines; `null` when there is no section. */
+/** The items of the Tests section, bullets and numbered, each with its continuation lines; `null` when there is no section. */
 function testsEntries(draft: string): Entry[] | null {
   const lines = draft.split(/\r?\n/)
   const start = lines.findIndex((line) => /^#{1,6}\s+Tests\s*$/.test(line))
@@ -57,7 +57,7 @@ function testsEntries(draft: string): Entry[] | null {
   for (const line of lines.slice(start + 1)) {
     const heading = /^(#{1,6})\s/.exec(line)
     if (heading && (heading[1]?.length ?? 7) <= level) break
-    const bullet = /^[-*]\s+(.*)$/.exec(line)
+    const bullet = /^(?:[-*]|\d+[.)])\s+(.*)$/.exec(line)
     if (bullet) {
       entries.push({ text: (bullet[1] ?? '').trim(), intro })
     } else if (/^\s+\S/.test(line) && entries.length > 0) {
@@ -68,6 +68,16 @@ function testsEntries(draft: string): Entry[] | null {
     }
   }
   return entries
+}
+
+/**
+ * The command a worker ran through the slot script: `<path>/factory-slot.sh run -- <command>` is
+ * `<command>`. Only that prefix is removed; anything else is returned as it is, and the rest still
+ * goes through `tokenize` and the repository's commands.
+ */
+export function withoutSlotPrefix(command: string): string {
+  const prefixed = /^\S*factory-slot\.sh\s+run\s+--\s+(\S.*)$/.exec(command)
+  return prefixed?.[1] ?? command
 }
 
 /** The command's words, or `null` when it has a shell construct (a pipe, `;`, `&&`, a redirection, `$(…)`, a backtick, a URL, a path outside the copy). */
@@ -230,7 +240,7 @@ export async function verifyDraft(
     const hasLog =
       logs === undefined ||
       (logName !== undefined && (await deps.exists(join(logs, basename(logName)))))
-    const words = tokenize(command)
+    const words = tokenize(withoutSlotPrefix(command))
     if (words === null || !isRepositoryCommand(words, agents, scripts)) {
       outcomes.push(
         hasLog ? { kind: 'not-run', command } : { kind: 'mismatch', command, reasons: ['no log'] }
@@ -329,13 +339,16 @@ export const defaultVerifyDeps: VerifyDraftDeps = {
   exec,
 }
 
+const NO_COMMAND_RAN =
+  'no command ran: gate 4 of the normal lane needs at least one repository command in the Tests section'
+
 const USAGE =
   'Usage:\n  factory-tools verify-draft --draft <file> [--logs <dir>] [--cwd <clean copy>]\n'
 
 /**
  * `factory-tools verify-draft --draft <file> [--logs <dir>] [--cwd <clean copy>]`: the script that
  * stands in for the verifier in the `normal` lane. It prints one line per bullet of the Tests
- * section and a verdict line. Without `--logs` it prints `logs: not checked` before the verdict.
+ * section and a verdict line, `Red` when no command ran. Without `--logs` it prints `logs: not checked` before the verdict.
  *
  * @param argv - The arguments after the program name, starting with `verify-draft`.
  */
@@ -371,12 +384,14 @@ export async function runVerifyDraft(
       return { code: 2, stdout: '', stderr: `error: ${draft} has no "${TESTS_SECTION}" section\n` }
     }
     const mismatches = outcomes.filter((outcome) => outcome.kind === 'mismatch').length
-    const verdict = `Verdict: ${mismatches === 0 ? 'Pass' : 'Red'} · ${mismatches} mismatches`
+    const ran = outcomes.some((outcome) => ['match', 'mismatch', 'variance'].includes(outcome.kind))
+    const red = mismatches > 0 || !ran
+    const verdict = `Verdict: ${red ? 'Red' : 'Pass'} · ${mismatches} mismatches`
     return {
-      code: mismatches === 0 ? 0 : 1,
+      code: red ? 1 : 0,
       stdout: `${outcomes.map((outcome) => `${line(outcome)}\n`).join('')}${
         logs === undefined ? 'logs: not checked\n' : ''
-      }${verdict}\n`,
+      }${ran ? '' : `${NO_COMMAND_RAN}\n`}${verdict}\n`,
       stderr: '',
     }
   } catch (error) {
