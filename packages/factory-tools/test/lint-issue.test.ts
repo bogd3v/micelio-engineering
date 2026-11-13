@@ -1,11 +1,14 @@
 import { spawnSync } from 'node:child_process'
-import { readFile, readdir } from 'node:fs/promises'
+import { chmod, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { issueFromMarkdown, sections } from '../src/issue.js'
 import type { Issue, IssueRef } from '../src/issue.js'
 import { RULE_IDS, lintIssue } from '../src/rules.js'
 import type { RuleId } from '../src/rules.js'
+import { parseLanes } from '../src/lane.js'
 import { run } from '../src/run.js'
 import type { RunDeps } from '../src/run.js'
 
@@ -25,6 +28,7 @@ function deps(issues: Record<string, Issue & { closed?: boolean }> = {}): RunDep
     readIssue: async (ref) => find(ref),
     isClosed: async (ref) => find(ref).closed === true,
     readText: (path) => readFile(new URL(path, `file://${PACKAGE}`), 'utf8'),
+    readLanes: async () => null,
     today: () => '2026-10-24',
   }
 }
@@ -60,7 +64,8 @@ describe('lint-issue on the fixtures', () => {
     const result = await run(['lint-issue', '--file', 'test/fixtures/pass.md'], deps())
     expect(result).toEqual({
       code: 0,
-      stdout: '**lint-issue** · `test/fixtures/pass.md` · 2026-10-24 · all 7 rules pass\n',
+      stdout:
+        'lane: full\n**lint-issue** · `test/fixtures/pass.md` · 2026-10-24 · all 8 rules pass\n',
       stderr: '',
     })
   })
@@ -71,8 +76,8 @@ describe('lint-issue on the fixtures', () => {
       const path = `test/fixtures/fail-${rule}.md`
       const result = await run(['lint-issue', '--file', path], deps())
       expect(result.code).toBe(1)
-      expect(result.stdout.split('\n')[0]).toBe(
-        `**lint-issue** · \`${path}\` · 2026-10-24 · 1 of 7 rules fail`
+      expect(result.stdout.split('\n')[1]).toBe(
+        `**lint-issue** · \`${path}\` · 2026-10-24 · 1 of 8 rules fail`
       )
       expect(failedRules(result.stdout)).toEqual([rule])
     }
@@ -97,8 +102,10 @@ describe('the reports of milestone "Builder, fase 1"', async () => {
     const issue = issueFromMarkdown(await readFile(`${PILOT}${input}`, 'utf8'), 'example/site')
     const saved = await readFile(`${PILOT}${input.replace('.input.md', '.md')}`, 'utf8')
     // The states of the dependencies come from GitHub on the day of the run, so they stay out.
-    const offline = (await failing(issue, {})).filter((rule) => rule !== 'depends-on')
-    expect(offline).toEqual(failedRules(saved).filter((rule) => rule !== 'depends-on'))
+    // The reports predate the `lane` rule, which needs a criterion they never had.
+    const skipped = (rule: string): boolean => rule === 'depends-on' || rule === 'lane'
+    const offline = (await failing(issue, {})).filter((rule) => !skipped(rule))
+    expect(offline).toEqual(failedRules(saved).filter((rule) => !skipped(rule)))
   })
 })
 
@@ -236,7 +243,7 @@ describe('comments, code blocks, nesting and references', () => {
   it('keeps the text of deeper subheadings in their part', async () => {
     const issue = await variant(
       /## Acceptance criteria\n\n[\s\S]*?\n\n## Out of scope/,
-      '## Acceptance criteria\n\n### Unit\n\n- [ ] `npm test` passes.\n\n## Out of scope'
+      '## Acceptance criteria\n\n### Unit\n\n- [ ] `npm test` passes.\n- [ ] Verified by the maintainer on the stack.\n\n## Out of scope'
     )
     expect(await failing(issue)).toEqual([])
   })
@@ -356,8 +363,8 @@ describe('the command line', () => {
     const issue = issueFromMarkdown(await fixture('fail-delivery.md'), 'example/site')
     const result = await run(['lint-issue', 'example/site#5'], deps({ 'example/site#5': issue }))
     expect(result.code).toBe(1)
-    expect(result.stdout.split('\n')[0]).toBe(
-      '**lint-issue** · `example/site#5` · 2026-10-24 · 1 of 7 rules fail'
+    expect(result.stdout.split('\n')[1]).toBe(
+      '**lint-issue** · `example/site#5` · 2026-10-24 · 1 of 8 rules fail'
     )
   })
 
@@ -367,18 +374,172 @@ describe('the command line', () => {
     expect((await run(['dashboard'], deps())).stderr).toContain('unknown command "dashboard"')
   })
 
-  it('runs as the built bin with the exit codes of the report', () => {
-    const pass = spawnSync('node', [CLI, 'lint-issue', '--file', 'test/fixtures/pass.md'], {
+  it('runs as the built bin with the exit codes of the report', async () => {
+    // A folder with no `AGENTS.md` and no repository: every issue is `full`.
+    const cwd = await mkdtemp(join(tmpdir(), 'lint-issue-'))
+    try {
+      const pass = spawnSync('node', [CLI, 'lint-issue', '--file', `${FIXTURES}pass.md`], {
+        cwd,
+        encoding: 'utf8',
+      })
+      expect(pass.status).toBe(0)
+      expect(pass.stdout).toMatch(/all 8 rules pass\n$/)
+      const fail = spawnSync('node', [CLI, 'lint-issue', '--file', `${FIXTURES}fail-title.md`], {
+        cwd,
+        encoding: 'utf8',
+      })
+      expect(fail.status).toBe(1)
+      expect(failedRules(fail.stdout)).toEqual(['title'])
+    } finally {
+      await rm(cwd, { recursive: true })
+    }
+  })
+})
+
+describe('the lanes of the own repository of the issue', () => {
+  /** A `gh` on the PATH that answers `issue view` with `issue` and the `AGENTS.md` call with `agents` (null: 404). */
+  async function withFakeGh(
+    issue: Issue,
+    agents: string | null,
+    check: (env: NodeJS.ProcessEnv) => void
+  ): Promise<void> {
+    const dir = await mkdtemp(join(tmpdir(), 'lint-issue-gh-'))
+    try {
+      await writeFile(join(dir, 'issue.json'), JSON.stringify(issue))
+      if (agents !== null) await writeFile(join(dir, 'AGENTS.md'), agents)
+      const script = [
+        '#!/bin/sh',
+        'case "$*" in',
+        `  *contents/AGENTS.md*) ${agents === null ? 'echo "gh: Not Found (HTTP 404)" >&2; exit 1' : `cat "${dir}/AGENTS.md"`} ;;`,
+        `  *"issue view"*) cat "${dir}/issue.json" ;;`,
+        '  *) echo "unexpected: $*" >&2; exit 1 ;;',
+        'esac',
+        '',
+      ].join('\n')
+      await writeFile(join(dir, 'gh'), script)
+      await chmod(join(dir, 'gh'), 0o755)
+      check({ ...process.env, PATH: `${dir}:${process.env.PATH ?? ''}` })
+    } finally {
+      await rm(dir, { recursive: true })
+    }
+  }
+
+  const lint = (env: NodeJS.ProcessEnv) =>
+    // The working directory is this repository, whose `AGENTS.md` has a `## Lanes` block.
+    spawnSync('node', [CLI, 'lint-issue', 'example/site#5'], {
       cwd: PACKAGE,
       encoding: 'utf8',
+      env,
     })
-    expect(pass.status).toBe(0)
-    expect(pass.stdout).toMatch(/all 7 rules pass\n$/)
-    const fail = spawnSync('node', [CLI, 'lint-issue', '--file', 'test/fixtures/fail-title.md'], {
-      cwd: PACKAGE,
-      encoding: 'utf8',
+
+  it('a repository whose AGENTS.md is not found keeps its issues full, whatever the checkout says', async () => {
+    const issue = issueFromMarkdown(await fixture('pass.md'), 'example/site')
+    await withFakeGh(issue, null, (env) => {
+      const result = lint(env)
+      expect(result.stderr).toBe('')
+      expect(result.stdout.split('\n')[0]).toBe('lane: full')
+      expect(result.status).toBe(0)
     })
-    expect(fail.status).toBe(1)
-    expect(failedRules(fail.stdout)).toEqual(['title'])
+  })
+
+  it('reads the Lanes block of the repository of the issue through gh', async () => {
+    const text = (await fixture('pass.md'))
+      .replace(/(?:src\/widgets\/)?counter\.ts/g, 'docs/widgets.md')
+      .replace('on the stack', 'by reading the diff')
+    const issue = issueFromMarkdown(text, 'example/site')
+    const agents = '## Lanes\n\nexpress: docs/**/*.md\n'
+    await withFakeGh(issue, agents, (env) => {
+      const result = lint(env)
+      expect(result.stdout.split('\n')[0]).toBe('lane: express')
+      expect(result.status).toBe(0)
+    })
+  })
+
+  it('reads the AGENTS.md of the checkout only for --file', async () => {
+    const seen: (string | null)[] = []
+    const lanes = { ...deps(), readLanes: async (repo: string | null) => (seen.push(repo), null) }
+    const issue = issueFromMarkdown(await fixture('pass.md'), 'example/site')
+    await run(['lint-issue', 'example/site#5'], { ...lanes, readIssue: async () => issue })
+    await run(['lint-issue', '--file', 'test/fixtures/pass.md'], lanes)
+    expect(seen).toEqual(['example/site', null])
+  })
+})
+
+describe('the lane rule', () => {
+  const AGENTS = [
+    '## Lanes',
+    '',
+    'stack: src/**',
+    'contract: api/**',
+    'express: docs/**/*.md',
+  ].join('\n')
+  const globs = parseLanes(AGENTS)
+  const READING = '- [ ] Verified by the maintainer by reading the diff.'
+  const STACK = '- [ ] Verified by the maintainer on the stack.'
+
+  /** `pass.md` with its maintainer criterion replaced by `criteria` and `path` named in What to build. */
+  async function laneIssue(criteria: string[], path = 'docs/widgets.md'): Promise<Issue> {
+    const text = (await fixture('pass.md'))
+      .replace(`${STACK}\n`, criteria.map((line) => `${line}\n`).join(''))
+      .replace(/(?:src\/widgets\/)?counter\.ts/g, path)
+    return issueFromMarkdown(text, 'example/site')
+  }
+
+  async function laneResult(issue: Issue): Promise<{ ok: boolean; detail: string }> {
+    const results = await lintIssue(issue, async () => true, globs)
+    const found = results.find((item) => item.rule === 'lane')
+    if (!found) throw new Error('no lane result')
+    return found
+  }
+
+  it('lane passes a full issue verified on the stack', async () => {
+    const stack = await laneIssue([STACK], 'src/widgets/counter.ts')
+    expect((await laneResult(stack)).ok).toBe(true)
+    const named = await laneIssue(
+      ['- [ ] Verified by the maintainer on the run `AGENTS.md` names.'],
+      'api/v1.yaml'
+    )
+    expect((await laneResult(named)).ok).toBe(true)
+    // With no `## Lanes` block every issue is full, and the fixture passes as written.
+    const plain = issueFromMarkdown(await fixture('pass.md'), 'example/site')
+    expect(await failing(plain)).toEqual([])
+  })
+
+  it('lane fails an express issue that asks for the stack, and names the sentence it expected', async () => {
+    const issue = await laneIssue([STACK])
+    const result = await laneResult(issue)
+    expect(result.ok).toBe(false)
+    expect(result.detail).toBe(
+      'the lane is express and the maintainer criterion does not read "Verified by the maintainer by reading the diff"'
+    )
+    expect((await laneResult(await laneIssue([READING]))).ok).toBe(true)
+    const full = await laneIssue([READING], 'api/v1.yaml')
+    expect((await laneResult(full)).detail).toBe(
+      'the lane is full and the maintainer criterion does not read "Verified by the maintainer on the stack" (or "on the run `AGENTS.md` names")'
+    )
+  })
+
+  it('lane fails an issue with no maintainer criterion, or with two', async () => {
+    const none = await laneResult(await laneIssue([]))
+    expect(none.ok).toBe(false)
+    expect(none.detail).toBe(
+      'the lane is express and the acceptance criteria have 0 items that start "Verified by the maintainer"; exactly one is needed, and it reads "Verified by the maintainer by reading the diff"'
+    )
+    const two = await laneResult(await laneIssue([READING, READING]))
+    expect(two.ok).toBe(false)
+    expect(two.detail).toContain('have 2 items')
+  })
+
+  it('the report starts with the lane', async () => {
+    const result = await run(['lint-issue', '--file', 'test/fixtures/fail-lane.md'], deps())
+    expect(result.code).toBe(1)
+    expect(result.stdout.split('\n')[0]).toBe('lane: full')
+    expect(failedRules(result.stdout)).toEqual(['lane'])
+    const express = await run(['lint-issue', 'example/site#9'], {
+      ...deps({ 'example/site#9': await laneIssue([READING]) }),
+      readLanes: async () => globs,
+    })
+    expect(express.code).toBe(0)
+    expect(express.stdout.split('\n')[0]).toBe('lane: express')
   })
 })

@@ -87,14 +87,14 @@ export function mergeTime(earlier: TimeLine | null, later: TimeLine): TimeLine {
  * `K mismatch(es)` (a verification, which may also be headed `# Gate 4 report: …`,
  * `# Verification report: …` or a `<details><summary><b>Gate 4 …` summary: the markup of the first
  * line is not read); and a
- * `**lint-issue** · … · K of 7 rules fail` report (the issue went back). A count that is not in the
+ * `**lint-issue** · … · K of N rules fail` report (the issue went back). A count that is not in the
  * first line is `null` for a review, and for a verification it is read from the report's
  * `**Mismatches: K.**` line.
  *
  * @returns `null` for any other comment.
  */
 export function parseEvent(body: string): GateEvent | null {
-  const first = (body.split(/\r?\n/, 1)[0] ?? '')
+  const first = (withoutLaneLine(body).split(/\r?\n/, 1)[0] ?? '')
     .replaceAll(/<[^>]*>/g, '')
     .replaceAll('*', '')
     .replace(/^\s*#+\s*/, '')
@@ -117,6 +117,11 @@ export function parseEvent(body: string): GateEvent | null {
     return { kind: 'verification', mismatches: count(lower, 'mismatch') ?? mismatchLine(body) }
   }
   return null
+}
+
+/** `lint-issue` starts its report with `lane: <lane>`; a reader of the report skips that line. */
+export function withoutLaneLine(body: string): string {
+  return body.replace(/^lane: (?:express|normal|full)\r?\n/, '')
 }
 
 /**

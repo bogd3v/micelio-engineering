@@ -25,7 +25,7 @@ The worker prompt says to report them (`template/.claude/agents/worker.md`), but
 
 - [ ] `npm run lint:standard` passes after the change, with the new hashes in `packages/eslint-config/standard-hashes.json`.
 - [ ] `grep -n "standard-sync.json" docs/engineering-standard.md` finds the new line in section 13.
-- [ ] Verified by the maintainer by reading the diff and the reports (`micelio-engineering` has no Docker image; `AGENTS.md` names `npm run check`, `npm run verify:template` and `npm run verify:isolated` instead).
+- [ ] Verified by the maintainer on the run `AGENTS.md` names instead of the stack (`micelio-engineering` has no Docker image: `npm run check`, `npm run verify:template` and `npm run verify:isolated`).
 
 ## Out of scope
 

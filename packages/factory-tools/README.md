@@ -31,8 +31,14 @@ rest is the body; add `--repo owner/repo` when its "Depends on" names a bare `#n
 0 when every rule passes, 1 when one fails, 2 when the arguments are wrong or the issue cannot be
 read.
 
+The report starts with `lane: <lane>`, the lane of the issue (`lint-lane`'s function, from the
+`## Lanes` block of the `AGENTS.md` of the issue's own repository, read with `gh api`; with `--file`,
+from the `AGENTS.md` at the root of the repository the command runs in; with no such file or block
+the lane is `full`), so the `issue-ready` comment shows it.
+
 ```text
-**lint-issue** · `bogd3v/micelio#729` · 2026-10-24 · 1 of 7 rules fail
+lane: full
+**lint-issue** · `bogd3v/micelio#729` · 2026-10-24 · 1 of 8 rules fail
 
 - `depends-on`: depends on bogd3v/micelio-plugin-core#44 is open.
 ```
@@ -48,6 +54,7 @@ read.
 | `out-of-scope` | There is a non-empty "Out of scope" section, or a line outside code that starts with "Out of scope" and says something                                                                                                                                                     |
 | `delivery`     | There is a non-empty "Delivery" section                                                                                                                                                                                                                                    |
 | `depends-on`   | Every issue listed after "Depends on" (up to the end of that sentence) or in a "Depends on" section, is closed (`gh issue view --json state`). A bare `#n` belongs to the issue's repository                                                                               |
+| `lane`         | Exactly one item of "Acceptance criteria" starts "Verified by the maintainer", and it reads "by reading the diff" in `express` and `normal`, or "on the stack" (or "on the run `AGENTS.md` names") in `full`. The report names the lane and the sentence it expected       |
 
 Headings are matched at any level, ignoring case, emphasis and a trailing colon, by their name or
 a name that starts with it as a whole word (`## Why this matters`, `## Out of scope (see #40)`).

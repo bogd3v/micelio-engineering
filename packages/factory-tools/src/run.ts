@@ -5,6 +5,8 @@ import { promisify } from 'node:util'
 import { errorLine } from './errors.js'
 import { OWNER_REPO, issueFromGh, issueFromMarkdown, parseTarget } from './issue.js'
 import type { Issue, IssueRef } from './issue.js'
+import { issueLane, parseLanes } from './lane.js'
+import type { LaneGlobs } from './lane.js'
 import { metrics } from './metrics.js'
 import { renderMetrics } from './render.js'
 import { report } from './report.js'
@@ -20,6 +22,13 @@ export interface RunDeps {
   isClosed: IssueClosed
   /** Reads a file given with `--file`, relative to the working directory. */
   readText: (path: string) => Promise<string>
+  /**
+   * The `## Lanes` block of an `AGENTS.md`, for the `lane` rule; `null` when there is none, and
+   * then every issue is `full`. Given the issue's repository, it reads that repository's
+   * `AGENTS.md` (the default asks `gh`); given `null`, for `--file`, the `AGENTS.md` at the root of
+   * the repository the command runs in.
+   */
+  readLanes?: (repo: string | null) => Promise<LaneGlobs | null>
   /** The day of the run, `YYYY-MM-DD`. */
   today: () => string
   /** The root of the repository the command runs in, where `docs/factory-log.md` is. */
@@ -65,11 +74,17 @@ export async function run(argv: string[], deps: RunDeps = defaultDeps): Promise<
   } catch (error) {
     return { code: 2, stdout: '', stderr: `error: ${errorLine(error)}\n` }
   }
-  const results = await lintIssue(issue, deps.isClosed)
+  let globs: LaneGlobs | null
+  try {
+    globs = await (deps.readLanes ?? defaultReadLanes)('file' in options ? null : options.ref.repo)
+  } catch (error) {
+    return { code: 2, stdout: '', stderr: `error: ${errorLine(error)}\n` }
+  }
+  const results = await lintIssue(issue, deps.isClosed, globs)
   const target = 'file' in options ? options.file : `${options.ref.repo}#${options.ref.number}`
   return {
     code: results.every((item) => item.ok) ? 0 : 1,
-    stdout: report(target, deps.today(), results),
+    stdout: report(target, deps.today(), results, issueLane(issue.title, issue.body, globs).lane),
     stderr: '',
   }
 }
@@ -159,6 +174,44 @@ export async function repoRoot(cwd: string): Promise<string> {
     return stdout.trim()
   } catch {
     throw new Error(`${cwd} is not in a git repository; give the log with --log <path>`)
+  }
+}
+
+/**
+ * The `## Lanes` block of an `AGENTS.md`: the one of `repo` on its default branch, read with
+ * `gh api repos/<repo>/contents/AGENTS.md`; with no `repo` (`--file`), the one at the root of the
+ * repository the command runs in (the working directory when it is not in one).
+ *
+ * @returns `null` when there is no `AGENTS.md`, or none with a `## Lanes` block.
+ * @throws `Error` when `gh` fails for any reason but a 404.
+ */
+async function defaultReadLanes(repo: string | null): Promise<LaneGlobs | null> {
+  if (repo !== null) {
+    try {
+      const { stdout } = await exec('gh', [
+        'api',
+        '-H',
+        'Accept: application/vnd.github.raw',
+        `repos/${repo}/contents/AGENTS.md`,
+      ])
+      return parseLanes(stdout)
+    } catch (error) {
+      const stderr = error instanceof Error && 'stderr' in error ? String(error.stderr) : ''
+      if (/HTTP 404/.test(stderr)) return null
+      throw error
+    }
+  }
+  let root = process.cwd()
+  try {
+    root = await repoRoot(root)
+  } catch {
+    // Not in a repository: look in the working directory.
+  }
+  try {
+    return parseLanes(await readFile(join(root, 'AGENTS.md'), 'utf8'))
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return null
+    throw error
   }
 }
 

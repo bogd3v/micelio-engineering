@@ -1,6 +1,8 @@
 import { errorLine } from './errors.js'
 import { OWNER_REPO, nameMatches, proseOnly, sections, stripComments } from './issue.js'
 import type { Issue, IssueRef, Section } from './issue.js'
+import { issueLane } from './lane.js'
+import type { Lane, LaneGlobs } from './lane.js'
 
 /** The identifiers of the rules, in the order the report lists them. */
 export const RULE_IDS = [
@@ -11,6 +13,7 @@ export const RULE_IDS = [
   'out-of-scope',
   'delivery',
   'depends-on',
+  'lane',
 ] as const
 
 /** One rule of the Definition of Ready. */
@@ -60,13 +63,19 @@ const ISSUE_REF = new RegExp(`(?:\\b(${OWNER_REPO}))?#(\\d+)\\b`, 'g')
 const ISSUE_URL = new RegExp(`https://github\\.com/(${OWNER_REPO})/issues/(\\d+)`, 'g')
 
 /**
- * Checks an issue against the seven rules of the Definition of Ready, the table in this
+ * Checks an issue against the eight rules of the Definition of Ready, the table in this
  * package's `README.md`.
  *
  * @param isClosed - Reads the state of each "Depends on" issue; called only when there is one.
+ * @param globs - The `## Lanes` block of the repository's `AGENTS.md`, for the `lane` rule; `null`
+ * when it has none, which makes every issue `full`.
  * @returns One result per rule, in the order of `RULE_IDS`.
  */
-export async function lintIssue(issue: Issue, isClosed: IssueClosed): Promise<RuleResult[]> {
+export async function lintIssue(
+  issue: Issue,
+  isClosed: IssueClosed,
+  globs: LaneGlobs | null = null
+): Promise<RuleResult[]> {
   const parts = sections(issue.body, SECTION_NAMES)
   const prose = proseOnly(issue.body)
   return [
@@ -77,6 +86,7 @@ export async function lintIssue(issue: Issue, isClosed: IssueClosed): Promise<Ru
     outOfScope(prose, parts),
     delivery(parts),
     await dependsOn(issue.repo, prose, parts, isClosed),
+    laneCriterion(parts, issueLane(issue.title, issue.body, globs).lane),
   ]
 }
 
@@ -178,6 +188,45 @@ async function dependsOn(
     }
   }
   return result('depends-on', problems.length ? `depends on ${problems.join(', ')}` : '')
+}
+
+/** The sentence each lane's fixed maintainer criterion starts with (standard section 12). */
+const MAINTAINER = 'Verified by the maintainer'
+const MAINTAINER_START = /^verified by the maintainer\b/i
+const READING = /^verified by the maintainer\s+by reading the diff\b/i
+const STACK = /^verified by the maintainer\s+on (?:the stack|the run `?AGENTS\.md`? names)\b/i
+
+/**
+ * The fixed last criterion of the issue's lane: exactly one item of "Acceptance criteria" starts
+ * "Verified by the maintainer", and it reads "by reading the diff" in `express` and `normal`, or
+ * "on the stack" (or "on the run `AGENTS.md` names") in `full`.
+ */
+function laneCriterion(parts: Section[], lane: Lane): RuleResult {
+  const part = section(parts, 'acceptance criteria')
+  const items = (part?.content ?? '')
+    .split('\n')
+    .filter((line) => LIST_ITEM.test(line))
+    .map((line) =>
+      line
+        .replace(LIST_ITEM, '')
+        .replace(/^\[[ xX]\]\s*/, '')
+        .replace(/^[*_]+/, '')
+        .trim()
+    )
+    .filter((item) => MAINTAINER_START.test(item))
+  const expected =
+    lane === 'full'
+      ? `"${MAINTAINER} on the stack" (or "on the run \`AGENTS.md\` names")`
+      : `"${MAINTAINER} by reading the diff"`
+  const where = `the lane is ${lane}`
+  if (items.length !== 1) {
+    return result(
+      'lane',
+      `${where} and the acceptance criteria have ${items.length} items that start "${MAINTAINER}"; exactly one is needed, and it reads ${expected}`
+    )
+  }
+  const ok = (lane === 'full' ? STACK : READING).test(items[0] ?? '')
+  return result('lane', ok ? '' : `${where} and the maintainer criterion does not read ${expected}`)
 }
 
 /** The issues listed right after "Depends on", up to the end of that sentence, or in its section. */

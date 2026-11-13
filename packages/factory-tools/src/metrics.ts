@@ -7,6 +7,7 @@ import {
   mergeTime,
   parseLane,
   parseEvent,
+  withoutLaneLine,
   passedByMaster,
   parseTime,
   parseTokenLines,
@@ -425,7 +426,7 @@ async function botReturns(
 /** Whether a body is the marker, then a `lint-issue` report with failing rules. */
 function failingReport(body: string): boolean {
   if (!body.startsWith(MARKER)) return false
-  const report = body.slice(MARKER.length).replace(/^\r?\n/, '')
+  const report = withoutLaneLine(body.slice(MARKER.length).replace(/^\r?\n/, ''))
   return (
     report.replaceAll('*', '').toLowerCase().startsWith('lint-issue') &&
     parseEvent(report)?.kind === 'returned'

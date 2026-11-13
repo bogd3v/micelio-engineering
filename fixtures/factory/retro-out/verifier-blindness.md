@@ -24,7 +24,7 @@ The verifier must work from the commands alone (`docs/factory.md`, gate 4), and 
 
 - [ ] `npm run test` passes with the new test, and fails when "Answers to review" is removed from `template/.github/pull_request_template.md`.
 - [ ] `npm run lint:standard` passes after `node scripts/synced-hashes.mjs`.
-- [ ] Verified by the maintainer by reading the diff and the reports (`micelio-engineering` has no Docker image; `AGENTS.md` names `npm run check`, `npm run verify:template` and `npm run verify:isolated` instead).
+- [ ] Verified by the maintainer on the run `AGENTS.md` names instead of the stack (`micelio-engineering` has no Docker image: `npm run check`, `npm run verify:template` and `npm run verify:isolated`).
 
 ## Out of scope
 
