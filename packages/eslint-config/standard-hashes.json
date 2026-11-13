@@ -27,6 +27,14 @@
       "site-engine": "4a67073bf657245cddf90ed0301cab74b50a9025b237ec4ed443088b21de3c2a"
     }
   },
+  "2.3": {
+    "core": "91c9da3b6311a536f377390f81ec5ce2484928555719172cc86cc23a1e5f89ee",
+    "profiles": {
+      "typescript": "3cae53a8cefdf41b115dc76fc4931d0a1c0999e74298a01ea5361197e6fcd3ab",
+      "rust": "3d8e0bd719e1559a59240b457d81e081b3af7a4f4a0fc395e0486ab860cc0485",
+      "site-engine": "4a67073bf657245cddf90ed0301cab74b50a9025b237ec4ed443088b21de3c2a"
+    }
+  },
   "files": {
     ".claude/agents/master.md": "5d82fe0d470e04d894a5304b28a271ffb70c3e48c2532f25f9924fd7da9ea458",
     ".claude/agents/planner.md": "8091c32e26233dce0b20826221e6aee34cd5d58ee76247604863ae2d21b2cdd5",

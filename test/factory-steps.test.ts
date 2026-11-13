@@ -14,6 +14,7 @@ const SKILLS = 'template/.claude/skills/'
  * of reaching the reviewer. A new shared term is added to this table (planner, step 3).
  */
 const STEPS: Record<string, string[]> = {
+  lane: ['docs/engineering-standard.md', 'docs/factory.md', 'AGENTS.md'],
   'logs/': [
     `${AGENTS}master.md`,
     `${AGENTS}verifier.md`,

@@ -4,7 +4,7 @@ Instructions for coding agents working in this repository. It holds Micelio's sh
 
 ## Engineering standard
 
-The rules shared by every Micelio repository live in [`docs/engineering-standard.md`](docs/engineering-standard.md), the core, and in the profiles of [`docs/standard/`](docs/standard/). This repository follows standard version 2.2 with the TypeScript profile (`standard: 2.2`, `profile: typescript`; `npm run lint:standard` checks the core and `docs/standard/typescript.md` against the hashes bundled in `@micelio/eslint-config`). This file adds what is specific to this repository and never relaxes the standard. This is the canonical copy of the core and of the three profiles (`typescript.md`, `rust.md`, `site-engine.md`): a change to the standard is a pull request here titled `docs(standard): …` (section 16), and `.github/workflows/standard-sync.yml` carries it to the other repositories (`docs/standard-sync.md`).
+The rules shared by every Micelio repository live in [`docs/engineering-standard.md`](docs/engineering-standard.md), the core, and in the profiles of [`docs/standard/`](docs/standard/). This repository follows standard version 2.3 with the TypeScript profile (`standard: 2.3`, `profile: typescript`; `npm run lint:standard` checks the core and `docs/standard/typescript.md` against the hashes bundled in `@micelio/eslint-config`). This file adds what is specific to this repository and never relaxes the standard. This is the canonical copy of the core and of the three profiles (`typescript.md`, `rust.md`, `site-engine.md`): a change to the standard is a pull request here titled `docs(standard): …` (section 16), and `.github/workflows/standard-sync.yml` carries it to the other repositories (`docs/standard-sync.md`).
 
 ## Commands
 
@@ -44,6 +44,16 @@ In the container, run `git config --global --add safe.directory <worktree path>`
 - `herdr/master.md` — the Herdr runbook of the master (not synced); `fixtures/factory/` — the planted defects, `build-scratch.sh`, `run-canary.sh` and `RUN.md` that prove the gates (`docs/factory.md`, "Running the master"; `test/factory-fixtures.test.ts` keeps their numbers true).
 - `docs/` — the standard (the core, and its profiles in `docs/standard/`), the factory (`factory.md`: the pipeline, its gates and roles; `factory-log.md`: the correction log), how the workflows are used, and Micelio's `contributing.md`, `governance.md`, `trademarks.md` and `adr-template.md`; the records of the decisions about the standard and the tooling are in `docs/adr/`. The other repositories link to them from a short `CONTRIBUTING.md` of their own (section 1 of the standard).
 - `REUSE.toml`, `LICENSES/` — licensing metadata; the repository is MIT-0 and `reuse lint` runs in CI.
+
+## Lanes
+
+Each issue runs in the lane its risk sets (`docs/factory.md`, "Lanes"; ADR-0003). This repository has no stack, so `stack:` is empty and the run named under "Rules" stands in for it in `full`. The globs are a proposal that the maintainer confirms at gate 5 of the issue that adopts them.
+
+```
+stack:
+contract: packages/*/package.json, .github/workflows/, template/
+express: .github/project-fields.json, docs/factory-log.md, docs/contributing.md, docs/governance.md, docs/trademarks.md
+```
 
 ## Rules
 
