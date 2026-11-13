@@ -38,6 +38,14 @@ const STEPS: Record<string, string[]> = {
     'herdr/master.md',
     'docs/factory.md',
   ],
+  scribe: [`${AGENTS}master.md`, 'herdr/master.md', 'docs/factory.md', 'docs/factory-log.md'],
+  'could become a check, a skill or a rule': [
+    `${AGENTS}master.md`,
+    `${SKILLS}ship-pr/SKILL.md`,
+    'herdr/master.md',
+    'docs/factory.md',
+    'docs/factory-log.md',
+  ],
   'time:': [
     `${AGENTS}planner.md`,
     `${SKILLS}ship-pr/SKILL.md`,
