@@ -3,8 +3,9 @@
 The commands of the Micelio software factory: `lint-issue` (Gate 1, the Definition of Ready, as a
 script), [`issue-ready`](#issue-ready) (what the workflow does with its result, and the project fields of
 `project-fields-backfill`),
-[`metrics`](#metrics) (the factory's numbers for a milestone) and [`lint-draft`](#lint-draft) (the
-shape of a draft's section "Instructions that were wrong or missing").
+[`metrics`](#metrics) (the factory's numbers for a milestone), [`lint-draft`](#lint-draft) (the
+shape of a draft's section "Instructions that were wrong or missing") and
+[`lint-lane`](#lint-lane) (an issue's lane, and a diff checked against it).
 
 ## lint-issue
 
@@ -296,3 +297,61 @@ The library exports `lintIssue`, `RULE_IDS`, `report` and `run`, `runReady`, `ap
 and `fixtureSource`, the parsers `parseTime`, `parseEvent`, `parseLogLines`, `blockingByCategory` and
 `countLog`, and their types. Before 1.0.0 any of them may
 change in a `0.y` release (standard, section 7).
+
+## `lint-lane`
+
+Sets an issue's lane at gate 1 and checks the diff against it at gate 2 (ADR-0003, D2 and D3,
+`docs/adr/0003-route-each-issue-through-a-lane-set-by-its-risk.md`). Run it in the checkout of the
+issue's repository: the globs come from the `## Lanes` block of the `AGENTS.md` in the current
+directory.
+
+```bash
+node <checkout>/packages/factory-tools/dist/cli.js lint-lane bogd3v/micelio#729   # needs gh
+node <checkout>/packages/factory-tools/dist/cli.js lint-lane --file <issue.md>    # first line "# <title>"
+node <checkout>/packages/factory-tools/dist/cli.js lint-lane --diff "$(git merge-base HEAD origin/main)" --lane normal
+```
+
+**The issue form** prints `lane: express|normal|full` and one line per reason: the title's `!`, or
+each path with the glob it matched (or `is normative`, or `matches no glob`). The paths are the
+ones the body names in backticks: a token with a `/`, or one that ends in an extension that starts
+with a letter; fenced blocks and HTML comments are not read. `gh` is needed only for
+`<owner/repo#n>`.
+
+**The diff form** takes the paths of `git diff --name-only <base>` plus the untracked files that git
+does not ignore (add them with `git add -N .` or leave them untracked: both count). It exits 0 when
+every path fits `--lane`; otherwise it exits 1, prints `lane: <the lane the diff fits>` and the
+paths that raise it above `--lane`, each with its lane. Add the lane the diff fits to the issue
+and run the gates it skipped.
+
+Rules, in this order:
+
+- `full`: a `!` in the title's conventional prefix (`feat(x)!:`), or a path that matches `stack:` or
+  `contract:`.
+- `express`: the issue names at least one path, every path matches `express:`, and none is normative.
+- `normal`: the rest. A path that matches no glob, and an issue that names no path, are `normal`,
+  never `express`.
+- Normative paths are fixed in the code and never `express`: `docs/engineering-standard.md`,
+  `docs/standard/`, `docs/factory.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/`, `template/` and
+  `herdr/`. A normative path that also matches `stack:` or `contract:` is `full`.
+- With no `## Lanes` block, or no `AGENTS.md`, every issue is `full`, and a diff fits only `full`.
+
+The block is a `## Lanes` heading in `AGENTS.md`, up to the next heading of level 1 or 2, with the
+lines `stack:`, `contract:` and `express:`, each a comma-separated list of globs. A line may start
+with a list bullet, a glob may be in backticks, and the lines may sit in a fenced block. A line
+that is missing, or empty, is an empty list.
+
+```text
+## Lanes
+
+stack: compose.yaml, images/**, **/Dockerfile
+contract: api/**, docs/contracts/*.md
+express: docs/**/*.md, README.md, .github/project-fields.json
+```
+
+A glob matches the whole path, written with `/`: `*` is any run of characters but `/`, `**` is any
+run including `/` (`**/` also matches nothing), `?` is one character but `/`, and a glob that ends
+in `/` is a folder and matches everything under it.
+
+There is no option to force a lane: nobody lowers one with this command. Exit codes: 0 when the lane
+is printed or the diff fits, 1 when the diff does not fit, 2 on a usage error or a file or `gh` that
+cannot be read.
