@@ -85,6 +85,8 @@ The title and body are read through the API by `lint-issue` and never reach a sh
 
 **Limit: dependencies.** The workflow runs when the issue itself is opened, edited or given a milestone. Closing an issue does not re-lint the issues that "Depend on" it, and reopening one does not take `ready` off its dependants, so the view can be stale until the dependant is edited (or the master runs `lint-issue`, gate 1). A sweep on `closed` and `reopened` is a follow-up.
 
+**Lane.** `lint-issue` reads the `## Lanes` block of the `AGENTS.md` of the issue's own repository on its default branch (`gh api repos/<owner>/<repo>/contents/AGENTS.md`), so the report the workflow posts starts with the issue's lane and the `lane` rule asks for that lane's criterion. A repository with no `AGENTS.md`, or none with a `## Lanes` block, is `full`. The runner's token reads the calling repository, so the workflow needs no change.
+
 `tools-ref` and `tools-repository` are the interface while the tools are built from source; when `@micelio/factory-tools` is published (#30) they go, which breaks callers of this workflow.
 
 `issues` events run from the default branch, so a change to this workflow is tried on a test issue only after it is merged.

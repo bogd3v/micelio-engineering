@@ -79,7 +79,7 @@ function params(over: Partial<ReadyParams> = {}): ReadyParams {
   return {
     ref: { repo: 'o/r', number: 7 },
     passed: true,
-    report: '**lint-issue** · `o/r#7` · 2026-10-24 · all 7 rules pass\n',
+    report: '**lint-issue** · `o/r#7` · 2026-10-24 · all 8 rules pass\n',
     project: { owner: 'bogd3v', number: 1 },
     readyStatus: 'Ready',
     notReadyStatus: 'Todo',
@@ -90,7 +90,7 @@ function params(over: Partial<ReadyParams> = {}): ReadyParams {
   }
 }
 
-const FAILING = '**lint-issue** · `o/r#7` · 2026-10-24 · 1 of 7 rules fail\n\n- `delivery`: x.\n'
+const FAILING = '**lint-issue** · `o/r#7` · 2026-10-24 · 1 of 8 rules fail\n\n- `delivery`: x.\n'
 const ready = { optionId: 'a1b2c3d4', name: 'Ready' }
 const todo = { optionId: 'f75ad846', name: 'Todo' }
 

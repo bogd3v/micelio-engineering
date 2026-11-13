@@ -2,6 +2,7 @@ import { readFile, readdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { issueFromMarkdown } from '../src/issue.js'
+import { parseLanes } from '../src/lane.js'
 import { lintIssue } from '../src/rules.js'
 
 const FACTORY = fileURLToPath(new URL('../../../fixtures/factory/', import.meta.url))
@@ -31,12 +32,16 @@ describe('the factory-retro fixture run', () => {
   it('has three drafts, each passing every lint-issue rule', async () => {
     const files = (await readdir(OUT)).filter((name) => name.endsWith('.md'))
     expect(files).toHaveLength(3)
+    // The drafts are issues of this repository, so they are held to its lanes.
+    const lanes = parseLanes(await readFile(`${FACTORY}../../AGENTS.md`, 'utf8'))
     for (const name of files) {
       const issue = issueFromMarkdown(
         await readFile(`${OUT}${name}`, 'utf8'),
         'bogd3v/micelio-engineering'
       )
-      const failed = (await lintIssue(issue, async () => true)).filter((result) => !result.ok)
+      const failed = (await lintIssue(issue, async () => true, lanes)).filter(
+        (result) => !result.ok
+      )
       expect(failed, name).toEqual([])
       expect(issue.body, name).toContain('Verified by the maintainer')
     }

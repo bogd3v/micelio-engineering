@@ -19,6 +19,7 @@ The example site at `https://example.com` shows no count of its pages. ADR-0001 
 
 - [ ] The unit tests pass.
 - [ ] The widget renders "3 pages" on a site with three pages.
+- [ ] Verified by the maintainer on the stack.
 
 ## Out of scope
 

@@ -197,6 +197,7 @@ describe('parseEvent', () => {
       { kind: 'returned' },
     ],
     ['**lint-issue** · `a/b#1` · 2026-10-24 · 1 of 7 rules fail', { kind: 'returned' }],
+    ['lane: full\n**lint-issue** · `a/b#1` · 2026-10-24 · 1 of 8 rules fail', { kind: 'returned' }],
     [
       '**Gate 3, round 4 (reviewer-35-r4): Red, 1 Blocking, 4 Important.** Report',
       { kind: 'review', round: 4, blocking: 1 },
@@ -625,6 +626,16 @@ describe('metrics', () => {
 
     it('counts fail → pass → fail twice', async () => {
       expect(await returned([bot(fail(2))], { IC_1: edits(fail(2), pass(2), fail(2)) })).toBe(2)
+    })
+
+    it('reads a report that starts with its lane line', async () => {
+      const lane = (body: string): string =>
+        body.replace(`${marker}\n`, `${marker}\nlane: normal\n`)
+      expect(await returned([bot(lane(fail(2)))])).toBe(1)
+      expect(await returned([bot(lane(pass(2)))])).toBe(0)
+      expect(
+        await returned([bot(lane(pass(2)))], { IC_1: edits(lane(fail(2)), lane(pass(2))) })
+      ).toBe(1)
     })
 
     it('counts a comment that was never edited once if it fails, and not if it passes', async () => {
