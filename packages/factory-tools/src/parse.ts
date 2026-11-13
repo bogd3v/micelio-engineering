@@ -1,3 +1,6 @@
+import { LANES } from './lane.js'
+import type { Lane } from './lane.js'
+
 /**
  * A `time:` note: the maintainer's minutes on one pull request. Each field is `null` when the note
  * does not give it.
@@ -7,7 +10,7 @@ export interface TimeLine {
   diff: number | null
   /** Minutes reading the reports first. */
   report: number | null
-  /** Minutes of the hands-on check, on Docker or as a test (`docker` or `test` in the note). */
+  /** Minutes of the hands-on check, on the stack, on Docker or as a test (`stack`, `docker` or `test` in the note). */
   handsOn: number | null
 }
 
@@ -19,15 +22,15 @@ export type GateEvent =
 
 const TIME = /^\s*time:\s*(.*)$/i
 const MINUTES = '(\\d{1,6})\\s*(?:m|mins?|minutes?)'
-const SPENT = new RegExp(`^${MINUTES}\\s+(diff|report|docker|test)$`, 'i')
-const CHECKED = new RegExp(`^maintainer's\\s+(?:docker|test)\\s+check\\s+${MINUTES}$`, 'i')
+const SPENT = new RegExp(`^${MINUTES}\\s+(diff|report|stack|docker|test)$`, 'i')
+const CHECKED = new RegExp(`^maintainer's\\s+(?:stack|docker|test)\\s+check\\s+${MINUTES}$`, 'i')
 const NOT_GIVEN = /^(?:diff|report)\s+(?:read\s+)?(?:time\s+)?(?:was\s+)?not\s+(?:stated|given)$/i
 
 /**
  * Reads one `time:` line, in the forms the maintainer writes: a comma-separated list of
- * `<n>m diff`, `<n>m report`, `<n>m docker` and `<n>m test` (the unit is `m`, `min`, `mins`,
+ * `<n>m diff`, `<n>m report`, `<n>m stack`, `<n>m docker` and `<n>m test` (`stack` and `docker` read the same; the unit is `m`, `min`, `mins`,
  * `minute` or `minutes`), `diff read not stated` (or `not given`), and
- * `maintainer's Docker check <n>m`. A remark may follow in parentheses or after a full stop. Any
+ * `maintainer's stack check <n>m` (or `Docker`, or `test`). A remark may follow in parentheses or after a full stop. Any
  * other clause, or no minutes at all, makes the line no note.
  */
 function parseTimeLine(rest: string): TimeLine | null {
@@ -40,7 +43,7 @@ function parseTimeLine(rest: string): TimeLine | null {
     const checked = CHECKED.exec(clause)
     const minutes = Number(spent?.[1] ?? checked?.[1])
     if (Number.isNaN(minutes)) return null
-    const kind = (spent?.[2] ?? 'docker').toLowerCase()
+    const kind = (spent?.[2] ?? 'stack').toLowerCase()
     if (kind === 'diff' || kind === 'report') note[kind] = minutes
     else note.handsOn = (note.handsOn ?? 0) + minutes
     found = true
@@ -114,6 +117,29 @@ export function parseEvent(body: string): GateEvent | null {
     return { kind: 'verification', mismatches: count(lower, 'mismatch') ?? mismatchLine(body) }
   }
   return null
+}
+
+/**
+ * The lane a `Gate 1` comment of the master sets, from its `lane: <lane>` line (`express`, `normal`
+ * or `full`, case does not matter; the line may be a list item and the lane in backticks). The
+ * comment is a `Gate 1` one when its first line, without its markup, starts `Gate 1`. The last such
+ * line of the comment wins.
+ *
+ * @returns The lane, or `null` when the comment is not a `Gate 1` one or has no valid `lane:` line.
+ */
+export function parseLane(body: string): Lane | null {
+  const first = (body.split(/\r?\n/, 1)[0] ?? '')
+    .replaceAll(/<[^>]*>/g, '')
+    .replaceAll('*', '')
+    .replace(/^\s*#+\s*/, '')
+  if (!first.toLowerCase().startsWith('gate 1')) return null
+  let lane: Lane | null = null
+  for (const line of body.split(/\r?\n/)) {
+    const word = /^\s*(?:[-*]\s+)?lane:\s*`?([a-z]+)`?\s*$/i.exec(line)?.[1]?.toLowerCase()
+    const found = LANES.find((name) => name === word)
+    if (found !== undefined) lane = found
+  }
+  return lane
 }
 
 /** One `tokens |` line: what the session of one agent reported, as the master records it. */

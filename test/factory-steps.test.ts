@@ -47,7 +47,9 @@ const STEPS: Record<string, string[]> = {
     'docs/factory.md',
     'docs/factory-log.md',
   ],
+  'lane:': ['packages/factory-tools/README.md', 'docs/factory.md'],
   'time:': [
+    'packages/factory-tools/README.md',
     `${AGENTS}planner.md`,
     `${SKILLS}ship-pr/SKILL.md`,
     'herdr/master.md',

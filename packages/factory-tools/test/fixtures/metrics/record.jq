@@ -12,13 +12,13 @@ def issue: {
   pull_request: (if .pull_request then {} else null end),
   body: (if (.title | test("^fix")) then (.body | citing) else "" end)
 };
-# A comment keeps its first line (and the line after the `issue-ready` marker), its `factory-log |` and `tokens |` lines, its `accepted:` line and, of a review report, its headings,
+# A comment keeps its first line (and the line after the `issue-ready` marker), its `factory-log |` and `tokens |` lines, its `lane:` line, its `accepted:` line and, of a review report, its headings,
 # the lines that start a finding and the line that counts the verifier's mismatches.
 def marked: (.body // "") | startswith("<!-- micelio:issue-ready -->");
 def comment: {
   user: user, created_at,
   body: ((.body // "") | split("\n") | . as $lines | to_entries
-    | map(select(.key == 0 or (.key == 1 and ($lines[0] | startswith("<!-- micelio:issue-ready -->"))) or (.value | test("^(factory-log \\||tokens \\||## |\\s*(\\*\\*)?[BI][0-9]+\\.)") or test("^\\s*([-*]\\s+)?accepted:|^\\*\\*mismatches:"; "i"))))
+    | map(select(.key == 0 or (.key == 1 and ($lines[0] | startswith("<!-- micelio:issue-ready -->"))) or (.value | test("^(factory-log \\||tokens \\||## |\\s*(\\*\\*)?[BI][0-9]+\\.)") or test("^\\s*([-*]\\s+)?(accepted|lane):|^\\*\\*mismatches:"; "i"))))
     | map(.value[0:400]) | join("\n"))
 } + (if marked then {node_id} else {} end);
 # The versions of a comment that `issue-ready` edits in place, from GraphQL `userContentEdits`: the

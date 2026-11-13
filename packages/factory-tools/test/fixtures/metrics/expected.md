@@ -26,6 +26,12 @@
 | #9053 | #9052 | 40 | 0 | 0 | 2 | 0 | — | — | — | 0 | — | — |
 | Total |  | 2733 | 0 | 0 | 2 | 0 | 31 | 0 | 0 | 0 | 0 |  |
 
+| Lane | Pull requests | Defects after merge | Tokens, by role | Minutes, diff | Minutes, report | Minutes, stack, Docker or test | Lead time, hours | Lead time, median hours |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| express | 0 | 0 | — | 0 | 0 | 0 | — | — |
+| normal | 0 | 0 | — | 0 | 0 | 0 | — | — |
+| full | 5 | 0 | worker 527000 (cache 3300000), verifier 57000 (cache 300000), reviewer 89000 (cache 400000) | 31 | 0 | 0 | 2.5, 2.6, 2.2, 1.3, 3 | 2.5 |
+
 | Category of the Blocking findings | Findings |
 | --- | --- |
 | Correctness | 5 |

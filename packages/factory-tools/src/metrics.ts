@@ -5,12 +5,15 @@ import {
   countLog,
   hasFindings,
   mergeTime,
+  parseLane,
   parseEvent,
   passedByMaster,
   parseTime,
   parseTokenLines,
 } from './parse.js'
 import type { TokenLine } from './parse.js'
+import { LANES } from './lane.js'
+import type { Lane } from './lane.js'
 import type { TimeLine } from './parse.js'
 import { MARKER } from './ready.js'
 import type { Source } from './source.js'
@@ -60,6 +63,13 @@ export interface IssueRow {
    * comment; 0 when it has one.
    */
   unlogged: number
+  /**
+   * The lane of the `lane: <lane>` line of the last `Gate 1` comment of the master that has one;
+   * `full` when none does (a recording made before the lanes reads as `full`).
+   */
+  lane: Lane
+  /** When the first comment of the issue, from anyone, was made, or `null` when it has none. */
+  firstComment: string | null
 }
 
 /** The per-pull-request numbers. */
@@ -89,6 +99,30 @@ export interface PullRow {
   silentApprovals: number
   /** The `tokens |` records of its issue (shared by the pull requests of one issue). */
   tokens: RoleTokens[]
+  /** The lane of its issue (`IssueRow.lane`); `full` when it has none. */
+  lane: Lane
+  /**
+   * The hours from the first comment of its issue to the merge, or `null` when it was not merged,
+   * has no issue or its issue has no comment.
+   */
+  leadHours: number | null
+}
+
+/** The numbers of the pull requests of one lane. */
+export interface LaneRow {
+  lane: Lane
+  /** Pull requests of the lane. */
+  pulls: number
+  /** Defects after merge over those pull requests. */
+  defects: number
+  /** The `tokens |` records of the lane's issues by role, each issue counted once; none: `[]`. */
+  tokens: RoleTokens[]
+  /** The maintainer's `time:` minutes over the lane's pull requests. */
+  minutes: { diff: number; report: number; handsOn: number }
+  /** The hours from the issue's first comment to the merge, of each merged pull request. */
+  leadHours: number[]
+  /** The median of `leadHours`, or `null` when there is none. */
+  medianLeadHours: number | null
 }
 
 /** Everything `renderMetrics` prints. */
@@ -96,6 +130,8 @@ export interface Metrics {
   milestone: string
   issues: IssueRow[]
   pulls: PullRow[]
+  /** One row per lane, `express`, `normal` and `full`, over the issues and pull requests above. */
+  lanes: LaneRow[]
   /** Blocking findings by category, most frequent first. */
   categories: [string, number][]
   /** Rows of the correction log, and those with a Destination. */
@@ -164,12 +200,16 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
       falseRedsGate4: 0,
       tokens: [],
       unlogged: 0,
+      lane: 'full',
+      firstComment: null,
     }
     let reviews = 0
     let findings = 0
     let logged = false
     for (const comment of (await source.comments(row.number)).map(object)) {
       const login = text(object(comment.user).login)
+      const at = text(comment.created_at)
+      if (at !== '' && (row.firstComment === null || at < row.firstComment)) row.firstComment = at
       if (login !== maintainer) {
         row.returned += await botReturns(source, login, comment)
         continue
@@ -177,6 +217,7 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
       const body = text(comment.body)
       if (/^factory-log \| /m.test(body)) logged = true
       const event = parseEvent(body)
+      row.lane = parseLane(body) ?? row.lane
       for (const line of parseTokenLines(body)) {
         addTokens(MILESTONE_ROLES.has(line.role) ? sessions : row.tokens, line)
       }
@@ -221,6 +262,13 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
     if (!required.has(branch)) required.set(branch, new Set(await source.requiredChecks(branch)))
     const merged = typeof listed.merged_at === 'string'
     const time = await timeOf(source, number, maintainer)
+    const issueRow = issueRows.find((row) => row.number === closes)
+    const mergedAt = text(listed.merged_at)
+    const first = issueRow?.firstComment ?? null
+    const leadHours =
+      merged && first !== null && !Number.isNaN(Date.parse(mergedAt))
+        ? (Date.parse(mergedAt) - Date.parse(first)) / 3_600_000
+        : null
     pullRows.push({
       number,
       title: text(listed.title),
@@ -240,7 +288,9 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
       time,
       merged,
       silentApprovals: await silentApprovals(source, number, maintainer, time),
-      tokens: issueRows.find((row) => row.number === closes)?.tokens ?? [],
+      tokens: issueRow?.tokens ?? [],
+      lane: issueRow?.lane ?? 'full',
+      leadHours,
     })
   }
   const recorded = issueRows.flatMap((row) => row.tokens)
@@ -252,6 +302,7 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
     milestone: options.milestone,
     issues: issueRows.toSorted((a, b) => a.number - b.number),
     pulls: pullRows.toSorted((a, b) => a.number - b.number),
+    lanes: LANES.map((lane) => laneRow(lane, issueRows, pullRows)),
     categories: [...categories].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])),
     log: (({ rows, converted }) => ({ rows, converted }))(countLog(options.log)),
     learnings: countLearnings(options.log),
@@ -262,6 +313,38 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
       cleanPulls: pullRows.filter((pull) => pull.merged && pull.defects === 0).length,
     },
   }
+}
+
+/** The numbers of one lane: its pull requests, and its issues' tokens counted once each. */
+function laneRow(lane: Lane, issues: IssueRow[], pulls: PullRow[]): LaneRow {
+  const own = pulls.filter((pull) => pull.lane === lane)
+  const tokens: RoleTokens[] = []
+  for (const issue of issues.filter((i) => i.lane === lane)) {
+    for (const record of issue.tokens)
+      addTokens(tokens, { ...record, date: '', issue: '', round: '' })
+  }
+  const sum = (column: 'diff' | 'report' | 'handsOn'): number =>
+    own.reduce((total, pull) => total + (pull.time?.[column] ?? 0), 0)
+  const leadHours = own.flatMap((pull) => (pull.leadHours === null ? [] : [pull.leadHours]))
+  return {
+    lane,
+    pulls: own.length,
+    defects: own.reduce((total, pull) => total + pull.defects, 0),
+    tokens,
+    minutes: { diff: sum('diff'), report: sum('report'), handsOn: sum('handsOn') },
+    leadHours,
+    medianLeadHours: median(leadHours),
+  }
+}
+
+/** The median of a list, the mean of the two middle values when it has an even length. */
+function median(values: number[]): number | null {
+  if (values.length === 0) return null
+  const sorted = values.toSorted((a, b) => a - b)
+  const middle = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 1
+    ? (sorted[middle] ?? 0)
+    : ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2
 }
 
 /**
