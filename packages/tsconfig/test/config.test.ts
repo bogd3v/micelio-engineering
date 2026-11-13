@@ -1,8 +1,8 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
+import { tempDir } from '../../../test/support/temp.js'
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url))
 const FIXTURE = `${ROOT}fixtures/basic/`
@@ -18,7 +18,7 @@ function parseFixtureConfig(): ts.ParsedCommandLine {
 
 /** Type-checks `code` with the fixture's compiler options and returns the diagnostic codes. */
 function diagnosticsFor(code: string): number[] {
-  const dir = mkdtempSync(`${tmpdir()}/micelio-tsconfig-`)
+  const dir = tempDir('micelio-tsconfig-')
   const file = `${dir}/sample.ts`
   writeFileSync(file, code)
   const { options } = parseFixtureConfig()

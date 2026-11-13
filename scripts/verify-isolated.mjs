@@ -2,7 +2,7 @@
 // the tarballs in an empty project (the registry serves their dependencies and peers, as it
 // will for a consumer) and runs the fixture's lint, typecheck and format:check there.
 import { execFileSync } from 'node:child_process'
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -20,42 +20,47 @@ function run(command, args, cwd) {
   execFileSync(command, args, { cwd, stdio: 'inherit' })
 }
 
-run('npm', ['run', 'build'], root)
-for (const name of ['eslint-config', 'prettier-config', 'tsconfig']) {
-  run('npm', ['pack', '--pack-destination', tarballs, '-w', `@micelio/${name}`], root)
-}
+try {
+  run('npm', ['run', 'build'], root)
+  for (const name of ['eslint-config', 'prettier-config', 'tsconfig']) {
+    run('npm', ['pack', '--pack-destination', tarballs, '-w', `@micelio/${name}`], root)
+  }
 
-cpSync(join(root, 'fixtures/basic'), project, {
-  recursive: true,
-  filter: (source) => !source.includes('node_modules'),
-})
-const packed = readdirSync(tarballs).map((file) => join(tarballs, file))
-writeFileSync(
-  join(project, 'package.json'),
-  JSON.stringify(
-    {
-      name: 'isolated-fixture',
-      private: true,
-      type: 'module',
-      scripts: {
-        lint: 'eslint .',
-        typecheck: 'tsc --noEmit',
-        'format:check': 'prettier --check .',
+  cpSync(join(root, 'fixtures/basic'), project, {
+    recursive: true,
+    filter: (source) => !source.includes('node_modules'),
+  })
+  const packed = readdirSync(tarballs).map((file) => join(tarballs, file))
+  writeFileSync(
+    join(project, 'package.json'),
+    JSON.stringify(
+      {
+        name: 'isolated-fixture',
+        private: true,
+        type: 'module',
+        scripts: {
+          lint: 'eslint .',
+          typecheck: 'tsc --noEmit',
+          'format:check': 'prettier --check .',
+        },
+        prettier: '@micelio/prettier-config',
       },
-      prettier: '@micelio/prettier-config',
-    },
-    null,
-    2
+      null,
+      2
+    )
   )
-)
-run('npm', ['install', '--save-dev', ...packed], project)
-const dependencies = Object.keys(
-  JSON.parse(
-    execFileSync('npm', ['pkg', 'get', 'devDependencies'], { cwd: project, encoding: 'utf8' })
+  run('npm', ['install', '--save-dev', ...packed], project)
+  const dependencies = Object.keys(
+    JSON.parse(
+      execFileSync('npm', ['pkg', 'get', 'devDependencies'], { cwd: project, encoding: 'utf8' })
+    )
   )
-)
-console.log(`devDependencies of the isolated project: ${dependencies.join(', ')}`)
-if (dependencies.length !== 3)
-  throw new Error('the isolated project must depend on exactly the three packages')
-for (const script of ['lint', 'typecheck', 'format:check']) run('npm', ['run', script], project)
-console.log('Isolated fixture passes lint, typecheck and format:check.')
+  console.log(`devDependencies of the isolated project: ${dependencies.join(', ')}`)
+  if (dependencies.length !== 3)
+    throw new Error('the isolated project must depend on exactly the three packages')
+  for (const script of ['lint', 'typecheck', 'format:check']) run('npm', ['run', script], project)
+  console.log('Isolated fixture passes lint, typecheck and format:check.')
+} finally {
+  // The work directory (node_modules included) goes whether the run passes or fails.
+  rmSync(work, { recursive: true, force: true })
+}

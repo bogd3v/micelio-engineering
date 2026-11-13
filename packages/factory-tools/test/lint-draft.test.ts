@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtemp, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { tempDir } from '../../../test/support/temp.js'
 import { createDeps, lintDraft, runLintDraft } from '../src/lint-draft.js'
 import type { DraftContext, LintDraftDeps } from '../src/lint-draft.js'
 
@@ -140,7 +140,7 @@ describe('runLintDraft', () => {
 
 describe('createDeps', () => {
   it('reads the synced files from this checkout, not from a target that has none', async () => {
-    const target = await mkdtemp(join(tmpdir(), 'lint-draft-target-'))
+    const target = tempDir('lint-draft-target-')
     const git = (...args: string[]): string =>
       execFileSync('git', ['-C', target, ...args], { encoding: 'utf8' })
     git('init', '-q')

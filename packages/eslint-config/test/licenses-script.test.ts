@@ -1,8 +1,8 @@
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { tempDir } from '../../../test/support/temp.js'
 
 const SCRIPT = fileURLToPath(new URL('../../../scripts/check-licenses.mjs', import.meta.url))
 
@@ -14,7 +14,7 @@ interface Entry {
 
 /** Runs `lint:licenses` on a lockfile made of `packages` and answers its exit code and output. */
 function run(packages: Record<string, Entry>): { code: number | null; output: string } {
-  const dir = mkdtempSync(`${tmpdir()}/micelio-licenses-`)
+  const dir = tempDir('micelio-licenses-')
   const lock = `${dir}/package-lock.json`
   const entries = Object.fromEntries(
     Object.entries(packages).map(([name, entry]) => [

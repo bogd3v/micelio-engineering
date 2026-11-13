@@ -1,16 +1,16 @@
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { tempDir } from '../../../test/support/temp.js'
 import { lintEe } from '../src/ee.js'
 
 const BIN = fileURLToPath(new URL('../dist/lint-ee.js', import.meta.url))
 
 /** A git repository holding `files`, all tracked. */
 function repo(files: Record<string, string>): string {
-  const dir = mkdtempSync(join(tmpdir(), 'micelio-ee-'))
+  const dir = tempDir('micelio-ee-')
   for (const [path, text] of Object.entries(files)) {
     mkdirSync(dirname(join(dir, path)), { recursive: true })
     writeFileSync(join(dir, path), text)

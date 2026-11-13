@@ -3,16 +3,15 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { tempDir } from '../../../test/support/temp.js'
 import { syncedFiles } from '../../../scripts/synced-files.mjs'
 import {
   STANDARD_PATH,
@@ -42,7 +41,7 @@ const AGENTS = (version: string): string =>
 
 /** A repository directory with an AGENTS.md pinning `pin` and a copy of the standard with `copy`. */
 function repo(pin: string | null, copy: string | null): string {
-  const dir = mkdtempSync(join(tmpdir(), 'micelio-standard-'))
+  const dir = tempDir('micelio-standard-')
   if (pin) writeFileSync(join(dir, 'AGENTS.md'), AGENTS(pin))
   if (copy !== null) {
     mkdirSync(join(dir, 'docs'))
@@ -453,7 +452,7 @@ describe('apply-standard', () => {
   })
 
   it('changes nothing in a repository that is already in sync', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'micelio-standard-'))
+    const dir = tempDir('micelio-standard-')
     mkdirSync(join(dir, 'docs'))
     cpSync(source, join(dir, STANDARD_PATH))
     writeFileSync(join(dir, 'AGENTS.md'), AGENTS(CURRENT))

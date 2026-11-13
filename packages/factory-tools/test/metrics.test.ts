@@ -1,10 +1,10 @@
 import { spawnSync } from 'node:child_process'
 import type { SpawnSyncReturns } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, readdir, realpath, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { tempDir } from '../../../test/support/temp.js'
 import { metrics } from '../src/metrics.js'
 import {
   acceptedFindings,
@@ -991,7 +991,7 @@ describe('factory-tools metrics', () => {
   })
 
   it('finds the log from the repository root when run from a package folder', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'factory-tools-'))
+    const root = tempDir('factory-tools-')
     const folder = join(root, 'packages', 'factory-tools')
     await mkdir(join(root, 'docs'), { recursive: true })
     await mkdir(folder, { recursive: true })
@@ -1011,7 +1011,7 @@ describe('factory-tools metrics', () => {
     expect(result.stderr).toBe('')
     expect(result.code).toBe(0)
     expect(result.stdout).toContain('| 2 | 1 |')
-    const outside = await mkdtemp(join(tmpdir(), 'factory-tools-outside-'))
+    const outside = tempDir('factory-tools-outside-')
     const inside = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: outside })
     // A TMPDIR inside a repository (some sandboxes) has no "outside" to test.
     if (inside.status !== 0) {
@@ -1113,7 +1113,7 @@ describe('factory-tools metrics', () => {
   })
 
   it('a hand-written overlay wins over a recording', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'overlay-'))
+    const dir = tempDir('overlay-')
     const put = async (file: string, json: unknown) => {
       await mkdir(join(dir, file, '..'), { recursive: true })
       await writeFile(join(dir, file), JSON.stringify(json))
@@ -1150,7 +1150,7 @@ describe('factory-tools metrics', () => {
   async function recorder(
     gh: string
   ): Promise<{ dir: string; run: () => SpawnSyncReturns<string> }> {
-    const root = await mkdtemp(join(tmpdir(), 'record-'))
+    const root = tempDir('record-')
     const dir = join(root, 'a/b/c/d/e')
     await mkdir(join(dir, 'comments'), { recursive: true })
     await mkdir(join(dir, 'overlay'), { recursive: true })

@@ -5,7 +5,6 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readdirSync,
   readFileSync,
   writeFileSync,
@@ -14,6 +13,7 @@ import { arch, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { tempDir } from '../../../test/support/temp.js'
 import { loadFileHashes, standardVersion } from '../src/standard.js'
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url))
@@ -130,7 +130,7 @@ interface World {
 
 /** Bare remotes for the targets, each with an AGENTS.md pinning `pin`, and the stubbed tools. */
 function world(pin: string, existingPr = '', spec: Repository = CURRENT_REPOSITORY): World {
-  const base = mkdtempSync(join(tmpdir(), 'micelio-sync-'))
+  const base = tempDir('micelio-sync-')
   const remotes = join(base, 'remotes')
   const bin = join(base, 'bin')
   mkdirSync(remotes)
@@ -199,6 +199,8 @@ function world(pin: string, existingPr = '', spec: Repository = CURRENT_REPOSITO
     SOURCE: 'https://example.test/micelio-engineering',
     NODE_DIST: `file://${dist}`,
     REAL_NODE: process.execPath,
+    // The TMPDIR of the test's process: the script's `mktemp -d` makes its work directory there.
+    TMPDIR: tmpdir(),
   }
   return { env, remotes, log }
 }
@@ -216,7 +218,7 @@ function makeDist(dist: string, withSemver = true): void {
   )
   for (const version of ['22.99.0', '22.98.0', '20.1.0']) {
     const archive = `node-v${version}-${platform}`
-    const stage = mkdtempSync(join(tmpdir(), 'micelio-node-'))
+    const stage = tempDir('micelio-node-')
     mkdirSync(join(stage, archive, 'bin'), { recursive: true })
     mkdirSync(join(stage, archive, 'lib/node_modules/npm/node_modules'), { recursive: true })
     writeFileSync(join(stage, archive, 'bin/node'), '#!/usr/bin/env bash\nexec "$REAL_NODE" "$@"\n')
@@ -307,7 +309,7 @@ describe('standard-sync.sh', () => {
     const source = readFileSync(`${ROOT}docs/engineering-standard.md`, 'utf8')
     for (const repository of TARGETS.repositories) {
       const dir = join(w.remotes, `${repository.split('/')[1]}.git`)
-      const work = mkdtempSync(join(tmpdir(), 'micelio-sync-work-'))
+      const work = tempDir('micelio-sync-work-')
       git(work, 'clone', '-q', dir, '.')
       git(work, 'config', 'user.name', 'Seed')
       git(work, 'config', 'user.email', 'seed@example.test')
@@ -332,7 +334,7 @@ describe('standard-sync.sh', () => {
   it('fails, without stopping the others, when a repository has no pin to move', () => {
     const w = world('1.3')
     const first = TARGETS.repositories[0]?.split('/')[1] ?? ''
-    const work = mkdtempSync(join(tmpdir(), 'micelio-sync-work-'))
+    const work = tempDir('micelio-sync-work-')
     git(work, 'clone', '-q', join(w.remotes, `${first}.git`), '.')
     git(work, 'config', 'user.name', 'Seed')
     git(work, 'config', 'user.email', 'seed@example.test')
@@ -586,11 +588,57 @@ describe('standard-sync.sh raising the package', () => {
     expect(result.status).toBe(1)
     expect(result.output).toContain('is not a Node version')
   })
+
+  describe('its work directory', () => {
+    /** A directory of its own that the script gets as `TMPDIR`. */
+    function scratch(): string {
+      return tempDir('micelio-sync-tmp-')
+    }
+
+    it('the script makes its work directory in the TMPDIR it is given', () => {
+      // `world()` gives the script the TMPDIR of this process, the run's own (test/setup/tmpdir.ts).
+      const w = world('1.3')
+      expect(w.env['TMPDIR']).toBe(process.env['TMPDIR'])
+      const result = sync(w, true)
+      expect(result.status, result.output).toBe(0)
+      // The clones of the targets are made in the work directory: every one is under that TMPDIR.
+      const clones = readFileSync(w.log, 'utf8')
+        .split('\n')
+        .filter((line) => line.startsWith('gh repo clone '))
+      expect(clones).toHaveLength(TARGETS.repositories.length)
+      for (const line of clones) expect(line, line).toContain(` ${tmpdir()}/tmp.`)
+    })
+
+    it('the script removes its work directory when it exits', () => {
+      const w = world('1.3')
+      const given = scratch()
+      const result = sync({ ...w, env: { ...w.env, TMPDIR: given } }, false)
+      expect(result.status, result.output).toBe(0)
+      expect(readdirSync(given)).toEqual([])
+    })
+
+    it('the script removes its work directory when it fails', () => {
+      const w = world('1.3')
+      const first = TARGETS.repositories[0]?.split('/')[1] ?? ''
+      const work = tempDir('micelio-sync-work-')
+      git(work, 'clone', '-q', join(w.remotes, `${first}.git`), '.')
+      git(work, 'config', 'user.name', 'Seed')
+      git(work, 'config', 'user.email', 'seed@example.test')
+      writeFileSync(join(work, 'AGENTS.md'), 'no pin\n')
+      git(work, 'commit', '-qam', 'unpin')
+      git(work, 'push', '-q', 'origin', 'main')
+      const given = scratch()
+      const result = sync({ ...w, env: { ...w.env, TMPDIR: given } }, false)
+      expect(result.status).toBe(1)
+      expect(result.output).toContain('has no pin to move')
+      expect(readdirSync(given)).toEqual([])
+    })
+  })
 })
 
 /** A canonical copy of a version in the new form: the core and `docs/standard/<profile>.md`. */
 function splitSource(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'micelio-split-'))
+  const dir = tempDir('micelio-split-')
   mkdirSync(join(dir, 'docs/standard'), { recursive: true })
   const core = join(dir, 'docs/engineering-standard.md')
   writeFileSync(core, '# Micelio engineering standard\n\nVersion 2.0 (2026-12-01). Core.\n')
@@ -605,7 +653,7 @@ function splitSource(): string {
  * `docs/standard/` next to it.
  */
 function oneFileSource(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'micelio-one-file-'))
+  const dir = tempDir('micelio-one-file-')
   mkdirSync(join(dir, 'docs'))
   const core = join(dir, 'docs/engineering-standard.md')
   cpSync(fileURLToPath(new URL('./fixtures/standard-1.8.md', import.meta.url)), core)
@@ -614,7 +662,7 @@ function oneFileSource(): string {
 
 /** A repository whose AGENTS.md carries `pins` (the backticked pins) and an older standard. */
 function pinned(pins: string): string {
-  const dir = mkdtempSync(join(tmpdir(), 'micelio-apply-'))
+  const dir = tempDir('micelio-apply-')
   mkdirSync(join(dir, 'docs'))
   writeFileSync(join(dir, 'docs/engineering-standard.md'), 'older\n')
   writeFileSync(join(dir, 'AGENTS.md'), `follows standard version 1.8 (${pins})\n`)
@@ -948,7 +996,7 @@ describe('standard-sync.sh and the profile pin', () => {
   it('says the standard could not be applied, not that the pin is missing, for another failure', () => {
     const w = world('1.3')
     const first = TARGETS.repositories[0]?.split('/')[1] ?? ''
-    const work = mkdtempSync(join(tmpdir(), 'micelio-sync-work-'))
+    const work = tempDir('micelio-sync-work-')
     git(work, 'clone', '-q', join(w.remotes, `${first}.git`), '.')
     git(work, 'config', 'user.name', 'Seed')
     git(work, 'config', 'user.email', 'seed@example.test')
