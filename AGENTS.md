@@ -17,6 +17,7 @@ npm run template -- <dir> # creates a repository from template/ (docs/template.m
 npm run verify:template  # creates one, installs the packed packages and runs its checks (needs the registry)
 npm run verify:isolated  # installs the three packed packages in an empty project and runs the fixture's checks (needs the registry)
 npm run lint-issue --workspace packages/factory-tools -- <owner/repo#n> # checks an issue against the Definition of Ready (needs gh)
+npm run build && node packages/factory-tools/dist/cli.js lint-lane <owner/repo#n> # sets an issue's lane from the ## Lanes block of AGENTS.md (needs gh); --file <path>, or --diff <base> --lane <lane> to check a diff
 npm run metrics --workspace packages/factory-tools -- --milestone "<title>" # the factory's numbers for a milestone (needs gh; --fixtures <dir> reads a recording instead)
 ```
 
@@ -32,7 +33,7 @@ In the container, run `git config --global --add safe.directory <worktree path>`
 
 ## Structure
 
-- `packages/` — the configuration packages `@micelio/eslint-config`, `@micelio/tsconfig` and `@micelio/prettier-config`, each with its own version and published by `.github/workflows/publish-packages.yml` from a tag `<package>-vX.Y.Z`; and `@micelio/factory-tools`, the factory's commands (`lint-issue`, `issue-ready`, `project-fields-backfill` and `metrics`, their rules and columns in `packages/factory-tools/README.md`), not published yet.
+- `packages/` — the configuration packages `@micelio/eslint-config`, `@micelio/tsconfig` and `@micelio/prettier-config`, each with its own version and published by `.github/workflows/publish-packages.yml` from a tag `<package>-vX.Y.Z`; and `@micelio/factory-tools`, the factory's commands (`lint-issue`, `lint-lane`, `issue-ready`, `project-fields-backfill` and `metrics`, their rules and columns in `packages/factory-tools/README.md`), not published yet.
 - `fixtures/basic/` — a project that uses only the three configuration packages; their tests run against it.
 - `fixtures/rust-basic/` — a minimal Rust library that `ci.yml` checks through `check.yml` with `profile: rust`.
 - `fixtures/no-npm/` — a repository without npm (`AGENTS.md` pinning 1.8 and a copy of the standard) that `ci.yml` checks with the `lint-standard` action.
