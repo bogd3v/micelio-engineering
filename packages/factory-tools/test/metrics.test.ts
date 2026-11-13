@@ -14,6 +14,7 @@ import {
   hasFindings,
   mergeTime,
   parseEvent,
+  parseLane,
   parseLogLines,
   parseTime,
   parseTokenLines,
@@ -763,6 +764,8 @@ describe('metrics', () => {
       merged: true,
       silentApprovals: 0,
       tokens: [],
+      lane: 'full',
+      leadHours: null,
     })
     expect(result.pulls[1]).toMatchObject({ issue: null, time: null, defects: 0 })
     expect(result.pulls[2]).toMatchObject({ issue: 1, defects: 0 })
@@ -1481,5 +1484,197 @@ describe('the columns of the token and review-quality metrics', () => {
     })
     expect(result.tokens).toEqual({ total: 2, cleanPulls: 0 })
     expect(renderMetrics(result, '2026-10-24')).toContain('without a later fix:** —')
+  })
+})
+
+describe('the table per lane', () => {
+  const gate1 = (lane: string, extra = ''): string =>
+    `**Gate 1 (#1): ready**${extra}\nlane: ${lane}\nthe issue passes`
+
+  it("an issue's lane is read from the Gate 1 comment, and is full without one", async () => {
+    expect(parseLane(gate1('express'))).toBe('express')
+    expect(parseLane('# Gate 1: ready\n- lane: `normal`')).toBe('normal')
+    expect(parseLane('**Gate 3, round 1**\nlane: express')).toBeNull()
+    expect(parseLane(gate1('fast'))).toBeNull()
+    const result = await metrics(
+      source({
+        issues: [issue(1), issue(2), issue(3), issue(4), issue(5), issue(6)],
+        comments: {
+          1: [comment('maint', gate1('express'))],
+          2: [comment('maint', gate1('express')), comment('maint', gate1('normal'))],
+          3: [comment('maint', 'prose\nlane: express')],
+          4: [comment('other', gate1('express'))],
+          5: [comment('maint', gate1('fast'))],
+        },
+        pulls: [
+          pull(10, { milestone: { title: 'M2' }, body: 'Closes #1' }),
+          pull(11, { milestone: { title: 'M2' }, body: 'Closes #6' }),
+          pull(12, { milestone: { title: 'M2' } }),
+        ],
+      }),
+      { milestone: 'M2', log: '' }
+    )
+    expect(result.issues.map((i) => [i.number, i.lane])).toEqual([
+      [1, 'express'],
+      [2, 'normal'],
+      [3, 'full'],
+      [4, 'full'],
+      [5, 'full'],
+      [6, 'full'],
+    ])
+    expect(result.pulls.map((p) => [p.number, p.lane])).toEqual([
+      [10, 'express'],
+      [11, 'full'],
+      [12, 'full'],
+    ])
+  })
+
+  it('a recording made before the lanes reads every pull request as full', async () => {
+    const result = await metrics(fixtureSource(RECORDED), { milestone: MILESTONE, log: '' })
+    expect(result.pulls.length).toBeGreaterThan(0)
+    expect(result.lanes.map((l) => [l.lane, l.pulls])).toEqual([
+      ['express', 0],
+      ['normal', 0],
+      ['full', result.pulls.length],
+    ])
+  })
+
+  it('the summary has one row per lane with defects after merge, tokens, minutes and lead time', async () => {
+    const tokens = (issue: number, role: string, input: number): string =>
+      `tokens | 2026-01-01 | #${issue} | ${role} | 1 | ${input} | 10 | 5`
+    const result = await metrics(
+      source({
+        issues: [issue(1), issue(2), issue(3)],
+        comments: {
+          1: [
+            comment(
+              'maint',
+              gate1('express') + '\n' + tokens(1, 'worker', 100),
+              '2026-01-01T00:00:00Z'
+            ),
+          ],
+          2: [
+            comment('bot', 'hello', '2026-01-01T00:00:00Z'),
+            comment(
+              'maint',
+              gate1('express') + '\n' + tokens(2, 'worker', 200),
+              '2026-01-01T06:00:00Z'
+            ),
+          ],
+          3: [
+            comment(
+              'maint',
+              gate1('full') + '\n' + tokens(3, 'reviewer', 50),
+              '2026-01-01T00:00:00Z'
+            ),
+          ],
+          10: [comment('maint', 'time: 3m diff, 2m stack')],
+          11: [comment('maint', 'time: 4m report, 1m docker')],
+          12: [comment('maint', 'time: 10m diff')],
+        },
+        pulls: [
+          pull(10, {
+            milestone: { title: 'M2' },
+            body: 'Closes #1',
+            merged_at: '2026-01-01T05:00:00Z',
+          }),
+          pull(11, {
+            milestone: { title: 'M2' },
+            body: 'Closes #2',
+            merged_at: '2026-01-01T12:00:00Z',
+          }),
+          pull(12, {
+            milestone: { title: 'M2' },
+            body: 'Closes #3',
+            merged_at: '2026-01-02T00:00:00Z',
+          }),
+          pull(13, { milestone: { title: 'M2' }, body: 'Closes #3', merged_at: null }),
+        ],
+        all: [{ number: 30, title: 'fix: it broke', body: 'Introduced by #11.' }],
+      }),
+      { milestone: 'M2', log: '' }
+    )
+    const [express, normal, full] = result.lanes
+    expect(express).toEqual({
+      lane: 'express',
+      pulls: 2,
+      defects: 1,
+      tokens: [{ role: 'worker', input: 300, output: 20, cacheRead: 10 }],
+      minutes: { diff: 3, report: 4, handsOn: 3 },
+      leadHours: [5, 12],
+      medianLeadHours: 8.5,
+    })
+    expect(normal).toMatchObject({ lane: 'normal', pulls: 0, tokens: [], medianLeadHours: null })
+    expect(full).toMatchObject({
+      lane: 'full',
+      pulls: 2,
+      defects: 0,
+      minutes: { diff: 10, report: 0, handsOn: 0 },
+      leadHours: [24],
+      medianLeadHours: 24,
+    })
+    const text = renderMetrics(result, '2026-10-24')
+    expect(text).toContain(
+      '| Lane | Pull requests | Defects after merge | Tokens, by role | Minutes, diff | Minutes, report | Minutes, stack, Docker or test | Lead time, hours | Lead time, median hours |'
+    )
+    expect(text).toContain('| express | 2 | 1 | worker 320 (cache 10) | 3 | 4 | 3 | 5, 12 | 8.5 |')
+    expect(text).toContain('| normal | 0 | 0 | — | 0 | 0 | 0 | — | — |')
+    expect(text).toContain('| full | 2 | 0 | reviewer 60 (cache 5) | 10 | 0 | 0 | 24 | 24 |')
+  })
+
+  it('the median of an odd number of lead times is the middle one', async () => {
+    const result = await metrics(
+      source({
+        issues: [issue(1)],
+        comments: { 1: [comment('maint', 'x', '2026-01-01T00:00:00Z')] },
+        pulls: [
+          pull(10, {
+            milestone: { title: 'M2' },
+            body: 'Closes #1',
+            merged_at: '2026-01-01T10:00:00Z',
+          }),
+          pull(11, {
+            milestone: { title: 'M2' },
+            body: 'Closes #1',
+            merged_at: '2026-01-01T02:00:00Z',
+          }),
+          pull(12, {
+            milestone: { title: 'M2' },
+            body: 'Closes #1',
+            merged_at: '2026-01-01T04:30:00Z',
+          }),
+        ],
+      }),
+      { milestone: 'M2', log: '' }
+    )
+    expect(result.lanes[2]?.leadHours).toEqual([10, 2, 4.5])
+    expect(result.lanes[2]?.medianLeadHours).toBe(4.5)
+  })
+
+  it('a time note reads stack as it reads docker', () => {
+    expect(parseTime('time: 3m diff, 2m stack')).toEqual({ diff: 3, report: null, handsOn: 2 })
+    expect(parseTime("time: 5 minutes report, maintainer's stack check 4m")).toEqual({
+      diff: null,
+      report: 5,
+      handsOn: 4,
+    })
+    expect(parseTime('time: 2m STACK')).toEqual(parseTime('time: 2m docker'))
+    expect(parseTime("time: maintainer's stack check 4m")).toEqual(
+      parseTime("time: maintainer's Docker check 4m")
+    )
+    expect(parseTime('time: 2m docker')?.handsOn).toBe(2)
+    expect(parseTime('time: 2m stacks')).toBeNull()
+  })
+
+  it('record.jq keeps the lane line of a Gate 1 comment', () => {
+    const body = ['**Gate 1 (#1): ready**', 'prose that is dropped', 'lane: express'].join('\n')
+    const out = spawnSync('jq', ['-c', '-L', RECORDED, 'include "record"; comment | .body'], {
+      encoding: 'utf8',
+      input: JSON.stringify({ user: { login: 'u' }, created_at: 'x', body }),
+    })
+    expect(out.status).toBe(0)
+    const kept = JSON.parse(out.stdout) as string
+    expect(kept).toBe('**Gate 1 (#1): ready**\nlane: express')
+    expect(parseLane(kept)).toBe('express')
   })
 })

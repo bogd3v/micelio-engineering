@@ -5,7 +5,9 @@ import type { Metrics, PullRow, RoleTokens } from './metrics.js'
  * ends the first two. A pull request without a `time:` line shows `—` in the three minutes columns;
  * with one, a column it does not give shows `—`, except that `diff` and `report` are alternatives,
  * so a note with one of them shows 0 in the other. The tokens cell is `—` when the issue has no
- * `tokens |` record, never 0. After the correction log table come the tokens of the milestone by
+ * `tokens |` record, never 0. The table per lane follows, one row for each of `express`, `normal` and
+ * `full`: its pull requests, defects after merge, tokens by role, minutes and the hours from the
+ * issue's first comment to the merge of each merged pull request, with their median (`—` with none). After the correction log table come the tokens of the milestone by
  * role (the `master` and `canary` records included, cache reads shown) and two summary lines, the
  * tokens per merged pull request without a later fix without and with cache reads; a pull request's
  * issue record is counted once in them, however many pull requests repeat its cell. The same holds
@@ -112,6 +114,31 @@ export function renderMetrics(result: Metrics, date: string): string {
       ],
     ]
   )
+  const hours = (value: number): string => String(Math.round(value * 10) / 10)
+  const lanes = table(
+    [
+      'Lane',
+      'Pull requests',
+      'Defects after merge',
+      'Tokens, by role',
+      'Minutes, diff',
+      'Minutes, report',
+      'Minutes, stack, Docker or test',
+      'Lead time, hours',
+      'Lead time, median hours',
+    ],
+    result.lanes.map((l) => [
+      l.lane,
+      l.pulls,
+      l.defects,
+      tokensCell(l.tokens),
+      l.minutes.diff,
+      l.minutes.report,
+      l.minutes.handsOn,
+      l.leadHours.length ? l.leadHours.map(hours).join(', ') : '—',
+      l.medianLeadHours === null ? '—' : hours(l.medianLeadHours),
+    ])
+  )
   const categories = table(
     ['Category of the Blocking findings', 'Findings'],
     result.categories.length ? result.categories : [['none', 0]]
@@ -157,6 +184,7 @@ export function renderMetrics(result: Metrics, date: string): string {
       `**metrics** · "${result.milestone}" · ${date}`,
       issues,
       pulls,
+      lanes,
       categories,
       learnings,
       roles,
