@@ -48,7 +48,7 @@ const MAX_BUFFER = 256 * 1024 * 1024
 
 /** The bullets of the Tests section, each with its continuation lines; `null` when there is no section. */
 function testsEntries(draft: string): Entry[] | null {
-  const lines = draft.split('\n')
+  const lines = draft.split(/\r?\n/)
   const start = lines.findIndex((line) => /^#{1,6}\s+Tests\s*$/.test(line))
   if (start === -1) return null
   const level = /^#+/.exec(lines[start] ?? '')?.[0].length ?? 1
@@ -188,13 +188,13 @@ function numbersBefore(output: string, word: string): string[] {
  * compares its exit code and the figures of its summary line with the draft's.
  *
  * @param draft - The text of the pull request draft.
- * @param logs - The directory the draft's `logs/` files are in.
+ * @param logs - The directory the draft's `logs/` files are in; `undefined` when there is none (a pull request's CI), and then a command with no log is not a mismatch.
  * @param cwd - The clean copy the commands run in.
  * @returns One outcome per bullet of the section; `null` when the draft has no Tests section.
  */
 export async function verifyDraft(
   draft: string,
-  logs: string,
+  logs: string | undefined,
   cwd: string,
   deps: VerifyDraftDeps
 ): Promise<EntryOutcome[] | null> {
@@ -227,7 +227,9 @@ export async function verifyDraft(
       continue
     }
     const logName = LOG.exec(summary)?.[1]
-    const hasLog = logName !== undefined && (await deps.exists(join(logs, basename(logName))))
+    const hasLog =
+      logs === undefined ||
+      (logName !== undefined && (await deps.exists(join(logs, basename(logName)))))
     const words = tokenize(command)
     if (words === null || !isRepositoryCommand(words, agents, scripts)) {
       outcomes.push(
@@ -328,12 +330,12 @@ export const defaultVerifyDeps: VerifyDraftDeps = {
 }
 
 const USAGE =
-  'Usage:\n  factory-tools verify-draft --draft <file> --logs <dir> [--cwd <clean copy>]\n'
+  'Usage:\n  factory-tools verify-draft --draft <file> [--logs <dir>] [--cwd <clean copy>]\n'
 
 /**
- * `factory-tools verify-draft --draft <file> --logs <dir> [--cwd <clean copy>]`: the script that
+ * `factory-tools verify-draft --draft <file> [--logs <dir>] [--cwd <clean copy>]`: the script that
  * stands in for the verifier in the `normal` lane. It prints one line per bullet of the Tests
- * section and a verdict line.
+ * section and a verdict line. Without `--logs` it prints `logs: not checked` before the verdict.
  *
  * @param argv - The arguments after the program name, starting with `verify-draft`.
  */
@@ -355,8 +357,8 @@ export async function runVerifyDraft(
   }
   const draft = values.get('--draft')
   const logs = values.get('--logs')
-  if (draft === undefined || logs === undefined) {
-    return { code: 2, stdout: '', stderr: `error: verify-draft needs --draft and --logs\n${USAGE}` }
+  if (draft === undefined) {
+    return { code: 2, stdout: '', stderr: `error: verify-draft needs --draft\n${USAGE}` }
   }
   try {
     const outcomes = await verifyDraft(
@@ -372,7 +374,9 @@ export async function runVerifyDraft(
     const verdict = `Verdict: ${mismatches === 0 ? 'Pass' : 'Red'} · ${mismatches} mismatches`
     return {
       code: mismatches === 0 ? 0 : 1,
-      stdout: `${outcomes.map((outcome) => `${line(outcome)}\n`).join('')}${verdict}\n`,
+      stdout: `${outcomes.map((outcome) => `${line(outcome)}\n`).join('')}${
+        logs === undefined ? 'logs: not checked\n' : ''
+      }${verdict}\n`,
       stderr: '',
     }
   } catch (error) {

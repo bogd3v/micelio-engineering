@@ -461,3 +461,163 @@ describe('lint-standard action', () => {
     )
   })
 })
+
+const VERIFY = readFileSync(join(ROOT, '.github/workflows/verify-draft.yml'), 'utf8')
+
+/** The steps of the one job of `verify-draft.yml`, each with its text, by name. */
+function verifySteps(): Record<string, string> {
+  const steps: Record<string, string> = {}
+  for (const step of VERIFY.split(/\n(?= {6}- name: )/).slice(1)) {
+    const name = /^ {6}- name: (.*)$/m.exec(step)?.[1]
+    if (name !== undefined) steps[name] = step
+  }
+  return steps
+}
+
+/** The shell of a step of `verify-draft.yml`, without the YAML indentation. */
+function verifyScript(name: string): string {
+  const step = verifySteps()[name] ?? ''
+  expect(step, `step ${name}`).not.toBe('')
+  return (step.split('run: |\n')[1] ?? '').replace(/^ {10}/gm, '')
+}
+
+describe('verify-draft.yml', () => {
+  it('verify-draft.yml runs on pull_request only, with read-only permissions and no secrets', () => {
+    expect(VERIFY).toMatch(/^on:\n {2}workflow_call:\n/m)
+    expect(VERIFY).not.toMatch(/pull_request_target/)
+    expect(VERIFY).toMatch(/^ {4}if: github\.event_name == 'pull_request'$/m)
+    expect(VERIFY).toMatch(/^permissions: \{\}$/m)
+    expect(VERIFY).toMatch(
+      /^ {4}permissions:\n {6}contents: read\n {6}pull-requests: read\n {4}steps:/m
+    )
+    expect(VERIFY.match(/^ {2,6}[a-z-]+: (read|write|none)$/gm)).toEqual([
+      '      contents: read',
+      '      pull-requests: read',
+    ])
+    expect(VERIFY).not.toMatch(/\$\{\{\s*secrets\./)
+    expect(VERIFY).not.toMatch(/^ {4}secrets:/m)
+    expect(VERIFY).not.toMatch(/github\.token|GITHUB_TOKEN|GH_TOKEN/)
+    expect(VERIFY).toMatch(/^ {6}tools-ref:\n(?: {8}.*\n)*? {8}required: true$/m)
+    expect(VERIFY).toMatch(
+      /^ {6}tools-repository:\n(?: {8}.*\n)*? {8}default: bogd3v\/micelio-engineering$/m
+    )
+    const ci = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8')
+    expect(ci).toContain(
+      "  verify-draft:\n    if: ${{ github.event_name == 'pull_request' }}\n    permissions:\n      contents: read\n      pull-requests: read\n    uses: ./.github/workflows/verify-draft.yml\n    with:\n      tools-ref: ${{ github.sha }}\n"
+    )
+  })
+
+  it("verify-draft.yml never puts the pull request's description in a run script", () => {
+    // the description is read in one place: the env of the step that writes it to a file
+    const reads = VERIFY.split('\n').filter((line) => /pull_request\.body/.test(line))
+    expect(reads).toEqual(['          PR_BODY: ${{ github.event.pull_request.body }}'])
+    // no `run:` script holds an expression, and none reads the description but through its variable
+    for (const [name, step] of Object.entries(verifySteps())) {
+      const script = step.includes('run: ') ? step.slice(step.indexOf('run: ')) : ''
+      expect(script, `step ${name}`).not.toMatch(/\$\{\{/)
+    }
+    expect(verifyScript('Verify the draft')).toContain(
+      'printf \'%s\' "$PR_BODY" > "$RUNNER_TEMP/draft.md"'
+    )
+    expect(verifyScript('Verify the draft')).toContain('--draft "$RUNNER_TEMP/draft.md"')
+    // the file is what a shell sees: a body that is shell code is not run
+    const dir = tempDir('micelio-verify-')
+    const body = '$(touch pwned); `touch pwned2`\n```\nx'
+    const bin = join(dir, 'bin')
+    mkdirSync(bin)
+    writeFileSync(join(bin, 'node'), '#!/bin/sh\nexit 0\n')
+    chmodSync(join(bin, 'node'), 0o755)
+    const result = run(
+      verifyScript('Verify the draft'),
+      { PATH: `${bin}:${process.env.PATH ?? ''}`, RUNNER_TEMP: dir, PR_BODY: body },
+      dir
+    )
+    expect(result.status).toBe(0)
+    expect(readFileSync(join(dir, 'draft.md'), 'utf8')).toBe(body)
+    expect(existsSync(join(dir, 'pwned'))).toBe(false)
+    expect(existsSync(join(dir, 'pwned2'))).toBe(false)
+  })
+
+  it('verify-draft.yml skips and passes when the diff does not fit the normal lane', () => {
+    const dir = tempDir('micelio-verify-')
+    const bin = join(dir, 'bin')
+    mkdirSync(bin)
+    const lane = (exit: number): { status: number | null; output: string; outputs: string } => {
+      writeFileSync(join(bin, 'node'), `#!/bin/sh\necho "node $*"\nexit ${String(exit)}\n`)
+      chmodSync(join(bin, 'node'), 0o755)
+      writeFileSync(join(dir, 'out'), '')
+      const result = run(
+        verifyScript('Check the lane'),
+        {
+          PATH: `${bin}:${process.env.PATH ?? ''}`,
+          GITHUB_OUTPUT: join(dir, 'out'),
+          BASE_SHA: 'abc123',
+          RUNNER_TEMP: dir,
+        },
+        dir
+      )
+      return { ...result, outputs: readFileSync(join(dir, 'out'), 'utf8') }
+    }
+    const full = lane(1)
+    expect(full.status).toBe(0)
+    expect(full.output).toContain('lint-lane --diff abc123 --lane normal')
+    expect(full.output).toContain('full lane: gate 4 is the verifier')
+    expect(full.outputs).toBe('normal=false\n')
+    const normal = lane(0)
+    expect(normal.status).toBe(0)
+    expect(normal.output).not.toContain('full lane')
+    expect(normal.outputs).toBe('normal=true\n')
+    const broken = lane(2)
+    expect(broken.status).toBe(1)
+    expect(broken.output).toContain('lint-lane failed (exit 2)')
+    expect(broken.outputs).toBe('')
+    // every step after the lane's runs only on `normal`
+    const steps = Object.entries(verifySteps())
+    const at = steps.findIndex(([name]) => name === 'Check the lane')
+    expect(steps.slice(at + 1).map(([name]) => name)).toEqual([
+      'Set up Node',
+      'Install dependencies',
+      'Verify the draft',
+    ])
+    for (const [name, step] of steps.slice(at + 1)) {
+      expect(step, name).toContain("if: ${{ steps.lane.outputs.normal == 'true' }}")
+    }
+    expect(verifyScript('Verify the draft')).toContain('verify-draft --draft')
+    expect(verifyScript('Verify the draft')).not.toContain('--logs')
+  })
+
+  it('verify-draft.yml moves the built tools out of the workspace before the lane and the draft are checked', () => {
+    const names = Object.keys(verifySteps())
+    const move = names.indexOf('Move the tools out of the workspace')
+    expect(move).toBeGreaterThan(names.indexOf('Build the tools'))
+    expect(move).toBeLessThan(names.indexOf('Check the lane'))
+    expect(VERIFY).not.toContain('.git/info/exclude')
+    // the tools are run from RUNNER_TEMP, never from the workspace that the draft's commands read
+    for (const name of ['Check the lane', 'Verify the draft']) {
+      expect(verifyScript(name)).toContain(
+        'node "$RUNNER_TEMP/tools/packages/factory-tools/dist/cli.js"'
+      )
+      expect(verifyScript(name)).not.toContain('.micelio-tools')
+    }
+    const dir = tempDir('micelio-verify-')
+    const workspace = join(dir, 'ws')
+    const temp = join(dir, 'temp')
+    mkdirSync(join(workspace, '.micelio-tools'), { recursive: true })
+    mkdirSync(temp)
+    writeFileSync(join(workspace, '.micelio-tools', 'marker'), 'built')
+    const result = run(
+      verifyScript('Move the tools out of the workspace'),
+      { RUNNER_TEMP: temp },
+      workspace
+    )
+    expect(result.status).toBe(0)
+    expect(existsSync(join(workspace, '.micelio-tools'))).toBe(false)
+    expect(readFileSync(join(temp, 'tools', 'marker'), 'utf8')).toBe('built')
+  })
+
+  it('every action in verify-draft.yml is pinned by a commit SHA', () => {
+    expect(VERIFY).toMatch(/uses: actions\/checkout@/)
+    expect(VERIFY).toMatch(/uses: actions\/setup-node@/)
+    expect(unpinned(VERIFY)).toEqual([])
+  })
+})

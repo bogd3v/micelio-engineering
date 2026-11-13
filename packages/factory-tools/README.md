@@ -148,6 +148,8 @@ compares their numbers. The `full` lane keeps the verifier (`docs/factory.md`, g
 node <checkout>/packages/factory-tools/dist/cli.js verify-draft --draft <draft> --logs <packet>/logs --cwd <clean copy>
 ```
 
+`--logs` may be left out (below).
+
 Nothing is committed before gate 5, so `--cwd` is a clean copy: a fresh clone at the merge base with
 the worktree's diff applied (`.claude/skills/verify-pr/SKILL.md`, "Build a clean copy"), and the
 master runs the command through `herdr/factory-slot.sh run`. `--cwd` defaults to the current
@@ -169,9 +171,11 @@ the line is its summary:
   and anything in backticks are not figures.
 - `<k> failed of <n>` marks a figure the repository does not reproduce: the command runs `n` times,
   the number of runs with a non-zero exit is compared as `variance`, and the exit code is not; with
-  no log it is a mismatch, as any command.
+  no log and with `--logs` it is a mismatch, as any command.
 - `logs/<file>` names the file of `--logs` that holds the full output; a command with no such file
-  is a mismatch.
+  is a mismatch. `--logs` is optional: without it (a pull request's CI has no `logs/` directory) a
+  command with no log is not a mismatch, and the output has a line `logs: not checked` before the
+  verdict.
 - A bullet that is under a line, or contains words, `without the change`, and does not report
   `exit 0`, is a run shown failing without the change: it is skipped (a run that reports `exit 0`
   is rerun whatever it says).
