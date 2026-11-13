@@ -1,0 +1,123 @@
+name: Verify draft
+
+# Gate 4 of the `normal` lane (docs/factory.md, ADR-0003) repeated by CI on a pull request: when the
+# diff fits the `normal` lane, runs `verify-draft` on the pull request's description, so a number the
+# code does not produce turns the check red. Call it from a workflow that runs on pull_request:
+#
+#   on:
+#     pull_request:
+#   jobs:
+#     verify-draft:
+#       permissions:
+#         contents: read
+#         pull-requests: read
+#       uses: bogd3v/micelio-engineering/.github/workflows/verify-draft.yml@<commit SHA> # <tag>
+#       with:
+#         tools-ref: <the same commit SHA>
+#
+# It takes no secrets. The description is untrusted text: it reaches `verify-draft` through a file
+# that a step writes from an environment variable, never a shell line or an expression of a `run:`
+# script. `verify-draft` runs only the repository's own commands (the `## Commands` block of AGENTS.md
+# and the scripts of package.json) and the job never builds or starts a stack.
+
+on:
+  workflow_call:
+    inputs:
+      tools-ref:
+        description: Commit SHA of the tools repository that holds @micelio/factory-tools (it is built from source until it is published)
+        type: string
+        required: true
+      tools-repository:
+        description: Repository that holds @micelio/factory-tools
+        type: string
+        default: bogd3v/micelio-engineering
+
+permissions: {}
+
+jobs:
+  verify-draft:
+    name: Verify draft
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout the tools
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.tools-repository }}
+          ref: ${{ inputs.tools-ref }}
+          path: .micelio-tools
+          persist-credentials: false
+
+      - name: Set up Node for the tools
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .micelio-tools/.nvmrc
+          cache: npm
+          cache-dependency-path: .micelio-tools/package-lock.json
+
+      - name: Build the tools
+        working-directory: .micelio-tools
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+
+      # The checkout must be inside the workspace, but the commands verify-draft runs (prettier --check .,
+      # lint) read the whole workspace, and lint-lane lists untracked files: move the built tools out.
+      - name: Move the tools out of the workspace
+        run: |
+          mv .micelio-tools "$RUNNER_TEMP/tools"
+
+      # Exit 0: the diff fits the normal lane. Exit 1: it does not (or the repository has no
+      # `## Lanes` block, so it is `full`): gate 4 is the verifier and the job passes. Exit 2 fails.
+      - name: Check the lane
+        id: lane
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          code=0
+          node "$RUNNER_TEMP/tools/packages/factory-tools/dist/cli.js" lint-lane --diff "$BASE_SHA" --lane normal || code=$?
+          if [ "$code" -eq 1 ]; then
+            echo "full lane: gate 4 is the verifier"
+          elif [ "$code" -ne 0 ]; then
+            echo "::error::lint-lane failed (exit $code)"
+            exit 1
+          fi
+          echo "normal=$([ "$code" -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node
+        if: ${{ steps.lane.outputs.normal == 'true' }}
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # The install: line of the first Commands block of AGENTS.md.
+      - name: Install dependencies
+        if: ${{ steps.lane.outputs.normal == 'true' }}
+        run: |
+          INSTALL=$(awk '/^## Commands/ { seen = 1; next } seen && /^```/ { if (inside) exit; inside = 1; next } inside && /^install:/ { sub(/^install:[ \t]*/, ""); sub(/[ \t]+#.*$/, ""); print; exit }' AGENTS.md)
+          if [ -z "$INSTALL" ]; then
+            echo "::error::AGENTS.md has no install: line in its first Commands block"
+            exit 1
+          fi
+          bash -e -c "$INSTALL"
+
+      # The description is data: it is written to a file from the environment and read by the tool.
+      - name: Verify the draft
+        if: ${{ steps.lane.outputs.normal == 'true' }}
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s' "$PR_BODY" > "$RUNNER_TEMP/draft.md"
+          node "$RUNNER_TEMP/tools/packages/factory-tools/dist/cli.js" verify-draft --draft "$RUNNER_TEMP/draft.md" --cwd .

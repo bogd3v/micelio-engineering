@@ -10,13 +10,14 @@ jobs:
       test-script: test:coverage
 ```
 
-| Workflow          | Does                                                                                                                                                                                                                                           | Caller must                                                                                                                                                                                           |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `check.yml`       | `npm audit` at critical, `typecheck`, `lint`, `format:check`, tests, `lint:licenses`, `lint:standard`, REUSE and the build, then one `Check` status that passes only when all of them did                                                      | grant `contents: read`                                                                                                                                                                                |
-| `dco.yml`         | Every commit of the pull request has its author's `Signed-off-by`                                                                                                                                                                              | run on `pull_request`                                                                                                                                                                                 |
-| `scorecard.yml`   | The OpenSSF Scorecard, uploaded to code scanning                                                                                                                                                                                               | grant `contents: read`, `actions: read`, `security-events: write`, `id-token: write`; run on push to the default branch and on a schedule                                                             |
-| `release.yml`     | Plans the version, writes the notes, and with `dry-run: false` retags the images, publishes the npm packages with provenance and creates the GitHub release                                                                                    | grant `contents: write`, `packages: write`, `pull-requests: read`, `actions: read`, `id-token: write`; define the `release` environment                                                               |
-| `issue-ready.yml` | Gate 1 on an issue: runs `lint-issue`, adds or removes the label `ready`, keeps one comment with the report, sets the project Status to Ready (a fail moves a Ready issue back to Todo) and an empty Release line and Front from the milestone | grant `contents: read` and `issues: read`; run on `issues` (`opened`, `edited`, `milestoned`); pass `tools-ref` and the secret `MICELIO_BOT_PRIVATE_KEY`; define the variable `MICELIO_BOT_CLIENT_ID` |
+| Workflow           | Does                                                                                                                                                                                                                                           | Caller must                                                                                                                                                                                           |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `check.yml`        | `npm audit` at critical, `typecheck`, `lint`, `format:check`, tests, `lint:licenses`, `lint:standard`, REUSE and the build, then one `Check` status that passes only when all of them did                                                      | grant `contents: read`                                                                                                                                                                                |
+| `dco.yml`          | Every commit of the pull request has its author's `Signed-off-by`                                                                                                                                                                              | run on `pull_request`                                                                                                                                                                                 |
+| `scorecard.yml`    | The OpenSSF Scorecard, uploaded to code scanning                                                                                                                                                                                               | grant `contents: read`, `actions: read`, `security-events: write`, `id-token: write`; run on push to the default branch and on a schedule                                                             |
+| `release.yml`      | Plans the version, writes the notes, and with `dry-run: false` retags the images, publishes the npm packages with provenance and creates the GitHub release                                                                                    | grant `contents: write`, `packages: write`, `pull-requests: read`, `actions: read`, `id-token: write`; define the `release` environment                                                               |
+| `issue-ready.yml`  | Gate 1 on an issue: runs `lint-issue`, adds or removes the label `ready`, keeps one comment with the report, sets the project Status to Ready (a fail moves a Ready issue back to Todo) and an empty Release line and Front from the milestone | grant `contents: read` and `issues: read`; run on `issues` (`opened`, `edited`, `milestoned`); pass `tools-ref` and the secret `MICELIO_BOT_PRIVATE_KEY`; define the variable `MICELIO_BOT_CLIENT_ID` |
+| `verify-draft.yml` | Gate 4 of the `normal` lane on a pull request: when the diff fits the lane, runs `verify-draft` on the pull request's description; any other diff skips and passes                                                                             | grant `contents: read` and `pull-requests: read`; run on `pull_request`; pass `tools-ref`; no secrets                                                                                                 |
 
 ## `check.yml`
 
@@ -87,6 +88,39 @@ The title and body are read through the API by `lint-issue` and never reach a sh
 `tools-ref` and `tools-repository` are the interface while the tools are built from source; when `@micelio/factory-tools` is published (#30) they go, which breaks callers of this workflow.
 
 `issues` events run from the default branch, so a change to this workflow is tried on a test issue only after it is merged.
+
+## `verify-draft.yml`
+
+Gate 4 of the `normal` lane (ADR-0003, D7) repeated by CI on a pull request, so a description whose numbers the code does not produce turns a check red. Call it from a workflow that runs on `pull_request`, never on `pull_request_target`:
+
+```yaml
+on:
+  pull_request:
+jobs:
+  verify-draft:
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: bogd3v/micelio-engineering/.github/workflows/verify-draft.yml@<commit SHA> # <tag>
+    with:
+      tools-ref: <the same commit SHA>
+```
+
+**Permissions.** `contents: read` and `pull-requests: read`; it takes no secrets and uses no token. `tools-ref` and `tools-repository` are the interface while `@micelio/factory-tools` is built from source, as in `issue-ready.yml`; they go when it is published (#30).
+
+**What it does.** It checks out the pull request with its history and the tools at `tools-ref`, builds the tools and moves them out of the workspace (the commands `verify-draft` runs, such as `prettier --check .`, read the whole workspace), then runs `lint-lane --diff <the pull request's base SHA> --lane normal` (`packages/factory-tools/README.md`). Then:
+
+- exit 0, the diff fits `normal` (or `express`): it sets up Node from `.nvmrc` as `check.yml` does for `typescript`, runs the `install:` line of the first `## Commands` block of `AGENTS.md`, and runs `verify-draft --draft <file> --cwd .` on the pull request's description. The job fails when `verify-draft` exits non-zero. There is no `logs/` directory in CI, so it runs without `--logs`: a command with no log is not a mismatch and the output says `logs: not checked`;
+- exit 1, the diff does not fit: it prints `full lane: gate 4 is the verifier` and the job passes;
+- exit 2: the job fails.
+
+**When it skips.** The job skips and passes on a diff that raises the lane to `full`, and in a repository whose `AGENTS.md` has no `## Lanes` block, where every path is `full` (ADR-0003, D13). It does not run on other events. It never reads the lane from the issue.
+
+**The description is data.** It reaches `verify-draft` through a file that a step writes from an environment variable; it is never in a shell line or in an expression of a `run:` script. `verify-draft` runs only the repository's own commands (`packages/factory-tools/README.md`, `verify-draft`) and the job never builds or starts a stack. `verify-draft` reads the commands `AGENTS.md` allows at `HEAD`, which in CI is the merge commit it checked out, not the merge base.
+
+**What a runner lacks.** The commands run on `ubuntu-latest` with Node and the repository's `install:` line, nothing else: a draft that reports a command needing another tool (this repository's `npm run verify:template` needs `reuse`) mismatches in CI, so such a draft is verified by the master at gate 4, not by this job. A description with CRLF line endings is read as one with LF.
+
+Making it a required check, and calling it from the other repositories, are maintainer steps.
 
 ## `project-fields-backfill.yml`
 

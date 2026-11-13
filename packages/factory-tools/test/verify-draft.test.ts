@@ -118,6 +118,63 @@ describe('verify-draft', () => {
     })
   })
 
+  it('without --logs a missing log is not a mismatch, and the output says logs are not checked', async () => {
+    const { deps, ran } = fake(
+      { ...BASE, '/d.md': draft('- `npm test`: exit 0, 482 passed (`logs/npm-test.log`)') },
+      { 'npm test': [[0, VITEST]] }
+    )
+    const result = await runVerifyDraft(['verify-draft', '--draft', '/d.md', '--cwd', '/c'], deps)
+    expect(result.code).toBe(0)
+    expect(ran).toEqual(['npm test'])
+    expect(result.stdout).toContain('match: npm test')
+    expect(result.stdout).toContain('logs: not checked\nVerdict: Pass · 0 mismatches')
+
+    // a number that is wrong is still a mismatch
+    const wrong = fake(
+      { ...BASE, '/d.md': draft('- `npm test`: exit 0, 481 passed') },
+      { 'npm test': [[0, VITEST]] }
+    )
+    const red = await runVerifyDraft(
+      ['verify-draft', '--draft', '/d.md', '--cwd', '/c'],
+      wrong.deps
+    )
+    expect(red.code).toBe(1)
+    expect(red.stdout).not.toContain('no log')
+
+    // with --logs the line is not printed
+    const withLogs = fake(
+      {
+        ...BASE,
+        '/d.md': draft('- `npm test`: exit 0, 482 passed (`logs/npm-test.log`)'),
+        '/l/npm-test.log': '',
+      },
+      { 'npm test': [[0, VITEST]] }
+    )
+    const checked = await runVerifyDraft(
+      ['verify-draft', '--draft', '/d.md', '--logs', '/l', '--cwd', '/c'],
+      withLogs.deps
+    )
+    expect(checked.stdout).not.toContain('logs: not checked')
+  })
+
+  it('a description with CRLF line endings is read as one with LF', async () => {
+    const crlf = draft('- `npm test`: exit 0, 482 passed (`logs/npm-test.log`)').replace(
+      /\n/g,
+      '\r\n'
+    )
+    const { deps, ran } = fake(
+      { ...BASE, '/d.md': crlf, '/l/npm-test.log': '' },
+      { 'npm test': [[0, VITEST]] }
+    )
+    const result = await runVerifyDraft(
+      ['verify-draft', '--draft', '/d.md', '--logs', '/l', '--cwd', '/c'],
+      deps
+    )
+    expect(ran).toEqual(['npm test'])
+    expect(result.stdout).toContain('match: npm test')
+    expect(result.code).toBe(0)
+  })
+
   it('a figure reported as k failed of n is checked as variance', async () => {
     const { deps, ran } = fake(
       { ...BASE, '/l/npm-test.log': '' },
