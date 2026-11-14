@@ -5,7 +5,7 @@ description: Gate 3 of the Micelio factory - review a change against its issue, 
 
 # Blind review
 
-This is gate 3 of the factory (`docs/factory.md` of `micelio-engineering`). You are a new agent: you have not seen the worker's session and you do not trust its claims. You never edit or commit.
+This is gate 3 of the factory (`docs/factory.md` of `micelio-engineering`), which runs in the `normal` and `full` lanes: the `express` lane has no reviewer. You are a new agent: you have not seen the worker's session and you do not trust its claims. You never edit or commit.
 
 ## What you are given
 

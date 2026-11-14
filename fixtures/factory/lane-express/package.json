@@ -1,0 +1,9 @@
+{
+  "name": "release-notes",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "test": "node -e \"process.exit(require('node:fs').readFileSync('docs/notes/calendar.md','utf8').trim() ? 0 : 1)\""
+  }
+}

@@ -14,7 +14,31 @@ const SKILLS = 'template/.claude/skills/'
  * of reaching the reviewer. A new shared term is added to this table (planner, step 3).
  */
 const STEPS: Record<string, string[]> = {
-  lane: ['docs/engineering-standard.md', 'docs/factory.md', 'AGENTS.md'],
+  lane: [
+    'docs/engineering-standard.md',
+    'docs/factory.md',
+    'AGENTS.md',
+    `${AGENTS}master.md`,
+    `${AGENTS}worker.md`,
+    `${SKILLS}ship-pr/SKILL.md`,
+    `${SKILLS}blind-review/SKILL.md`,
+    `${SKILLS}verify-pr/SKILL.md`,
+    'herdr/master.md',
+  ],
+  'lint-lane': [`${AGENTS}master.md`, 'herdr/master.md', 'docs/factory.md'],
+  'verify-draft': [
+    `${AGENTS}master.md`,
+    `${SKILLS}ship-pr/SKILL.md`,
+    `${SKILLS}verify-pr/SKILL.md`,
+    'herdr/master.md',
+    'docs/factory.md',
+  ],
+  'approved, sign off #N #M': [
+    `${AGENTS}master.md`,
+    `${SKILLS}ship-pr/SKILL.md`,
+    'herdr/master.md',
+    'docs/factory.md',
+  ],
   'logs/': [
     `${AGENTS}master.md`,
     `${AGENTS}verifier.md`,
@@ -130,6 +154,23 @@ describe("the terms the factory's steps share", () => {
     const other = files.filter((file) => /npm (run )?check|\bnpm ci\b/.test(readRepo(file)))
     expect(other).toEqual([])
     for (const file of files) expect(readRepo(file), file).toContain('the check command')
+  })
+
+  it('the review levels say what each lane is read from', () => {
+    const doc = readRepo('docs/factory.md')
+    const start = doc.indexOf("## The maintainer's review levels")
+    expect(start).toBeGreaterThan(0)
+    const rest = doc.slice(start + 1)
+    const levels = rest.slice(0, rest.indexOf('\n## ') < 0 ? undefined : rest.indexOf('\n## '))
+    for (const term of ['express', 'normal', 'verify-draft', 'Decision 8']) {
+      expect(levels, term).toContain(term)
+    }
+    // each lane's own line names what that lane is read from first
+    expect(levels).toMatch(/`express`: the diff/)
+    expect(levels).toMatch(/`normal`: the reviewer's report, then the diff/)
+    expect(levels).toMatch(/It is not the lane calibration/)
+    // ship-pr records the same order in the time line
+    expect(readRepo(`${SKILLS}ship-pr/SKILL.md`)).toContain('`diff` in `express`')
   })
 
   it('a listed file that drops the term fails and names the file', () => {

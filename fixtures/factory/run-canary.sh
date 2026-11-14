@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# The master's canary (fixtures/factory/RUN.md, "Canary"): the three runs, started in Herdr from <checkout>,
-# each report moved out of the next agent's reach.
+# The master's canary (fixtures/factory/RUN.md, "Canary"): the three runs of agents, started in Herdr from <checkout>,
+# each report moved out of the next agent's reach, and the two lane cases (runs 4 and 5), which run a command of
+# the checkout and need no agent. Build the checkout first (npm run build).
 #
 #   fixtures/factory/run-canary.sh <label> <checkout> <pane to split from>
 #
@@ -8,10 +9,10 @@
 # limits to 32 characters). The scratch repositories are ~/Git/scratch-pages-<label> and
 # ~/Git/scratch-clamps-<label>; the results, the reports and the token counts go to $CANARY_OUT (default
 # ~/.cache/factory/packets/canary-<label>). All three directories must be empty or new: the script never
-# reuses an earlier run. ONLY3=1 runs only run 3. It reads no RUN.md: the agents never do.
+# reuses an earlier run. ONLY3=1 runs only run 3 (and no lane case). It reads no RUN.md: the agents never do.
 #
 # Exit status: 0 when every run started and gave its expected verdict; 1 when an agent did not start, a
-# report is missing, a round of run 3 is not red, has no findings or none on src/clamp.mjs:10, run 1 has no Blocking on package.json:8, or a verdict is not the expected one
+# report is missing, a lane case gives another result, a round of run 3 is not red, has no findings or none on src/clamp.mjs:10, run 1 has no Blocking on package.json:8, or a verdict is not the expected one
 # (the lines are in results.txt, after `FAILED:`); 2 for a bad argument or a directory in use.
 set -uo pipefail
 
@@ -124,6 +125,32 @@ if [ "${ONLY3:-}" = 1 ]; then
   wait "$r3" || true
   nap 2; close; tokens 'session-*3_review*.txt'; report
 fi
+
+# Run 4 — the express diff is raised to normal (lane-express: lint-lane --diff of a diff that touches AGENTS.md)
+run4() {
+  local d=$OUT/lane-express out rc base cli=$SRC/packages/factory-tools/dist/cli.js
+  "$SRC/fixtures/factory/build-scratch.sh" lane-express "$d" > /dev/null || { bad "build-scratch lane-express"; return 1; }
+  base=$(git -C "$d/repo" merge-base HEAD origin/main)
+  out=$(cd "$d/repo" && node "$cli" lint-lane --file ISSUE.md | sed -n 1p)
+  [ "$out" = "lane: express" ] || { bad "run4: the issue is not express ($out)"; return 1; }
+  out=$(cd "$d/repo" && node "$cli" lint-lane --diff "$base" --lane express); rc=$?
+  note "run4: exit $rc | $(sed -n 1p <<<"$out")"
+  [ "$rc" = 1 ] && grep -q '^lane: normal' <<<"$out" && grep -q 'AGENTS.md' <<<"$out" || bad "run4: expected exit 1, 'lane: normal' and AGENTS.md ($rc)"
+}
+# Run 5 — verify-draft catches the count (lane-normal: the draft's tests and pass against a clean copy)
+run5() {
+  local d=$OUT/lane-normal out rc base cli=$SRC/packages/factory-tools/dist/cli.js
+  "$SRC/fixtures/factory/build-scratch.sh" lane-normal "$d" > /dev/null || { bad "build-scratch lane-normal"; return 1; }
+  base=$(git -C "$d/repo" merge-base HEAD origin/main)
+  git clone --quiet "$d/repo" "$d/clean" && git -C "$d/clean" checkout --quiet "$base" || { bad "run5: no clean copy"; return 1; }
+  git -C "$d/repo" diff --binary "$base" | git -C "$d/clean" apply || { bad "run5: the diff does not apply"; return 1; }
+  mkdir -p "$d/logs"
+  printf '> npm test\n\n4 tests\n4 pass\n0 fail\n' > "$d/logs/npm-test.log"
+  out=$("$SRC/herdr/factory-slot.sh" run -- node "$cli" verify-draft --draft "$d/draft.md" --logs "$d/logs" --cwd "$d/clean"); rc=$?
+  note "run5: exit $rc | $(tail -1 <<<"$out")"
+  [ "$rc" = 1 ] && grep -q '^mismatch: npm test' <<<"$out" && [[ $(tail -1 <<<"$out") == "Verdict: Red · 1 mismatches" ]] || bad "run5: expected exit 1, one mismatch of npm test and 'Verdict: Red · 1 mismatches' ($rc)"
+}
+run4; run5
 
 # Run 1 — the reviewer flags a lowered threshold (planted-coverage)
 run1() {

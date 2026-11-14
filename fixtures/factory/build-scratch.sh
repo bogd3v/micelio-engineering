@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the scratch repository a factory fixture is run in (fixtures/factory/RUN.md).
 #
-#   fixtures/factory/build-scratch.sh planted-coverage|never-fixes <empty dir>
+#   fixtures/factory/build-scratch.sh planted-coverage|never-fixes|lane-express|lane-normal <empty dir>
 #
 # It writes two things into <dir>, both built from the fixture's own files and nothing else:
 #
@@ -15,12 +15,12 @@
 # RUN.md is never copied: it holds the expected results.
 set -euo pipefail
 
-usage='usage: build-scratch.sh planted-coverage|never-fixes <empty dir>'
+usage='usage: build-scratch.sh planted-coverage|never-fixes|lane-express|lane-normal <empty dir>'
 here="$(cd "$(dirname "$0")" && pwd)"
 fixture="${1:?$usage}"
 target="${2:?$usage}"
 case "$fixture" in
-  planted-coverage | never-fixes) ;;
+  planted-coverage | never-fixes | lane-express | lane-normal) ;;
   *) echo "unknown fixture: $fixture" >&2; exit 2 ;;
 esac
 [ -z "$(ls -A "$target" 2>/dev/null)" ] || { echo "$target is not empty" >&2; exit 2; }
@@ -31,13 +31,17 @@ cp "$here/../../docs/engineering-standard.md" "$repo/docs/"
 cp -R "$here/../../docs/standard" "$repo/docs/"
 cp "$here/../../CLAUDE.md" "$repo/"
 
-if [ "$fixture" = planted-coverage ]; then
-  src="$here/planted-coverage"
-  cp "$here/wrong-test-count.md" "$target/draft.md"
-else
-  src="$here/never-fixes/project"
-  cp "$here/never-fixes/draft.md" "$target/draft.md"
-fi
+case "$fixture" in
+  planted-coverage)
+    src="$here/planted-coverage"
+    cp "$here/wrong-test-count.md" "$target/draft.md" ;;
+  never-fixes)
+    src="$here/never-fixes/project"
+    cp "$here/never-fixes/draft.md" "$target/draft.md" ;;
+  *)
+    src="$here/$fixture"
+    cp "$src/draft.md" "$target/draft.md" ;;
+esac
 cd "$repo"
 
 git init --quiet --initial-branch=main
@@ -58,6 +62,15 @@ if [ "$fixture" = planted-coverage ]; then
     fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n")
   '
 fi
+if [ "$fixture" = lane-express ]; then
+  mkdir -p docs/notes
+  cp "$src/docs/notes/calendar.md" docs/notes/
+fi
+if [ "$fixture" = lane-normal ]; then
+  mkdir src test
+  cp "$src/src/slug.mjs" src/
+  cp "$src/test/slug.test.mjs" test/
+fi
 git add -A
 # The user's signing key and hooks have no place in a scratch commit.
 git -c commit.gpgsign=false -c core.hooksPath=/dev/null commit --quiet -m "chore: start the project"
@@ -67,10 +80,12 @@ git update-ref refs/remotes/origin/main HEAD
 if [ "$fixture" = planted-coverage ]; then
   cp "$src/package.json" package.json
   cp "$src/src/index.mjs" "$src/src/page.mjs" src/
-else
+elif [ "$fixture" = never-fixes ]; then
   mkdir -p src test
   cp "$src/src/clamp.mjs" src/
   cp "$src/test/clamp.test.mjs" test/
+else
+  cp -R "$src/work/." .
 fi
 git add -N .
 git status --short
