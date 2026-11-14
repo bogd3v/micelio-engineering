@@ -87,42 +87,45 @@ function workFiles(dir: string, path = ''): string[] {
     )
 }
 
-describe.each(['planted-coverage', 'never-fixes'])('the scratch repository of %s', (fixture) => {
-  let dir = ''
-  beforeAll(() => {
-    dir = build(fixture)
-  })
+describe.each(['planted-coverage', 'never-fixes', 'lane-express', 'lane-normal'])(
+  'the scratch repository of %s',
+  (fixture) => {
+    let dir = ''
+    beforeAll(() => {
+      dir = build(fixture)
+    })
 
-  it('commits AGENTS.md, ISSUE.md and the standard in the base and leaves the draft outside', () => {
-    const base = git(join(dir, 'repo'), 'ls-tree', '-r', '--name-only', 'origin/main').split('\n')
-    expect(base).toEqual(
-      expect.arrayContaining(['AGENTS.md', 'ISSUE.md', 'docs/engineering-standard.md'])
-    )
-    // the profiles the role prompts send a reviewer to for sections 4, 9 and 10
-    expect(base).toEqual(
-      expect.arrayContaining(['docs/standard/typescript.md', 'docs/standard/site-engine.md'])
-    )
-    expect(readFileSync(join(dir, 'repo/AGENTS.md'), 'utf8')).toContain('npm test')
-    expect(readdirSync(dir).sort()).toEqual(['draft.md', 'repo'])
-    expect(git(join(dir, 'repo'), 'status', '--short')).not.toContain('draft.md')
-  })
+    it('commits AGENTS.md, ISSUE.md and the standard in the base and leaves the draft outside', () => {
+      const base = git(join(dir, 'repo'), 'ls-tree', '-r', '--name-only', 'origin/main').split('\n')
+      expect(base).toEqual(
+        expect.arrayContaining(['AGENTS.md', 'ISSUE.md', 'docs/engineering-standard.md'])
+      )
+      // the profiles the role prompts send a reviewer to for sections 4, 9 and 10
+      expect(base).toEqual(
+        expect.arrayContaining(['docs/standard/typescript.md', 'docs/standard/site-engine.md'])
+      )
+      expect(readFileSync(join(dir, 'repo/AGENTS.md'), 'utf8')).toContain('npm test')
+      expect(readdirSync(dir).sort()).toEqual(['draft.md', 'repo'])
+      expect(git(join(dir, 'repo'), 'status', '--short')).not.toContain('draft.md')
+    })
 
-  it('commits the synced CLAUDE.md in the base, as in a real repository', () => {
-    const base = git(join(dir, 'repo'), 'ls-tree', '-r', '--name-only', 'origin/main').split('\n')
-    expect(base).toContain('CLAUDE.md')
-    expect(readFileSync(join(dir, 'repo/CLAUDE.md'), 'utf8')).toBe(
-      readFileSync(join(ROOT, 'CLAUDE.md'), 'utf8')
-    )
-  })
+    it('commits the synced CLAUDE.md in the base, as in a real repository', () => {
+      const base = git(join(dir, 'repo'), 'ls-tree', '-r', '--name-only', 'origin/main').split('\n')
+      expect(base).toContain('CLAUDE.md')
+      expect(readFileSync(join(dir, 'repo/CLAUDE.md'), 'utf8')).toBe(
+        readFileSync(join(ROOT, 'CLAUDE.md'), 'utf8')
+      )
+    })
 
-  it('names no planted defect in what the agents read', () => {
-    const texts = workFiles(join(dir, 'repo')).map((path) =>
-      readFileSync(join(dir, 'repo', path), 'utf8')
-    )
-    texts.push(readFileSync(join(dir, 'draft.md'), 'utf8'))
-    for (const text of texts) expect(text).not.toMatch(/planted|untested|defect|fixture/i)
-  })
-})
+    it('names no planted defect in what the agents read', () => {
+      const texts = workFiles(join(dir, 'repo')).map((path) =>
+        readFileSync(join(dir, 'repo', path), 'utf8')
+      )
+      texts.push(readFileSync(join(dir, 'draft.md'), 'utf8'))
+      for (const text of texts) expect(text).not.toMatch(/planted|untested|defect|fixture/i)
+    })
+  }
+)
 
 describe('planted-coverage and wrong-test-count.md', () => {
   let dir = ''
@@ -211,6 +214,80 @@ describe('never-fixes', () => {
   })
 })
 
+const CLI = join(ROOT, 'packages/factory-tools/dist/cli.js')
+
+/** Runs a command of `packages/factory-tools` (built by `npm test`, which builds first) in `cwd`. */
+function tool(cwd: string, ...args: string[]): Run {
+  const result = spawnSync('node', [CLI, ...args], { cwd, encoding: 'utf8' })
+  return { code: result.status, output: `${result.stdout}${result.stderr}` }
+}
+
+describe('lane-express', () => {
+  let repo = ''
+  let base = ''
+  beforeAll(() => {
+    repo = join(build('lane-express'), 'repo')
+    base = git(repo, 'merge-base', 'HEAD', 'origin/main').trim()
+  })
+
+  it('has an issue that lint-lane puts in express', () => {
+    const run = tool(repo, 'lint-lane', '--file', 'ISSUE.md')
+    expect(run.code, run.output).toBe(0)
+    expect(run.output.split('\n')[0]).toBe('lane: express')
+  })
+
+  it('has a diff that lint-lane raises to normal because it touches AGENTS.md', () => {
+    const run = tool(repo, 'lint-lane', '--diff', base, '--lane', 'express')
+    expect(run.code, run.output).toBe(1)
+    expect(run.output).toContain('lane: normal')
+    expect(run.output).toContain('- AGENTS.md (normal)')
+    expect(run.output).not.toContain('calendar.md')
+  })
+
+  it('has a diff that fits express once AGENTS.md is restored', () => {
+    git(repo, 'checkout', 'origin/main', '--', 'AGENTS.md')
+    const run = tool(repo, 'lint-lane', '--diff', base, '--lane', 'express')
+    expect(run.code, run.output).toBe(0)
+    expect(run.output).toContain('the diff fits the lane')
+  })
+})
+
+describe('lane-normal', () => {
+  let dir = ''
+  let repo = ''
+  beforeAll(() => {
+    dir = build('lane-normal')
+    repo = join(dir, 'repo')
+  })
+
+  it('has a project whose npm test prints 3 tests and 3 pass, one fewer than its draft', () => {
+    const run = npmTest(repo)
+    expect(run.code, run.output).toBe(0)
+    expect(run.output).toMatch(/^3 tests$/m)
+    expect(run.output).toMatch(/^3 pass$/m)
+    expect(run.output).toMatch(/^0 fail$/m)
+    const draft = readFileSync(join(dir, 'draft.md'), 'utf8')
+    expect(draft).toContain('`npm test`: exit 0, 4 tests, 4 pass, 0 fail')
+  })
+
+  it('has a draft that verify-draft finds one mismatch in, on a clean copy', () => {
+    const base = git(repo, 'merge-base', 'HEAD', 'origin/main').trim()
+    const clean = join(tempDir('factory-clean-'), 'repo')
+    git(ROOT, 'clone', '--quiet', repo, clean)
+    git(clean, 'checkout', '--quiet', base)
+    const patch = join(dir, 'work.patch')
+    writeFileSync(patch, git(repo, 'diff', '--binary', base))
+    git(clean, 'apply', patch)
+    const logs = join(dir, 'logs')
+    mkdirSync(logs)
+    writeFileSync(join(logs, 'npm-test.log'), '> npm test\n\n4 tests\n4 pass\n0 fail\n')
+    const run = tool(clean, 'verify-draft', '--draft', join(dir, 'draft.md'), '--logs', logs)
+    expect(run.code, run.output).toBe(1)
+    expect(run.output).toContain('mismatch: npm test: tests: draft 4, got 3; pass: draft 4, got 3')
+    expect(run.output.trim().split('\n').pop()).toBe('Verdict: Red · 1 mismatches')
+  })
+})
+
 /** What the fixtures plant and what RUN.md expects, as patterns no example an agent reads may match. */
 function plantedValues(): RegExp[] {
   const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -277,7 +354,9 @@ describe('RUN.md', () => {
   const notPaths = /…|^~|^\/home\/|^<home>|^<packets>|^origin\/main$/
 
   it('names only files that exist or that a step creates', () => {
-    const scratch = ['planted-coverage', 'never-fixes'].map((fixture) => build(fixture))
+    const scratch = ['planted-coverage', 'never-fixes', 'lane-express', 'lane-normal'].map(
+      (fixture) => build(fixture)
+    )
     const inScratch = (path: string) =>
       scratch.some(
         (dir) =>
@@ -348,10 +427,22 @@ describe('run-canary.sh', () => {
     const titles = [
       ...readFileSync(join(FIXTURES, 'RUN.md'), 'utf8').matchAll(/^## (Run \d+ — .+)$/gm),
     ]
-    expect(titles.map(([, title]) => title?.slice(0, 5))).toEqual(['Run 1', 'Run 2', 'Run 3'])
+    expect(titles.map(([, title]) => title?.slice(0, 5))).toEqual([
+      'Run 1',
+      'Run 2',
+      'Run 3',
+      'Run 4',
+      'Run 5',
+    ])
     for (const [, title] of titles)
       expect(script).toContain(`# ${title ?? ''}`.split(' (')[0] ?? '')
-    for (const name of ['planted-coverage', 'never-fixes', 'wrong-test-count']) {
+    for (const name of [
+      'planted-coverage',
+      'never-fixes',
+      'wrong-test-count',
+      'lane-express',
+      'lane-normal',
+    ]) {
       expect(script).toContain(name)
     }
     expect(script).toContain('build-scratch.sh')
@@ -475,6 +566,8 @@ exit 0
     const results = result.read('results.txt')
     expect(results).toContain('run1: Verdict: Red')
     expect(results).toContain('run2: Verdict: Red · 1 mismatches')
+    expect(results).toContain('run4: exit 1 | lane: normal')
+    expect(results).toContain('run5: exit 1 | Verdict: Red · 1 mismatches')
     expect(results).not.toContain('FAILED')
   })
 

@@ -5,7 +5,7 @@ description: Gate 4 of the Micelio factory - re-create the repository's stack (o
 
 # Verify a pull request draft
 
-This is gate 4 of the factory (`docs/factory.md` of `micelio-engineering`). You are a new agent: you have not seen the worker's session or the reviewer's findings, and you never accept a number you did not produce. You never edit or commit.
+This is gate 4 of the factory (`docs/factory.md` of `micelio-engineering`), which the verifier runs only in the `full` lane: `normal` runs `verify-draft` instead and `express` skips the gate. You are a new agent: you have not seen the worker's session or the reviewer's findings, and you never accept a number you did not produce. You never edit or commit.
 
 ## What you are given
 

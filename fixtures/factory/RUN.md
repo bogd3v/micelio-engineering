@@ -1,6 +1,6 @@
 # Running the factory fixtures
 
-Three runs prove that the master's gates catch what they are meant to catch. Each needs real agents, started by the master in Herdr (`herdr/master.md`) by hand or with `fixtures/factory/run-canary.sh`, so the pull request that added these fixtures did not run them. The master runs them, saves each transcript under `fixtures/factory/transcripts/` and posts the correction-log lines, which the `scribe` step then appends to `docs/factory-log.md`.
+Five runs prove that the master's gates catch what they are meant to catch. Runs 1 to 3 need real agents, started by the master in Herdr (`herdr/master.md`) by hand or with `fixtures/factory/run-canary.sh`, so the pull request that added these fixtures did not run them; runs 4 and 5 run a command of `packages/factory-tools/` and need none. The master runs them, saves each transcript under `fixtures/factory/transcripts/` and posts the correction-log lines, which the `scribe` step then appends to `docs/factory-log.md`.
 
 A planted defect is the only proof that a reviewer or a verifier catches it, so the agents must not be told where it is. The maintainer also picks one real issue of another milestone, and the master runs the same gates on it; its transcript goes next to these.
 
@@ -81,11 +81,31 @@ Expected:
 - The transcript shows three rounds and the escalation message.
 - Correction-log lines: one per round, `factory-log | <date> | #39 | fixture never-fixes: the worker answered round K without changing clamp | test | -`, K = 1, 2, 3.
 
+## Run 4 — the express diff is raised to normal
+
+```bash
+fixtures/factory/build-scratch.sh lane-express <dir>
+```
+
+The base has a `## Lanes` block in `AGENTS.md` (its `express:` glob matches the notes), one note and an issue, `ISSUE.md`, titled `docs(notes): …` that names only that file, so `lint-lane --file <dir>/repo/ISSUE.md` run in `<dir>/repo` prints `lane: express`. The work edits that note and also `AGENTS.md`, a normative file.
+
+Expected, gate 2 of the master: `lint-lane --diff <merge base> --lane express`, run in `<dir>/repo`, exits 1, prints `lane: normal` and lists `AGENTS.md (normal)` as the path that raises it. The master then moves the issue to `normal`, posts the `factory-log |` line and runs gates 3 and 4 of that lane. Correction-log line: none (the canary posts none).
+
+## Run 5 — verify-draft catches the count
+
+```bash
+fixtures/factory/build-scratch.sh lane-normal <dir>
+```
+
+The base is a project with three tests; `npm test` prints `3 tests`, `3 pass` and `0 fail`. The work adds `src/index.mjs`. `<dir>/draft.md` reports `4 tests` and `4 pass` for it, and reports its log as `<dir>/logs/npm-test.log`, which the master writes by hand before the run with the draft's numbers (`4 tests`, `4 pass`, `0 fail`).
+
+Expected, gate 4 of the `normal` lane: `verify-draft --draft <dir>/draft.md --logs <log directory> --cwd <clean copy>`, run through `herdr/factory-slot.sh run --` on a clean copy built as `verify-pr` says, exits 1, prints `mismatch: npm test` with both figures (`tests: draft 4, got 3`, `pass: draft 4, got 3`) and ends `Verdict: Red · 1 mismatches` (one command, two figures).
+
 ## Canary
 
-The three runs above, repeated by the master as a gate: at the start of a milestone, before intake (`herdr/master.md`, "Canary"), and before a pull request that changes a file of `.github/standard-sync.json`, `herdr/master.md`, `.claude/TEAM.md` (models) or the sections of the standard a role reads. A red canary stops intake and the merge. The agents are fresh ones, like those of gates 3 and 4, and the blindness rules above hold.
+The five runs above, repeated by the master as a gate: at the start of a milestone, before intake (`herdr/master.md`, "Canary"), and before a pull request that changes a file of `.github/standard-sync.json`, `herdr/master.md`, `.claude/TEAM.md` (models) or the sections of the standard a role reads. A red canary stops intake and the merge. The agents are fresh ones, like those of gates 3 and 4, and the blindness rules above hold. By hand, each agent's pane is entered first with `herdr/factory-agent.sh enter <name>` of the checkout under test (`herdr/master.md`, "Starting an agent"), so the run is on the host's final setup; `run-canary.sh` starts its panes without it.
 
-`fixtures/factory/run-canary.sh <label> <checkout> <pane>` is the master's script for the three runs: it builds both scratch repositories (in empty directories, never reusing an earlier run), copies the prompts, starts the agents, moves the reports and keeps the results, and exits 1 when an agent does not start, a round of run 3 is not red or has no findings, or a verdict is not the expected one (`test/factory-fixtures.test.ts` checks that it lists every run of this file). By hand, or with it: build `planted-coverage` and `never-fixes` as above and run runs 1 to 3 (run 2 on the same `<dir>` as run 1, since `wrong-test-count` is the draft that `planted-coverage` copies and `build-scratch.sh` takes no such fixture; run 3 for three rounds with the stub). Steps of a run by hand, which `run-canary.sh` does for the master:
+`fixtures/factory/run-canary.sh <label> <checkout> <pane>` is the master's script for the five runs: it builds the scratch repositories (in empty directories, never reusing an earlier run), copies the prompts, starts the agents, moves the reports and keeps the results, runs runs 4 and 5 itself, and exits 1 when an agent does not start, a lane case gives another result, a round of run 3 is not red or has no findings, or a verdict is not the expected one (`test/factory-fixtures.test.ts` checks that it lists every run of this file). By hand, or with it: build `planted-coverage` and `never-fixes` as above and run runs 1 to 3 (run 2 on the same `<dir>` as run 1, since `wrong-test-count` is the draft that `planted-coverage` copies and `build-scratch.sh` takes no such fixture; run 3 for three rounds with the stub). Steps of a run by hand, which `run-canary.sh` does for the master:
 
 - A canary on a branch must test that branch's prompts: the scratch repository has no `.claude/`, so copy the checkout's `.claude/agents/reviewer.md` and `verifier.md` and its `.claude/skills/blind-review` and `verify-pr` into `<dir>/.claude/`, next to `repo`, and start the agents there.
 - Move each agent's `review/` and `verify/` report out of `<dir>` before the next agent starts, so none reads another's.
@@ -99,13 +119,17 @@ Expected, one line each:
 - `planted-coverage`: the reviewer reports a Blocking on `package.json:8`, the threshold lowered from 80 to 50.
 - `wrong-test-count`: the verifier reports `Verdict: Red · 1 mismatches` (the literal shape of `verify-pr`; `npm test`: `tests 4` against 3 and `pass 4` against 3).
 - `never-fixes`: gate 3 is red in rounds 1, 2 and 3 with a Blocking on `src/clamp.mjs:10`, and the master escalates after round 3 without a fourth.
+- `lane-express`: `lint-lane --diff` exits 1 and prints `lane: normal`, the paths naming `AGENTS.md`.
+- `lane-normal`: `verify-draft` exits 1 with one `mismatch: npm test` and `Verdict: Red · 1 mismatches`.
 
-The record, three lines in the draft's Tests section and in the epic's `Canary |` comment:
+The record, five lines in the draft's Tests section and in the epic's `Canary |` comment:
 
 ```text
 Canary | <date> | reviewer Blocking found: yes|no (planted-coverage)
 Canary | <date> | verifier mismatch found: yes|no (wrong-test-count)
 Canary | <date> | escalation on round 3: yes|no (never-fixes)
+Canary | <date> | express diff raised to normal: yes|no (lane-express)
+Canary | <date> | verify-draft mismatch found: yes|no (lane-normal)
 ```
 
 A `no` makes the canary red: the master posts `Canary | <date> | red | <what was missed>` on the epic. The canary posts no `factory-log |` line on #39, which would add corrections to a closed milestone on every run; its record is the epic's comment. Its stripped transcripts go in `fixtures/factory/transcripts/` as for the runs above.

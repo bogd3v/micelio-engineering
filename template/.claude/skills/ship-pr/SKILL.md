@@ -14,18 +14,18 @@ This is gate 5 of the factory (`docs/factory.md` of `micelio-engineering`). The 
 
 ## Before the maintainer
 
-Gate 5 starts only after gates 2, 3 and 4 passed. Nothing is committed before it.
+Gate 5 starts only after the gates of the issue's lane passed (`docs/factory.md`, "Lanes"): 2 in `express`, 2 and 3 and `verify-draft` in `normal`, 2, 3 and 4 in `full`. Nothing is committed before it.
 
 1. Run the check command (the `check:` line in the first `## Commands` block of `AGENTS.md`; else the manifest's `check` script): it is green, and the pull request draft has, for every command, its summary lines (exit code and numbers) and the name of its log in the packet's `logs/`.
 2. The correction log is complete. List the `Gate 3` and `Gate 4` comments and the `factory-log |` lines of the issue (`gh issue view <n> --json comments --jq '.comments[] | select(.body | test("^\\*\\*Gate [34]|(^|\\n)factory-log \\|")) | .body'`, never the full list). If any of them names a Blocking, an Important or a mismatch that could become a check, a skill or a rule and the issue has no comment with a `factory-log |` line, stop: say which correction (which gate comment) has no line, and let the master post it. `ship-pr` never writes the line itself: it is the master's job at the moment of the correction (`docs/factory.md`, "The learning loop").
-3. Canary. A pull request that changes a file of `.github/standard-sync.json`, `herdr/master.md`, `.claude/TEAM.md` (models) or the sections of the standard a role reads is opened only with a green canary run on the branch (`fixtures/factory/RUN.md`, "Canary" of `micelio-engineering`), cited in the draft's Tests section with its three results: the reviewer's Blocking found, the verifier's mismatch found, the escalation on round 3. Without it, stop and say so; the master runs the canary.
+3. Canary. A pull request that changes a file of `.github/standard-sync.json`, `herdr/master.md`, `.claude/TEAM.md` (models) or the sections of the standard a role reads is opened only with a green canary run on the branch (`fixtures/factory/RUN.md`, "Canary" of `micelio-engineering`), cited in the draft's Tests section with its five results: the reviewer's Blocking found, the verifier's mismatch found, the escalation on round 3, the `express` case raised to `normal` and `verify-draft`'s mismatch on the `normal` case. Without it, stop and say so; the master runs the canary.
 4. Tell the maintainer the change is ready and what only they can see on the stack (below). Then wait.
 5. The commit message is a file outside the worktree, written by the worker. The worker never commits or pushes; the master runs this skill.
 6. The sign-off is the maintainer's certification of the DCO (standard, section 13), given after they read the diff. The rule is written once, in `.claude/agents/master.md` ("Delivery"): only the master runs `git commit -s`, and only on the maintainer's exact phrase.
 
 ## The stack by risk
 
-- The worker proved the acceptance criteria on the repository's stack (or the run `AGENTS.md` names instead), and the verifier re-created it from scratch. Cite both runs in the pull request.
+- In `full`, the worker proved the acceptance criteria on the repository's stack (or the run `AGENTS.md` names instead), and the verifier re-created it from scratch: cite both runs in the pull request. `normal` and `express` run no stack: cite the reviewer's report and `verify-draft`'s output in `normal`, only the check command's output in `express`, and say in the description the lane, why (the reasons `lint-lane` printed) and whether the change needs the stack.
 - The maintainer tests on the stack only what an operator or an editor sees: the admin UI, variables, migrations, Compose. Give the steps (image from the branch, the Compose to run it against, what to look at) for those and for nothing else.
 - A change nobody sees that way (tooling, documents, a library) needs no maintainer stack run.
 
@@ -60,7 +60,7 @@ Only after the commit exists: made by the master after the phrase, or by the mai
 
 ## The approval
 
-The maintainer's approval carries a line `time: <minutes>m diff|report` (`diff` when they started from the diff, `report` when they started from the reviewer's and verifier's reports; `docs/factory.md`, review levels). The approval text you prepare carries it already filled in with the order read: `report` when the pull request is level 2 ("The maintainer's review levels" of `docs/factory.md`), `diff` when it is level 1; only the minutes are left to the maintainer. When the maintainer's own account opened the pull request, GitHub does not allow it to approve, so the line goes in a review comment instead:
+The maintainer's approval carries a line `time: <minutes>m diff|report` (`diff` when they started from the diff, `report` when they started from the reviewer's and verifier's reports; `docs/factory.md`, review levels). The approval text you prepare carries it already filled in with the order read ("The maintainer's review levels" of `docs/factory.md`): `diff` in `express` and at level 1 of `full`, `report` in `normal` and at level 2 of `full`; only the minutes are left to the maintainer. When the maintainer's own account opened the pull request, GitHub does not allow it to approve, so the line goes in a review comment instead:
 
 ```bash
 gh pr review <n> --comment -b "time: 10m diff"
@@ -68,4 +68,4 @@ gh pr review <n> --comment -b "time: 10m diff"
 
 ## Never
 
-Run `git commit -s` without the maintainer's own `approved, sign off #N` for this issue, or as any role but the master, or with a committer identity that is not the maintainer's; add a `Signed-off-by` by hand or with `--amend`; push before the commit exists; or merge, tag, release or deploy without the maintainer's confirmation. Only the maintainer releases (standard, section 13); prepare a release, never run it unasked.
+Run `git commit -s` without the maintainer's own `approved, sign off #N` for this issue, or as any role but the master, or with a committer identity that is not the maintainer's; add a `Signed-off-by` by hand or with `--amend`; push before the commit exists; or merge, tag, release or deploy without the maintainer's confirmation. **Several issues in one message.** Only `express` issues share a message, `approved, sign off #N #M`, typed after you presented each of those diffs: each number approves one commit, once, and a number whose issue is not `express` when the message is typed signs nothing (say so). Only the maintainer releases (standard, section 13); prepare a release, never run it unasked.

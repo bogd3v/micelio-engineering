@@ -1,0 +1,10 @@
+{
+  "name": "page-tools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "test": "node --test test/*.test.mjs | sed -E 's/^(ℹ|#) (tests|pass|fail) ([0-9]+)$/\\3 \\2/'"
+  }
+}

@@ -10,11 +10,12 @@ Start it as the main session in a Herdr pane: `claude --agent master`. A subagen
 
 Before intake, at the start of a milestone and before a pull request that changes what a role reads (`template/.claude/skills/ship-pr/SKILL.md`, "Before the maintainer"), the master runs the canary of [`fixtures/factory/RUN.md`](../fixtures/factory/RUN.md), "Canary":
 
-1. `fixtures/factory/build-scratch.sh` for `planted-coverage` and for `never-fixes`, each in its own empty directory outside the repository (`wrong-test-count` is a draft, which `planted-coverage` already copies), with the packet `RUN.md` describes. Copy the checkout's `.claude/agents/reviewer.md` and `verifier.md` and its `blind-review` and `verify-pr` skills into each directory's `.claude/`, next to `repo`, so a run on a branch reads that branch's prompts.
+1. `fixtures/factory/build-scratch.sh` for `planted-coverage`, `never-fixes`, `lane-express` and `lane-normal`, each in its own empty directory outside the repository (`wrong-test-count` is a draft, which `planted-coverage` already copies), with the packet `RUN.md` describes. Copy the checkout's `.claude/agents/reviewer.md` and `verifier.md` and its `blind-review` and `verify-pr` skills into each directory's `.claude/`, next to `repo`, so a run on a branch reads that branch's prompts.
 2. A fresh reviewer on `planted-coverage`, then a fresh verifier on the same directory (its `wrong-test-count` draft), and the `never-fixes` worker stub for three rounds with a fresh reviewer each, as gates 3 and 4 and the escalation do. The canary agents never get `RUN.md`; move each report out of reach before the next agent starts, and keep agent names within 32 characters.
-3. It passes when the reviewer reports the planted Blocking, the verifier reports the one mismatch and the `never-fixes` run escalates after the third red round. Anything else is red.
+3. The two lane cases need no agent: in `lane-express`, `lint-lane --diff <merge base> --lane express` exits 1 and prints `lane: normal` (the diff touches `AGENTS.md`); in `lane-normal`, `verify-draft` on a clean copy through `factory-slot.sh run` reports one mismatch (`RUN.md`, runs 4 and 5).
+4. It passes when the reviewer reports the planted Blocking, the verifier reports the one mismatch, the `never-fixes` run escalates after the third red round, and each lane case gives its result. Anything else is red.
 
-A red canary stops intake: the master posts `Canary | <date> | red | <what was missed>` on the epic and tells the maintainer. A green one is posted as the three `Canary |` lines of `RUN.md`, "Canary", each ending `yes`. The canary posts no correction-log line (see "Correction log"): those would add corrections to a closed milestone on every run.
+A red canary stops intake: the master posts `Canary | <date> | red | <what was missed>` on the epic and tells the maintainer. A green one is posted as the five `Canary |` lines of `RUN.md`, "Canary", each ending `yes`. The canary posts no correction-log line (see "Correction log"): those would add corrections to a closed milestone on every run.
 
 ## Intake (gate 1)
 
@@ -25,6 +26,8 @@ The master takes an issue only when all of these hold:
 3. The master's own by-hand read of the issue, against the list of gate 1 of `docs/factory.md`, finds nothing the linter cannot see (a criterion nobody can run, a path that does not exist).
 
 An issue that fails the by-hand read is set back to Todo (the `ready` label stays for `issue-ready` to judge again when the issue is next edited; it comes back to Ready only after that edit), the failure goes in a comment that starts `**Gate 1 (master): not ready**` (or `held, not started` when the maintainer must decide), and the planner is told. Never fix it or start it half ready.
+
+**Lane.** Once the issue passes, the master sets its lane: from a built checkout of `micelio-engineering` (`npm run build`), in the issue's repository, `node <checkout>/packages/factory-tools/dist/cli.js lint-lane {{repo}}#<N>` (`packages/factory-tools/README.md`, "`lint-lane`"). It writes `lane: <lane>` and the reasons the command printed in its `Gate 1` comment and gives the worker the lane. Nobody lowers a lane, and a repository whose `AGENTS.md` has no `## Lanes` block runs every issue as `full`.
 
 **Freeze.** Once gate 1 passes the issue is frozen: record its `updatedAt` (`gh issue view <n> --json updatedAt -q .updatedAt`) when a round starts and compare it when the round ends. If it changed (other than the master's own `### Progress` edit), stop the round, tell the maintainer and restart the round on the new text.
 
@@ -104,6 +107,8 @@ The master also counts the changed lines of the draft with the diff of the comma
 
 The master then runs `lint-draft` on the draft, after the `add -N .` of that block so that the new files are in the diff, from the worktree with the command built in its checkout of `micelio-engineering` (`npm run build` there first): `(cd ../wt-<N> && node <checkout>/packages/factory-tools/dist/cli.js lint-draft --file <draft> --base "$(git merge-base HEAD origin/main)")`. It reads "Instructions that were wrong or missing" (`packages/factory-tools/README.md`, "lint-draft") and exits 1 for a line that ends `fixed in` a file the diff does not touch, for an `issue` or `standard` line that ends `fixed in`, for a synced file fixed anywhere but under `template/<subject>`, for an own file (`AGENTS.md`, a skill the `.github/standard-sync.json` of the checkout does not list, so it works in any repository) that ends `reported to the master`, or for a line in neither shape. A failure sends the draft back to the worker before a reviewer is started, as a missing part does; that bounce is not one of the three rounds.
 
+Then the master checks the diff against the lane, from the same checkout and the same `add -N .`: `(cd ../wt-<N> && node <checkout>/packages/factory-tools/dist/cli.js lint-lane --diff "$(git merge-base HEAD origin/main)" --lane <lane>)`. It never skips the command and never lowers a lane. Exit 1 prints the lane the diff fits: the master moves the issue to it, posts the correction-log line ("Correction log" below; what: the diff fits that lane, not the issue's; category `issue`), and runs the gates the first lane skipped (`docs/factory.md`, "Lanes").
+
 ### The review packet
 
 Nothing is committed before gate 5, so the reviewer reads the worktree. The `logs/` directory travels in the verifier's packet; the master reads the draft's Tests section, never `logs/`. One command block serves the packet, the line count and the status check of step 7 of `master.md`, always in this order: the status first, because `git add -N .` marks every untracked path, tool output included, and a status run after it no longer shows them as untracked; then `git add -N .`, because `git diff` leaves out untracked files; then the diff. Build the packet in a directory outside the worktree (`<packets>/<N>/r<K>/`):
@@ -131,6 +136,8 @@ Write `decisions.md` in the packet before the worker starts (round 1) and again 
 
 ### Gate 3 — blind review
 
+`express` skips this gate and gate 4: after gate 2 the master runs the check command on a clean copy (built as `verify-pr` says, "Build a clean copy") through `<path of herdr/factory-slot.sh> run -- <check command>`, posts its output as the `Gate 2` result and goes to gate 5.
+
 ```bash
 herdr agent start reviewer-<N> --kind claude --pane <new pane> -- --agent reviewer --model opus
 herdr agent prompt reviewer-<N> "Use the blind-review skill (.claude/skills/blind-review/SKILL.md). Worktree: <path>. Branch: <branch>. Issue: {{repo}}#<N>. Maintainer's decisions: <packets>/<N>/r<K>/decisions.md. Draft, for its \"Instructions that were wrong or missing\" section only: <path>. Write report.md and summary.md in <report dir>." --wait --timeout 1800000
@@ -149,6 +156,8 @@ gh issue comment <N> --repo {{repo}} --body-file comment.md
 When the master accepts Important findings the worker justified, it adds the line `accepted: n` (n the number accepted) under the first line of that `Gate 3` comment; `metrics` sums it as the gate's false reds.
 
 ### Gate 4 — verification
+
+`full` only. `normal` runs `verify-draft` on a clean copy (built the same way) through the slot script, `<path of herdr/factory-slot.sh> run -- node <checkout>/packages/factory-tools/dist/cli.js verify-draft --draft <draft without its Answers to review> --logs <packets>/<N>/logs --cwd <clean copy>`, and posts its output as `**Gate 4, round K (verify-draft)** · M mismatches`; the master reads the criteria it lists as `not checked`, and a verdict `Red` goes back to the worker as a red gate 4.
 
 ```bash
 herdr agent start verifier-<N> --kind claude --pane <new pane> -- --agent verifier --model sonnet
@@ -191,9 +200,9 @@ When an issue's pull request is merged, or when the maintainer asks, the master 
 
 ## Gate 5 — delivery
 
-Once gate 4 passes, tell the maintainer the issue is ready, with both reports and the review level (diff or reports); set the Status to Review. The `ship-pr` skill is the procedure. Delivery rule of `master.md`:
+Once gate 4 passes (or the lane skips it), tell the maintainer the issue is ready: its lane, why (the reasons `lint-lane` printed), whether the change needs the stack, and the review level (`docs/factory.md`, "The maintainer's review levels"); set the Status to Review. The `ship-pr` skill is the procedure. Delivery rule of `master.md`:
 
-- **The sign-off.** The rule is written once, in `.claude/agents/master.md` ("Delivery"): the exact phrase, a message of the maintainer's own, one commit per phrase, the identity check and who may run `git commit -s`. Without the phrase, the maintainer commits and the master pushes after they say so.
+- **The sign-off.** The rule is written once, in `.claude/agents/master.md` ("Delivery"): the exact phrase, a message of the maintainer's own, one commit per phrase, the identity check and who may run `git commit -s`. Without the phrase, the maintainer commits and the master pushes after they say so. Several `express` issues may share one message, `approved, sign off #N #M`, typed after the master presented each of those diffs; each number approves one commit, once, and the master says which number signed nothing because its issue is not `express`.
 - The commit is `git commit -s -F <message file>`, with the message the worker left outside the worktree (it carries the `Co-Authored-By:` trailer). Before running it, the master quotes the maintainer's message that holds the phrase, checks that its `N` is this issue (the epic for the scribe's), and checks that `git var GIT_COMMITTER_IDENT` starts with `{{maintainer-ident}}`; if not, it stops and asks.
 - After the pull request opens, replace only the text under `### Progress` of the issue, and tick the epic's box for it, with a script that edits that section and nothing else; save the body before and after and post both as a comment with `gh issue comment --body-file`. Never touch the title, the criteria or the scope.
 - The `time: <minutes>m diff|report` line is the maintainer's, in a review comment on the pull request.
