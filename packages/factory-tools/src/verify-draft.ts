@@ -25,6 +25,7 @@ export type EntryOutcome =
   | { kind: 'match'; command: string }
   | { kind: 'mismatch'; command: string; reasons: string[] }
   | { kind: 'variance'; command: string; reported: string; got: string }
+  | { kind: 'earlier'; command: string }
   | { kind: 'skipped'; command: string }
   | { kind: 'not-run'; command: string }
   | { kind: 'not-checked'; criterion: string }
@@ -158,6 +159,27 @@ function isRepositoryCommand(words: string[], agents: string[][], scripts: strin
   return words[1] === 'run' && words[2] !== undefined && scripts.includes(words[2])
 }
 
+/**
+ * What identifies the run of an entry: its command's words, after `withoutSlotPrefix` and
+ * `tokenize`. `null` when the entry does not run (not a command, shown failing without the change,
+ * not a repository command).
+ */
+function runKey(entry: Entry, agents: string[][], scripts: string[]): string | null {
+  const parsed = /^`([^`]+)`(.*)$/.exec(entry.text)
+  if (parsed === null) return null
+  const summary = parsed[2] ?? ''
+  if (
+    (WITHOUT_CHANGE.test(entry.text) || WITHOUT_CHANGE.test(entry.intro)) &&
+    EXIT.exec(summary)?.[1] !== '0'
+  ) {
+    return null
+  }
+  const words = tokenize(withoutSlotPrefix((parsed[1] ?? '').trim()))
+  return words !== null && isRepositoryCommand(words, agents, scripts)
+    ? JSON.stringify(words)
+    : null
+}
+
 /** The figures a summary line reports: `482 tests`, `23 passed`, as `[number, word]`. */
 function figures(summary: string): [string, string][] {
   const text = summary
@@ -218,8 +240,18 @@ export async function verifyDraft(
   }
   const agents = agentsCommands(await deps.baseAgents(cwd))
   const scripts = manifestScripts(manifest)
+  const lastRun = new Map<string, number>()
+  entries.forEach((entry, index) => {
+    const key = runKey(entry, agents, scripts)
+    if (key !== null) lastRun.set(key, index)
+  })
   const outcomes: EntryOutcome[] = []
-  for (const entry of entries) {
+  for (const [index, entry] of entries.entries()) {
+    const key = runKey(entry, agents, scripts)
+    if (key !== null && lastRun.get(key) !== index) {
+      outcomes.push({ kind: 'earlier', command: /^`([^`]+)`/.exec(entry.text)?.[1]?.trim() ?? '' })
+      continue
+    }
     const parsed = /^`([^`]+)`(.*)$/.exec(entry.text)
     if (parsed === null) {
       if (!/^no test:/i.test(entry.text))
@@ -270,8 +302,14 @@ export async function verifyDraft(
     const run = await deps.exec(file, args, cwd)
     if (exit === undefined) reasons.push('the draft gives no exit code')
     else if (Number(exit) !== run.code) reasons.push(`exit code: draft ${exit}, got ${run.code}`)
-    for (const [number, word] of figures(summary)) {
-      const got = numbersBefore(run.output, word)
+    const counted = figures(summary).map(
+      ([number, word]) => [number, word, numbersBefore(run.output, word)] as const
+    )
+    // A word the output never counts is prose, unless no figure of the summary is counted at all.
+    const compared = counted.some(([, , got]) => got.length > 0)
+      ? counted.filter(([, , got]) => got.length > 0)
+      : counted
+    for (const [number, word, got] of compared) {
       if (got.includes(number)) continue
       reasons.push(
         got.length === 0
@@ -295,6 +333,8 @@ function line(outcome: EntryOutcome): string {
       return `mismatch: ${outcome.command}: ${outcome.reasons.join('; ')}`
     case 'variance':
       return `variance: ${outcome.command}: draft ${outcome.reported}, got ${outcome.got}`
+    case 'earlier':
+      return `earlier: ${outcome.command} (a later entry runs it)`
     case 'skipped':
       return `skipped: ${outcome.command} (shown failing without the change)`
     case 'not-run':

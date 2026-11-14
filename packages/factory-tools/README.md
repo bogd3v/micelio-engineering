@@ -177,6 +177,14 @@ the line is its summary:
   matches `Tests  482 passed (482)`; a label before the number counts too: `23 test files` matches
   `Test Files  23 passed (23)`, `482 tests` matches `Tests  482 passed (482)`). Thousands may be written with a space or a comma. `round <n>`
   and anything in backticks are not figures.
+  A figure whose word the output does not count at all (`+5 new tests`, `load 7.66 on 8 cores`:
+  the output has no `<n> new` and no `<n> cores`) is prose and is not compared, as long as the
+  output counts some other figure of the line; when it counts none of them, every figure is a
+  mismatch (`<word>: draft <n>, the output has no "<n> <word>"`).
+- When two entries run the same command (the same words, after the slot prefix is removed), only
+  the last one is run and compared: a baseline on `main` or an earlier round does not run again.
+  Each earlier one is printed `earlier:` and is neither a run nor a mismatch. A draft cannot avoid a
+  run by repeating a command: the last entry of each command always runs.
 - `<k> failed of <n>` marks a figure the repository does not reproduce: the command runs `n` times,
   the number of runs with a non-zero exit is compared as `variance`, and the exit code is not; with
   no log and with `--logs` it is a mismatch, as any command.
@@ -205,9 +213,10 @@ path outside the copy, is not run.
 
 | Line                                                | Meaning                                                                                          |
 | --------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `match: <command>`                                  | the exit code and every figure agree with the draft                                              |
+| `match: <command>`                                  | the exit code and every compared figure agree with the draft                                     |
 | `mismatch: <command>: <what>; …`                    | a different exit code or figure, a figure with no counterpart, no log                            |
 | `variance: <command>: draft …, got …`               | a `k failed of n` figure; never a mismatch                                                       |
+| `earlier: <command> (a later entry runs it)`        | an entry whose command a later entry runs; not run, not a mismatch, not a command that ran       |
 | `skipped: <command> (shown failing …)`              | a run shown failing without the change                                                           |
 | `not run: <command>`                                | not a repository command; for the master, not a mismatch                                         |
 | `not checked: <criterion>`                          | a bullet that is not a command; for the master                                                   |

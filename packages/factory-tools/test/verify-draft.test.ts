@@ -394,21 +394,19 @@ describe('verify-draft', () => {
 
   it('a numbered item of the Tests section is an entry, as a bullet is', async () => {
     const { deps, ran } = fake(BASE, {
-      'npm test': [
-        [0, VITEST],
-        [0, VITEST],
-      ],
+      'npm test': [[0, VITEST]],
+      'npm run check': [[0, VITEST]],
     })
     const outcomes = await verifyDraft(
-      '# feat: x\n\n## Tests\n\nCommands as run:\n\n1. `npm test`: exit 0\n   and 482 passed\n2) `npm test`: exit 0\n10. The criterion for the master\n- `rm -rf x`: exit 0\n',
+      '# feat: x\n\n## Tests\n\nCommands as run:\n\n1. `npm test`: exit 0\n   and 482 passed\n2) `npm run check`: exit 0\n10. The criterion for the master\n- `rm -rf x`: exit 0\n',
       undefined,
       '/c',
       deps
     )
-    expect(ran).toEqual(['npm test', 'npm test'])
+    expect(ran).toEqual(['npm test', 'npm run check'])
     expect(outcomes).toEqual([
       { kind: 'match', command: 'npm test' },
-      { kind: 'match', command: 'npm test' },
+      { kind: 'match', command: 'npm run check' },
       { kind: 'not-checked', criterion: 'The criterion for the master' },
       { kind: 'not-run', command: 'rm -rf x' },
     ])
@@ -508,6 +506,134 @@ describe('verify-draft', () => {
     expect(
       outcomes?.flatMap((o) => (o.kind === 'not-run' ? [o.command.split(' ')[0]] : []))
     ).toEqual(['npx', 'npm', 'run.ts', 'failingReport', 'parseEvent', 'docs/'])
+  })
+
+  it('a command reported twice is run once, for its last entry, and the earlier entry is printed as earlier', async () => {
+    const { deps, ran } = fake(BASE, {
+      'npm test': [[0, VITEST]],
+      'npm run check': [[0, VITEST]],
+    })
+    const outcomes = await verifyDraft(
+      draft(
+        '- `npm test` on main: exit 0, 481 passed',
+        '- `npm run check`: exit 0, 23 test files',
+        '- `npm test`: exit 0, 482 passed'
+      ),
+      undefined,
+      '/c',
+      deps
+    )
+    expect(ran).toEqual(['npm run check', 'npm test'])
+    expect(outcomes).toEqual([
+      { kind: 'earlier', command: 'npm test' },
+      { kind: 'match', command: 'npm run check' },
+      { kind: 'match', command: 'npm test' },
+    ])
+    const result = await runVerifyDraft(
+      ['verify-draft', '--draft', '/d.md', '--cwd', '/c'],
+      fake(
+        {
+          ...BASE,
+          '/d.md': draft('- `npm test`: exit 0, 481 passed', '- `npm test`: exit 0, 482 passed'),
+        },
+        { 'npm test': [[0, VITEST]] }
+      ).deps
+    )
+    expect(result.stdout).toBe(
+      'earlier: npm test (a later entry runs it)\nmatch: npm test\nlogs: not checked\nVerdict: Pass · 0 mismatches\n'
+    )
+    expect(result.code).toBe(0)
+  })
+
+  it('a baseline through the slot prefix and a final run without it are the same command', async () => {
+    const slot = '/abs/herdr/factory-slot.sh'
+    const { deps, ran } = fake(BASE, { 'npm run check': [[0, VITEST]] })
+    const outcomes = await verifyDraft(
+      draft(
+        '- `factory-slot.sh run -- npm run check` on main: exit 0, 481 passed',
+        `- \`${slot} run -- npm run check\`: exit 0, 482 passed`
+      ),
+      undefined,
+      '/c',
+      deps
+    )
+    expect(ran).toEqual(['npm run check'])
+    expect(outcomes).toEqual([
+      { kind: 'earlier', command: 'factory-slot.sh run -- npm run check' },
+      { kind: 'match', command: `${slot} run -- npm run check` },
+    ])
+  })
+
+  it('a figure whose word the output does not count is not compared', async () => {
+    const output = 'Test Files  25 passed (25)\n     Tests  530 passed (530)\n'
+    const { deps } = fake(BASE, { 'npm run check': [[0, output]] })
+    const outcomes = await verifyDraft(
+      draft(
+        '- `npm run check`: exit 0, 25 test files, 530 tests passed (main: 525; +5 new tests); load 7.66 on 8 cores'
+      ),
+      undefined,
+      '/c',
+      deps
+    )
+    expect(outcomes).toEqual([{ kind: 'match', command: 'npm run check' }])
+    const wrong = fake(BASE, { 'npm run check': [[0, output]] })
+    const mismatch = await verifyDraft(
+      draft('- `npm run check`: exit 0, 529 tests passed (+5 new tests); load 7.66 on 8 cores'),
+      undefined,
+      '/c',
+      wrong.deps
+    )
+    expect(mismatch).toEqual([
+      { kind: 'mismatch', command: 'npm run check', reasons: ['tests: draft 529, got 530'] },
+    ])
+  })
+
+  it("a run whose output counts none of the draft's figures is a mismatch", async () => {
+    const { deps } = fake(BASE, { 'npm run check': [[0, 'done\n']] })
+    const outcomes = await verifyDraft(
+      draft('- `npm run check`: exit 0, 530 tests passed (+5 new tests)'),
+      undefined,
+      '/c',
+      deps
+    )
+    expect(outcomes).toEqual([
+      {
+        kind: 'mismatch',
+        command: 'npm run check',
+        reasons: [
+          'tests: draft 530, the output has no "<n> tests"',
+          'new: draft 5, the output has no "<n> new"',
+        ],
+      },
+    ])
+  })
+
+  it('the Tests section of pull request #267 is a match for each final command', async () => {
+    const manifest = JSON.stringify({
+      scripts: { check: 'x', 'verify:template': 'y', 'verify:isolated': 'z' },
+    })
+    const section = await readFile(new URL('./fixtures/pr-267-tests.md', import.meta.url), 'utf8')
+    const { deps, ran } = fake(
+      { ...BASE, '/c/package.json': manifest },
+      {
+        'npm run check': [[0, 'Test Files  25 passed (25)\n     Tests  530 passed (530)\n']],
+        'npm run verify:template': [[0, 'Test Files  1 passed (1)\n     Tests  1 passed (1)\n']],
+        'npm run verify:isolated': [
+          [0, 'Isolated fixture passes lint, typecheck and format:check.\n'],
+        ],
+      }
+    )
+    const outcomes = await verifyDraft(section, undefined, '/c', deps)
+    expect(ran).toEqual(['npm run check', 'npm run verify:template', 'npm run verify:isolated'])
+    expect(outcomes?.slice(0, 3).map((o) => o.kind)).toEqual(['earlier', 'earlier', 'earlier'])
+    expect(
+      outcomes?.filter((o) => o.kind === 'match').map((o) => (o.kind === 'match' ? o.command : ''))
+    ).toEqual([
+      '/home/alejo9420/Git/micelio-engineering/herdr/factory-slot.sh run -- npm run check',
+      '/home/alejo9420/Git/micelio-engineering/herdr/factory-slot.sh run -- npm run verify:template',
+      '/home/alejo9420/Git/micelio-engineering/herdr/factory-slot.sh run -- npm run verify:isolated',
+    ])
+    expect(outcomes?.some((o) => o.kind === 'mismatch')).toBe(false)
   })
 
   it('reports the usage and read errors with exit 2', async () => {
