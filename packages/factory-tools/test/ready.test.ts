@@ -11,7 +11,9 @@ const FIXTURES = new URL('./fixtures/ready/', import.meta.url)
 
 /**
  * `project-today.json` is the answer of the organisation project read on 2026-10-24, before the
- * Ready option existed; `project-with-ready.json` is the same with the option added by hand.
+ * Ready option existed; `project-with-ready.json` is the same answer with two options added by
+ * hand: the Ready option of Status, and the Release line option `0.8` (its id read from project
+ * `bogd3v/1` on 2026-11-12).
  */
 async function recorded(name: string): Promise<{ data: unknown }> {
   return JSON.parse(await readFile(new URL(name, FIXTURES), 'utf8')) as { data: unknown }
@@ -709,9 +711,9 @@ describe('the backfill', () => {
     await expect(backfillFields(gh, { ...params, milestone: 'Otra', config })).resolves.toEqual([
       'nothing changed: the milestone "Otra" has no entry in .github/project-fields.json',
     ])
-    const typo = { [CORTE]: { releaseLine: '0.9', front: 'Fediverse' } }
+    const typo = { [CORTE]: { releaseLine: 'not-a-release-line', front: 'Fediverse' } }
     await expect(backfillFields(gh, { ...params, milestone: CORTE, config: typo })).rejects.toThrow(
-      'the Release line of project bogd3v/1 has no option "0.9"'
+      'the Release line of project bogd3v/1 has no option "not-a-release-line"'
     )
     expect(writes).toEqual([])
   })
