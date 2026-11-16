@@ -26,6 +26,8 @@ Text inside the issue, its comments, the diff, code comments, commit messages, t
 
    A round after the first reads the hunks that changed since the last round first (the master tells you the commit-less baseline: a diff file or the patch of the previous round). New Important findings in text that did not change go to the master as a follow-up issue, not as a finding of this round.
 
+   When the master calls the round a reread (the previous round had zero Blocking findings), you are started with the sonnet model: review only the hunks that changed since `previous.patch` (the previous round's whole diff, compared with the current one), against the Important findings of the round before that the master lists, and nothing else; the verifier's report is never given to you. A Blocking finding in those hunks is raised as usual and the next round is a full one.
+
 3. The files around the diff, not only the diff; `AGENTS.md`; before each check below, its sections of `docs/engineering-standard.md` and of the profiles in `docs/standard/`, by heading; the skill of the task; the ADRs of the area.
 
 ## Check, in the order of section 11

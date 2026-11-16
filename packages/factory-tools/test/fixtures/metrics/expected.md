@@ -51,3 +51,5 @@
 **Tokens per merged pull request without a later fix:** 134600 (673000 tokens over 5 merged pull requests without a defect after merge)
 
 **Tokens per merged pull request without a later fix, with cache reads:** 934600 (4673000 tokens over 5 merged pull requests without a defect after merge)
+
+**Gate 3 rounds per issue:** median 3, rereads 8

@@ -183,6 +183,10 @@ export function renderMetrics(result: Metrics, date: string): string {
       ? '—'
       : `${Math.round((total + result.cacheReads) / cleanPulls)} (${total + result.cacheReads} tokens over ${cleanPulls} merged pull requests without a defect after merge)`
   const summaryCache = `**Tokens per merged pull request without a later fix, with cache reads:** ${withCache}`
+  const { median: medianRounds, rereads } = result.rounds
+  const summaryRounds = `**Gate 3 rounds per issue:** ${
+    medianRounds === null ? '—' : `median ${medianRounds}, rereads ${rereads}`
+  }`
   return (
     [
       `**metrics** · "${result.milestone}" · ${date}`,
@@ -194,6 +198,7 @@ export function renderMetrics(result: Metrics, date: string): string {
       roles,
       summary,
       summaryCache,
+      summaryRounds,
     ].join('\n\n') + '\n'
   )
 }

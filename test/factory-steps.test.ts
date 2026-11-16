@@ -46,6 +46,12 @@ const STEPS: Record<string, string[]> = {
     'herdr/master.md',
     'docs/factory.md',
   ],
+  'previous.patch': [
+    `${AGENTS}reviewer.md`,
+    `${SKILLS}blind-review/SKILL.md`,
+    'herdr/master.md',
+    'docs/factory.md',
+  ],
   'logs/': [
     `${AGENTS}master.md`,
     `${AGENTS}verifier.md`,
