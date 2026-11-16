@@ -156,3 +156,4 @@ jobs:
     uses: ./.github/workflows/verify-draft.yml
     with:
       tools-ref: ${{ github.sha }}
+      reuse: true

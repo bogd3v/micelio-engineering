@@ -106,13 +106,14 @@ jobs:
     uses: bogd3v/micelio-engineering/.github/workflows/verify-draft.yml@<commit SHA> # <tag>
     with:
       tools-ref: <the same commit SHA>
+      reuse: true # optional, default false
 ```
 
 **Permissions.** `contents: read` and `pull-requests: read`; it takes no secrets and uses no token. `tools-ref` and `tools-repository` are the interface while `@micelio/factory-tools` is built from source, as in `issue-ready.yml`; they go when it is published (#30).
 
 **What it does.** It checks out the pull request with its history and the tools at `tools-ref`, builds the tools and moves them out of the workspace (the commands `verify-draft` runs, such as `prettier --check .`, read the whole workspace), then runs `lint-lane --diff <the pull request's base SHA> --lane normal` (`packages/factory-tools/README.md`). Then:
 
-- exit 0, the diff fits `normal` (or `express`): it sets up Node from `.nvmrc` as `check.yml` does for `typescript`, runs the `install:` line of the first `## Commands` block of `AGENTS.md`, and runs `verify-draft --draft <file> --cwd .` on the pull request's description. The job fails when `verify-draft` exits non-zero, which includes a description whose Tests section names no command it can run (`no command ran`, exit 1). There is no `logs/` directory in CI, so it runs without `--logs`: a command with no log is not a mismatch and the output says `logs: not checked`;
+- exit 0, the diff fits `normal` (or `express`): it sets up Node from `.nvmrc` as `check.yml` does for `typescript`, runs the `install:` line of the first `## Commands` block of `AGENTS.md` (then `pipx install reuse==6.2.0`, only when the input `reuse` is `true`), and runs `verify-draft --draft <file> --cwd .` on the pull request's description. The job fails when `verify-draft` exits non-zero, which includes a description whose Tests section names no command it can run (`no command ran`, exit 1). There is no `logs/` directory in CI, so it runs without `--logs`: a command with no log is not a mismatch and the output says `logs: not checked`;
 - exit 1, the diff does not fit: it prints `full lane: gate 4 is the verifier` and the job passes;
 - exit 2: the job fails.
 
@@ -120,7 +121,7 @@ jobs:
 
 **The description is data.** It reaches `verify-draft` through a file that a step writes from an environment variable; it is never in a shell line or in an expression of a `run:` script. `verify-draft` runs only the repository's own commands (`packages/factory-tools/README.md`, `verify-draft`) and the job never builds or starts a stack. `verify-draft` reads the commands `AGENTS.md` allows at `HEAD`, which in CI is the merge commit it checked out, not the merge base.
 
-**What a runner lacks.** The commands run on `ubuntu-latest` with Node and the repository's `install:` line, nothing else: a draft that reports a command needing another tool (this repository's `npm run verify:template` needs `reuse`) mismatches in CI, so such a draft is verified by the master at gate 4, not by this job. A description with CRLF line endings is read as one with LF.
+**What a runner lacks.** The commands run on `ubuntu-latest` with Node and the repository's `install:` line, nothing else, and `reuse` when the caller sets the input `reuse` to `true` (default `false`; this repository's `ci.yml` sets it, because `npm run verify:template` ends with `reuse lint`). `reuse` is the one tool the workflow can add: a draft that reports a command needing any other tool mismatches in CI, so such a draft is verified by the master at gate 4, not by this job. A description with CRLF line endings is read as one with LF.
 
 Making it a required check, and calling it from the other repositories, are maintainer steps.
 

@@ -14,6 +14,7 @@ name: Verify draft
 #       uses: bogd3v/micelio-engineering/.github/workflows/verify-draft.yml@<commit SHA> # <tag>
 #       with:
 #         tools-ref: <the same commit SHA>
+#         reuse: true # optional: install reuse 6.2.0 for the draft's commands
 #
 # It takes no secrets. The description is untrusted text: it reaches `verify-draft` through a file
 # that a step writes from an environment variable, never a shell line or an expression of a `run:`
@@ -31,6 +32,10 @@ on:
         description: Repository that holds @micelio/factory-tools
         type: string
         default: bogd3v/micelio-engineering
+      reuse:
+        description: Install reuse 6.2.0 for the draft's commands
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -102,9 +107,12 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      # The install: line of the first Commands block of AGENTS.md.
+      # The install: line of the first Commands block of AGENTS.md, then reuse when the caller asks
+      # (a command such as `npm run verify:template` ends with `reuse lint`; ubuntu-latest has no reuse).
       - name: Install dependencies
         if: ${{ steps.lane.outputs.normal == 'true' }}
+        env:
+          INSTALL_REUSE: ${{ inputs.reuse }}
         run: |
           INSTALL=$(awk '/^## Commands/ { seen = 1; next } seen && /^```/ { if (inside) exit; inside = 1; next } inside && /^install:/ { sub(/^install:[ \t]*/, ""); sub(/[ \t]+#.*$/, ""); print; exit }' AGENTS.md)
           if [ -z "$INSTALL" ]; then
@@ -112,6 +120,9 @@ jobs:
             exit 1
           fi
           bash -e -c "$INSTALL"
+          if [ "$INSTALL_REUSE" = "true" ]; then
+            pipx install reuse==6.2.0
+          fi
 
       # The description is data: it is written to a file from the environment and read by the tool.
       - name: Verify the draft
