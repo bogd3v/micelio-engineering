@@ -1746,3 +1746,46 @@ describe('the table per lane', () => {
     expect(parseLane(kept)).toBe('express')
   })
 })
+
+describe('the rounds of gate 3', () => {
+  const round = (k: number, blocking: number, important: number): object =>
+    comment(
+      'maint',
+      `**Gate 3, round ${k} (reviewer-1): ${blocking === 0 ? 'Pass' : 'Red'}, ${blocking} Blocking, ${important} Important.**`
+    )
+  const read = (comments: Record<number, object[]>) =>
+    metrics(source({ issues: [issue(1), issue(2), issue(3), issue(4), issue(5)], comments }), {
+      milestone: 'M2',
+      log: '',
+    })
+
+  it('rounds per issue have a median, and rereads are counted apart', async () => {
+    const result = await read({
+      // one round, passed
+      1: [round(1, 0, 0)],
+      // zero Blocking and one Important, then a reread that passes
+      2: [round(1, 0, 1), round(2, 0, 0)],
+      // a Blocking round, a full round after it, then a reread of that one
+      3: [round(1, 1, 0), round(2, 0, 1), round(3, 0, 0)],
+      // a reread that finds a Blocking finding, then the full round that follows it
+      4: [round(1, 0, 2), round(2, 1, 0), round(3, 0, 0)],
+    })
+    const row = (n: number) => result.issues.find((i) => i.number === n)
+    expect(row(1)).toMatchObject({ rounds: 1, rereads: 0 })
+    expect(row(2)).toMatchObject({ rounds: 2, rereads: 1 })
+    expect(row(3)).toMatchObject({ rounds: 3, rereads: 1 })
+    expect(row(4)).toMatchObject({ rounds: 3, rereads: 1 })
+    // #5 has no round and stays out of the median: 1, 2, 3, 3
+    expect(row(5)).toMatchObject({ rounds: 0, rereads: 0 })
+    expect(result.rounds).toEqual({ median: 2.5, rereads: 3 })
+    expect(renderMetrics(result, '2026-10-24')).toContain(
+      '**Gate 3 rounds per issue:** median 2.5, rereads 3'
+    )
+  })
+
+  it('has no median when no issue has a round', async () => {
+    const result = await read({})
+    expect(result.rounds).toEqual({ median: null, rereads: 0 })
+    expect(renderMetrics(result, '2026-10-24')).toContain('**Gate 3 rounds per issue:** —')
+  })
+})

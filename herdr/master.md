@@ -38,7 +38,7 @@ An issue that fails the by-hand read is set back to Todo (the `ready` label stay
 | Agent    | Herdr name                                          | Worktree                                                    | Model                                                                                      |
 | -------- | --------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | worker   | `worker-<N>`                                        | `../wt-<N>`, branch `<type>/factory-<N>` from `origin/main` | sonnet; opus after two failed rounds or for contracts, security or concurrency (`TEAM.md`) |
-| reviewer | `reviewer-<N>`, `reviewer-<N>-r<K>` for round K ≥ 2 | the worker's                                                | opus                                                                                       |
+| reviewer | `reviewer-<N>`, `reviewer-<N>-r<K>` for round K ≥ 2 | the worker's                                                | opus; sonnet for a reread (\"Gate 3\")                                                     |
 | verifier | `verifier-<N>`, `verifier-<N>-r<K>`                 | a clean copy it builds itself                               | sonnet                                                                                     |
 | scribe   | `scribe`                                            | `../wt-scribe`                                              | sonnet                                                                                     |
 
@@ -147,6 +147,8 @@ herdr agent prompt reviewer-<N> "Use the blind-review skill (.claude/skills/blin
 
 From round 2, add: "Read the hunks that changed since <packets>/<N>/r<K>/previous.patch first. A new Important finding in text that did not change is not a finding of this round: list it under `Follow-up` in the report." Such a finding becomes a follow-up issue (the maintainer opens it).
 
+**A reread.** When round K-1's gate 3 report has zero Blocking findings (the verdict line of its `summary.md`), round K's reviewer is a reread: still a new agent with no context from the worker, never given the verifier's report, started with `--model sonnet` as `reviewer-<N>-r<K>`. Its prompt replaces the round 2 sentence above with: "This is a reread. Review only the hunks that changed since <packets>/<N>/r<K>/previous.patch (round K-1's whole diff; compare it with the diff of the worktree) against these Important findings of the round before: <the Important lines of that summary.md>." A Blocking finding in round 1, or a new one in a reread, makes the next round a full one: a new opus reviewer on the whole diff, as above. The third red round goes to the maintainer whichever kind it is ("Escalation"). `metrics` counts the rereads apart (`packages/factory-tools/README.md`).
+
 The master reads **only `summary.md`**. It posts the full `report.md` as a comment with `--body-file`, whose first line is the gate line:
 
 ```bash
@@ -212,7 +214,7 @@ Once gate 4 passes (or the lane skips it), tell the maintainer the issue is read
 
 ## Tokens
 
-97% of a session's tokens are cache reads, which grow with context size times turns. So: the master reads only `summary.md`; workers are compacted before each round; verifiers run on Sonnet and reviewers on Opus; tool calls are batched and agents are waited on in the background; issues are frozen after gate 1; reviewers focus on changed hunks from round 2; a worker never runs its own reviewer or verifier.
+97% of a session's tokens are cache reads, which grow with context size times turns. So: the master reads only `summary.md`; workers are compacted before each round; verifiers run on Sonnet and reviewers on Opus; tool calls are batched and agents are waited on in the background; issues are frozen after gate 1; reviewers focus on changed hunks from round 2, and a round after one with zero Blocking is a sonnet reread of them; a worker never runs its own reviewer or verifier.
 
 ## Session length
 

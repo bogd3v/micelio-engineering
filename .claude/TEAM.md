@@ -4,13 +4,13 @@ This repository's work runs through the Micelio factory ([`docs/factory.md`](../
 
 ## Roster
 
-| Agent      | Model  | Use it for                                                                                                             |
-| ---------- | ------ | ---------------------------------------------------------------------------------------------------------------------- |
-| `planner`  | opus   | With the maintainer: scope, the ADR of gate 0, the epic and its issues, the retro                                      |
-| `master`   | opus   | One per milestone, run as the main session: gate 1, one worker per ready issue, the reviewer and the verifier after it |
-| `worker`   | sonnet | One per issue, in its own worktree: the change, its evidence and the pull request draft                                |
-| `reviewer` | opus   | Gate 3: a new agent that reviews the diff with no context from the worker                                              |
-| `verifier` | sonnet | Gate 4: a new agent that re-creates the run below from a clean copy and reruns every reported command                  |
+| Agent      | Model                     | Use it for                                                                                                                                 |
+| ---------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `planner`  | opus                      | With the maintainer: scope, the ADR of gate 0, the epic and its issues, the retro                                                          |
+| `master`   | opus                      | One per milestone, run as the main session: gate 1, one worker per ready issue, the reviewer and the verifier after it                     |
+| `worker`   | sonnet                    | One per issue, in its own worktree: the change, its evidence and the pull request draft                                                    |
+| `reviewer` | opus; sonnet for a reread | Gate 3: a new agent that reviews the diff with no context from the worker; after a round with zero Blocking, a reread of the changed hunks |
+| `verifier` | sonnet                    | Gate 4: a new agent that re-creates the run below from a clean copy and reruns every reported command                                      |
 
 The model is chosen when the agent is started; the prompts do not fix it.
 

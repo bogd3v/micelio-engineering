@@ -251,7 +251,7 @@ npm run metrics --workspace packages/factory-tools -- --milestone "Micelio · F�
 | `--fixtures <dir>`     | Reads a recording instead of `gh api` (see below), so a run needs neither `gh` nor the network                                                                                                   |
 
 The exit code is 0, or 2 when the arguments are wrong, the milestone does not exist or something
-cannot be read. The output is six tables, a total row ending the first two, and two summary lines.
+cannot be read. The output is six tables, a total row ending the first two, and three summary lines.
 
 | Table                  | Column                                         | Counts                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ---------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -298,13 +298,17 @@ and input plus output of every `tokens |` record of the milestone (those of its 
 `master` and `canary` ones), one row per role in the order the roles first appear, and a total row;
 `none` when there is no record.
 
-Two lines follow. **Tokens per merged pull request without a later fix** is the tokens of every
+Three lines follow. **Tokens per merged pull request without a later fix** is the tokens of every
 `tokens |` record of the milestone's issues (input plus output; cache reads are not added; the
 `master` and `canary` records are not in it) divided by the merged pull requests whose "Defects after
 merge" is 0, with both numbers in brackets; `—` when there is no record or no such pull request. The
 same line **with cache reads** adds the cache reads of those records to the tokens. The "Tokens, by
 role" cell of an issue repeats on each of its pull requests, but both lines count the issue's
-records once.
+records once. The third, **Gate 3 rounds per issue**, gives the median of the "Gate 3 rounds" column
+over the issues that have a round (the mean of the two middle values when the count is even), and the
+number of rereads: the rounds after the first whose previous `Gate 3` round says `0 Blocking`, which
+`herdr/master.md` ("Gate 3") starts with a sonnet reviewer on the changed hunks; a round after one with
+a Blocking finding is a full round and is not counted. `—` when no issue has a round.
 
 ### The `tokens |` line
 

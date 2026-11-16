@@ -49,6 +49,11 @@ export interface IssueRow {
   returned: number
   /** The highest review round of gate 3. */
   rounds: number
+  /**
+   * The rounds of gate 3 that were rereads: a round after the first whose previous round raised no
+   * Blocking finding (`herdr/master.md`, "Gate 3"). A round after a Blocking one is a full round.
+   */
+  rereads: number
   /** Blocking findings raised over all the rounds. */
   blocking: number
   /** Mismatches the verifier found, over all its reports. */
@@ -144,6 +149,12 @@ export interface CalibrationRow {
 export interface Metrics {
   milestone: string
   issues: IssueRow[]
+  /**
+   * The gate 3 rounds over the issues that have one: the median of their `rounds` (the mean of the
+   * two middle values when the count is even), `null` when no issue has a round, and the sum of
+   * their `rereads`.
+   */
+  rounds: { median: number | null; rereads: number }
   pulls: PullRow[]
   /** One row per lane, `express`, `normal` and `full`, over the issues and pull requests above. */
   lanes: LaneRow[]
@@ -211,6 +222,7 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
       title: text(issue.title),
       returned: 0,
       rounds: 0,
+      rereads: 0,
       blocking: 0,
       mismatches: 0,
       falseRedsGate3: 0,
@@ -222,6 +234,7 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
       firstComment: null,
     }
     let reviews = 0
+    let previousBlocking: number | null = null
     let findings = 0
     let logged = false
     for (const comment of (await source.comments(row.number)).map(object)) {
@@ -254,6 +267,8 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
         const found = blockingByCategory(body)
         const listed = [...found.values()].reduce((sum, n) => sum + n, 0)
         const total = event.blocking ?? listed
+        if (previousBlocking === 0) row.rereads++
+        previousBlocking = total
         row.blocking += total
         for (const [category, n] of found)
           categories.set(category, (categories.get(category) ?? 0) + n)
@@ -321,6 +336,10 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
   return {
     milestone: options.milestone,
     issues: issueRows.toSorted((a, b) => a.number - b.number),
+    rounds: {
+      median: median(issueRows.filter((row) => row.rounds > 0).map((row) => row.rounds)),
+      rereads: issueRows.reduce((n, row) => n + row.rereads, 0),
+    },
     pulls: pullRows.toSorted((a, b) => a.number - b.number),
     lanes: LANES.map((lane) => laneRow(lane, issueRows, pullRows)),
     calibration: LANES.map((lane) => calibrationRow(lane, issueRows)),
