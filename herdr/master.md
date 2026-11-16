@@ -29,6 +29,8 @@ An issue that fails the by-hand read is set back to Todo (the `ready` label stay
 
 **Lane.** Once the issue passes, the master sets its lane: from a built checkout of `micelio-engineering` (`npm run build`), in the issue's repository, `node <checkout>/packages/factory-tools/dist/cli.js lint-lane {{repo}}#<N>` (`packages/factory-tools/README.md`, "`lint-lane`"). It writes `lane: <lane>` and the reasons the command printed in its `Gate 1` comment and gives the worker the lane. Nobody lowers a lane, and a repository whose `AGENTS.md` has no `## Lanes` block runs every issue as `full`.
 
+**Calibration.** An `express` or `normal` issue whose number is a multiple of 5 is one pull request in five (ADR-0003, Decision 8), so nobody chooses the sample: its `Gate 1` comment reads `lane: <lane> (calibration: full)`, it keeps its own lane for `lint-lane --diff` and for `metrics` (which counts it as a calibration run), and it runs every gate of `full`: gates 3 and 4 below, and the maintainer's stack check. A Blocking finding at its gate 3, or a mismatch at its gate 4, is a correction-log line of category `lint` ("Correction log" below) that names the glob of the `## Lanes` block to tighten.
+
 **Freeze.** Once gate 1 passes the issue is frozen: record its `updatedAt` (`gh issue view <n> --json updatedAt -q .updatedAt`) when a round starts and compare it when the round ends. If it changed (other than the master's own `### Progress` edit), stop the round, tell the maintainer and restart the round on the new text.
 
 ## Names, worktrees, models
@@ -136,7 +138,7 @@ Write `decisions.md` in the packet before the worker starts (round 1) and again 
 
 ### Gate 3 — blind review
 
-`express` skips this gate and gate 4: after gate 2 the master runs the check command on a clean copy (built as `verify-pr` says, "Build a clean copy") through `<path of herdr/factory-slot.sh> run -- <check command>`, posts its output as the `Gate 2` result and goes to gate 5.
+`express` skips this gate and gate 4 (a calibration run does not, "Calibration" above): after gate 2 the master runs the check command on a clean copy (built as `verify-pr` says, "Build a clean copy") through `<path of herdr/factory-slot.sh> run -- <check command>`, posts its output as the `Gate 2` result and goes to gate 5.
 
 ```bash
 herdr agent start reviewer-<N> --kind claude --pane <new pane> -- --agent reviewer --model opus
@@ -157,7 +159,7 @@ When the master accepts Important findings the worker justified, it adds the lin
 
 ### Gate 4 — verification
 
-`full` only. `normal` runs `verify-draft` on a clean copy (built the same way) through the slot script, `<path of herdr/factory-slot.sh> run -- node <checkout>/packages/factory-tools/dist/cli.js verify-draft --draft <draft without its Answers to review> --logs <packets>/<N>/logs --cwd <clean copy>`, and posts its output as `**Gate 4, round K (verify-draft)** · M mismatches`; the master reads the criteria it lists as `not checked`, and a verdict `Red` goes back to the worker as a red gate 4.
+`full` only, and the calibration runs. `normal` runs `verify-draft` on a clean copy (built the same way) through the slot script, `<path of herdr/factory-slot.sh> run -- node <checkout>/packages/factory-tools/dist/cli.js verify-draft --draft <draft without its Answers to review> --logs <packets>/<N>/logs --cwd <clean copy>`, and posts its output as `**Gate 4, round K (verify-draft)** · M mismatches`; the master reads the criteria it lists as `not checked`, and a verdict `Red` goes back to the worker as a red gate 4.
 
 ```bash
 herdr agent start verifier-<N> --kind claude --pane <new pane> -- --agent verifier --model sonnet

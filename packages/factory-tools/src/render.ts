@@ -126,8 +126,10 @@ export function renderMetrics(result: Metrics, date: string): string {
       'Minutes, stack, Docker or test',
       'Lead time, hours',
       'Lead time, median hours',
+      'Calibration runs',
+      'Calibration runs that found something',
     ],
-    result.lanes.map((l) => [
+    result.lanes.map((l, i) => [
       l.lane,
       l.pulls,
       l.defects,
@@ -137,6 +139,8 @@ export function renderMetrics(result: Metrics, date: string): string {
       l.minutes.handsOn,
       l.leadHours.length ? l.leadHours.map(hours).join(', ') : '—',
       l.medianLeadHours === null ? '—' : hours(l.medianLeadHours),
+      result.calibration[i]?.runs ?? 0,
+      result.calibration[i]?.found ?? 0,
     ])
   )
   const categories = table(

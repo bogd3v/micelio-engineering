@@ -5,7 +5,7 @@ import {
   countLog,
   hasFindings,
   mergeTime,
-  parseLane,
+  parseLaneLine,
   parseEvent,
   withoutLaneLine,
   passedByMaster,
@@ -69,6 +69,11 @@ export interface IssueRow {
    * `full` when none does (a recording made before the lanes reads as `full`).
    */
   lane: Lane
+  /**
+   * The last lane line reads `(calibration: full)`: the issue keeps its `lane` and ran every gate
+   * of `full`, as the sample of ADR-0003, Decision 8.
+   */
+  calibration: boolean
   /** When the first comment of the issue, from anyone, was made, or `null` when it has none. */
   firstComment: string | null
 }
@@ -126,6 +131,15 @@ export interface LaneRow {
   medianLeadHours: number | null
 }
 
+/** The calibration runs of one lane: its issues that ran `full` as a sample. */
+export interface CalibrationRow {
+  lane: Lane
+  /** Issues of the lane marked `(calibration: full)`. */
+  runs: number
+  /** Of those, the ones with a Blocking finding at gate 3 or a mismatch at gate 4. */
+  found: number
+}
+
 /** Everything `renderMetrics` prints. */
 export interface Metrics {
   milestone: string
@@ -133,6 +147,8 @@ export interface Metrics {
   pulls: PullRow[]
   /** One row per lane, `express`, `normal` and `full`, over the issues and pull requests above. */
   lanes: LaneRow[]
+  /** One row per lane, in the order of `lanes`: the calibration runs and the ones that found something. */
+  calibration: CalibrationRow[]
   /** Blocking findings by category, most frequent first. */
   categories: [string, number][]
   /** Rows of the correction log, and those with a Destination. */
@@ -202,6 +218,7 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
       tokens: [],
       unlogged: 0,
       lane: 'full',
+      calibration: false,
       firstComment: null,
     }
     let reviews = 0
@@ -218,7 +235,9 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
       const body = text(comment.body)
       if (/^factory-log \| /m.test(body)) logged = true
       const event = parseEvent(body)
-      row.lane = parseLane(body) ?? row.lane
+      const laneLine = parseLaneLine(body)
+      row.lane = laneLine?.lane ?? row.lane
+      row.calibration = laneLine?.calibration ?? row.calibration
       for (const line of parseTokenLines(body)) {
         addTokens(MILESTONE_ROLES.has(line.role) ? sessions : row.tokens, line)
       }
@@ -304,6 +323,7 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
     issues: issueRows.toSorted((a, b) => a.number - b.number),
     pulls: pullRows.toSorted((a, b) => a.number - b.number),
     lanes: LANES.map((lane) => laneRow(lane, issueRows, pullRows)),
+    calibration: LANES.map((lane) => calibrationRow(lane, issueRows)),
     categories: [...categories].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])),
     log: (({ rows, converted }) => ({ rows, converted }))(countLog(options.log)),
     learnings: countLearnings(options.log),
@@ -335,6 +355,16 @@ function laneRow(lane: Lane, issues: IssueRow[], pulls: PullRow[]): LaneRow {
     minutes: { diff: sum('diff'), report: sum('report'), handsOn: sum('handsOn') },
     leadHours,
     medianLeadHours: median(leadHours),
+  }
+}
+
+/** The calibration runs of one lane, and the ones that found a Blocking or a mismatch. */
+function calibrationRow(lane: Lane, issues: IssueRow[]): CalibrationRow {
+  const runs = issues.filter((issue) => issue.lane === lane && issue.calibration)
+  return {
+    lane,
+    runs: runs.length,
+    found: runs.filter((issue) => issue.blocking > 0 || issue.mismatches > 0).length,
   }
 }
 

@@ -72,7 +72,7 @@ The reviewer and the verifier exist because an agent that has just written somet
   - `express` is only non-normative Markdown, `.github/project-fields.json`, the version files of a `chore(release)` and the status line of an ADR. The standard, the profiles, `docs/factory.md`, `AGENTS.md`, `CLAUDE.md`, the role prompts, the skills and `herdr/` are normative and never `express` (standard, section 11); a change to `AGENTS.md` is at least `normal`.
   - `normal` is everything else.
 - **How the diff confirms it** (Decision 3). At gate 2, `lint-lane --diff` checks the diff against the lane. A diff that does not fit moves the issue to the lane it fits, and the gates the lane had skipped run.
-- **Calibration** (Decision 8). One pull request in five of `express` and of `normal` runs every gate of `full`; the metrics report per lane (Decision 10).
+- **Calibration** (Decision 8). One pull request in five of `express` and of `normal` runs every gate of `full`; the metrics report per lane (Decision 10). The rule is the issue's number: an `express` or `normal` issue whose number is a multiple of 5 is a calibration run, so nobody chooses the sample, and the master writes `lane: <lane> (calibration: full)` in its `Gate 1` comment. The issue keeps its own lane (`lint-lane --diff` checks the diff against it, and `metrics` counts the run under it, marked as calibration), and runs every gate of `full`. A Blocking finding at gate 3, or a mismatch at gate 4, on a calibration run is a `factory-log |` line of category `lint` that names the glob of the `## Lanes` block to tighten. The per-lane table of `metrics` counts the calibration runs and the ones that found something.
 - **No engine in the rule** (Decision 9). The lanes say "the stack" and keep what [The stack](#the-stack) says.
 
 The gates below say which lanes run each.
@@ -123,7 +123,7 @@ A gate is a list evaluated by a machine, the maintainer, or an agent other than 
 
 **Evaluated by:** the reviewer's findings, decided by the master. The reviewer is a new agent that starts with no context from the worker. Nothing is committed before gate 5, so it reads the worktree against its merge base with `origin/main`, untracked files included.
 
-**Lanes:** `normal` and `full`. `express` skips it: the check command stands in for it.
+**Lanes:** `normal` and `full`, and a calibration run of `express`. `express` skips it: the check command stands in for it.
 
 **Passes when:** there are zero Blocking findings, and every Important one is either fixed (the next round no longer raises it) or justified by the worker in the draft's "Answers to review", a section the verifier never reads; the master decides which. The reviewer checks in the order of section 11: correctness and edge cases; contracts and the version bump; security and permissions; tests that would fail without the change (a diff that edits an existing test, or a test the issue names, other than to add a case, without the issue asking for it, is Blocking); documents the change made false; scope. It also checks the draft's "Instructions that were wrong or missing": every wrong `AGENTS.md` or skill of the repository it names is corrected on the branch, and a wrong standard, synced file (the `files` of `.github/standard-sync.json`) or issue is reported to the master, as the draft says (section 13).
 
@@ -135,7 +135,7 @@ A gate is a list evaluated by a machine, the maintainer, or an agent other than 
 
 **Evaluated by:** the verifier, a new agent that starts with no context from the worker and has not read the reviewer's findings.
 
-**Lanes:** `full`, by the verifier on the stack from scratch. `normal` runs `verify-draft` (#236), a script that runs the draft's commands again on a clean copy, through `factory-slot.sh run`, and compares their numbers; the master reads the criteria it lists as `not checked`. `express` skips the gate.
+**Lanes:** `full`, by the verifier on the stack from scratch. `normal` runs `verify-draft` (#236), a script that runs the draft's commands again on a clean copy, through `factory-slot.sh run`, and compares their numbers; the master reads the criteria it lists as `not checked`. `express` skips the gate. A calibration run of `normal` or `express` runs it as `full` does.
 
 **Passes when:** on the repository's stack re-created from scratch from a clean copy of the worktree (nothing is committed before gate 5: a fresh clone at the merge base, the worktree's diff applied with `--binary` and its untracked files copied, never its ignored files), every command of the draft's Tests section (its summary lines are compared with the verifier's own run, and a command with no file in the packet's `logs/` behind it is a mismatch), except the runs shown failing without the change, gives the numbers the draft reports, and every test the draft names as failing without the change fails on the merge base's code (a count exactly; a figure the repository does not reproduce run to run, such as a coverage percentage, the failures of a known flaky test or the failures on `main`, is reported by the worker as the values of at least two runs and `k failed of n`, and is checked against the repository's floor and written as `variance`, not as a mismatch); every acceptance criterion is shown to hold; everything the draft says was not verified has been tried, and the outcome is written down.
 

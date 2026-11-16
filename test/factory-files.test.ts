@@ -178,7 +178,7 @@ describe('the role prompts', () => {
     verifier: 720,
     reviewer: 600,
   }
-  const TOTAL = 4990
+  const TOTAL = 4996
 
   it('each role prompt stays under its word budget', () => {
     const dir = join(ROOT, 'template/.claude/agents')
