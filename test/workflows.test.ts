@@ -615,6 +615,45 @@ describe('verify-draft.yml', () => {
     expect(readFileSync(join(temp, 'tools', 'marker'), 'utf8')).toBe('built')
   })
 
+  it('verify-draft.yml installs reuse 6.2.0 only when its input reuse is true and the lane is normal', () => {
+    expect(VERIFY).toMatch(
+      /^ {6}reuse:\n {8}description: Install reuse 6\.2\.0 for the draft's commands\n {8}type: boolean\n {8}default: false$/m
+    )
+    const step = verifySteps()['Install dependencies'] ?? ''
+    expect(step).toContain("if: ${{ steps.lane.outputs.normal == 'true' }}")
+    expect(step).toContain('INSTALL_REUSE: ${{ inputs.reuse }}')
+    // the install runs after the repository's own install: line and before the draft is verified
+    const names = Object.keys(verifySteps())
+    expect(names.indexOf('Install dependencies')).toBeLessThan(names.indexOf('Verify the draft'))
+    const script = verifyScript('Install dependencies')
+    expect(script).not.toMatch(/\$\{\{/)
+    expect(script.match(/pipx install .*/g)).toEqual(['pipx install reuse==6.2.0'])
+    const install = (reuse: string | undefined): { status: number | null; log: string } => {
+      const dir = tempDir('micelio-verify-')
+      const bin = join(dir, 'bin')
+      mkdirSync(bin)
+      writeFileSync(join(bin, 'pipx'), `#!/bin/sh\necho "pipx $*" >> "${join(dir, 'calls')}"\n`)
+      chmodSync(join(bin, 'pipx'), 0o755)
+      writeFileSync(join(dir, 'AGENTS.md'), '## Commands\n\n```bash\ninstall: true\n```\n')
+      const env: Record<string, string> = { PATH: `${bin}:${process.env.PATH ?? ''}` }
+      if (reuse !== undefined) env['INSTALL_REUSE'] = reuse
+      const result = run(script, env, dir)
+      const calls = join(dir, 'calls')
+      return { status: result.status, log: existsSync(calls) ? readFileSync(calls, 'utf8') : '' }
+    }
+    expect(install('true')).toEqual({ status: 0, log: 'pipx install reuse==6.2.0\n' })
+    expect(install('false')).toEqual({ status: 0, log: '' })
+    expect(install('')).toEqual({ status: 0, log: '' })
+    expect(install(undefined)).toEqual({ status: 0, log: '' })
+  })
+
+  it('ci.yml calls verify-draft.yml with reuse: true', () => {
+    const ci = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8')
+    expect(ci).toContain(
+      '    uses: ./.github/workflows/verify-draft.yml\n    with:\n      tools-ref: ${{ github.sha }}\n      reuse: true\n'
+    )
+  })
+
   it('every action in verify-draft.yml is pinned by a commit SHA', () => {
     expect(VERIFY).toMatch(/uses: actions\/checkout@/)
     expect(VERIFY).toMatch(/uses: actions\/setup-node@/)
