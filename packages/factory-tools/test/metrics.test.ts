@@ -15,6 +15,7 @@ import {
   mergeTime,
   parseEvent,
   parseLane,
+  parseLaneLine,
   parseLogLines,
   parseTime,
   parseTokenLines,
@@ -1631,6 +1632,62 @@ describe('the table per lane', () => {
     expect(text).toContain('| express | 2 | 1 | worker 320 (cache 10) | 3 | 4 | 3 | 5, 12 | 8.5 |')
     expect(text).toContain('| normal | 0 | 0 | — | 0 | 0 | 0 | — | — |')
     expect(text).toContain('| full | 2 | 0 | reviewer 60 (cache 5) | 10 | 0 | 0 | 24 | 24 |')
+  })
+
+  it('calibration runs are counted per lane, with the ones that found a Blocking or a mismatch', async () => {
+    const calibrated = (lane: string): string => gate1(`${lane} (calibration: full)`)
+    expect(parseLaneLine(calibrated('normal'))).toEqual({ lane: 'normal', calibration: true })
+    expect(parseLaneLine(gate1('normal'))).toEqual({ lane: 'normal', calibration: false })
+    expect(parseLaneLine(gate1('full (calibration: full)'))).toEqual({
+      lane: 'full',
+      calibration: false,
+    })
+    expect(parseLane(calibrated('express'))).toBe('express')
+    expect(parseLaneLine('**Gate 3, round 1**\nlane: express (calibration: full)')).toBeNull()
+    expect(parseLaneLine(gate1('express (calibration: normal)'))).toBeNull()
+    const review = '**Gate 3, round 1 (#5): 1 Blocking**\n**B1. lint.** the glob let it through'
+    const clean = '**Gate 3, round 1 (#10): 0 Blocking**'
+    const result = await metrics(
+      source({
+        issues: [issue(5), issue(10), issue(15), issue(20), issue(25), issue(30), issue(7)],
+        comments: {
+          5: [comment('maint', calibrated('express')), comment('maint', review)],
+          10: [comment('maint', calibrated('normal')), comment('maint', clean)],
+          15: [
+            comment('maint', calibrated('normal')),
+            comment('maint', '# Gate 4 report: p15\n**Mismatches: 1.**'),
+          ],
+          20: [comment('maint', calibrated('express')), comment('maint', clean)],
+          25: [comment('maint', gate1('normal')), comment('maint', review)],
+          30: [comment('maint', gate1('full')), comment('maint', review)],
+          7: [comment('other', calibrated('normal')), comment('other', review)],
+        },
+        pulls: [pull(40, { milestone: { title: 'M2' }, body: 'Closes #5' })],
+      }),
+      { milestone: 'M2', log: '' }
+    )
+    expect(result.issues.map((i) => [i.number, i.lane, i.calibration])).toEqual([
+      [5, 'express', true],
+      [7, 'full', false],
+      [10, 'normal', true],
+      [15, 'normal', true],
+      [20, 'express', true],
+      [25, 'normal', false],
+      [30, 'full', false],
+    ])
+    expect(result.pulls[0]?.lane).toBe('express')
+    expect(result.calibration).toEqual([
+      { lane: 'express', runs: 2, found: 1 },
+      { lane: 'normal', runs: 2, found: 1 },
+      { lane: 'full', runs: 0, found: 0 },
+    ])
+    const text = renderMetrics(result, '2026-10-24')
+    expect(text).toContain(
+      'Lead time, median hours | Calibration runs | Calibration runs that found something |'
+    )
+    expect(text).toMatch(/\| express \| 1 \|.* \| 2 \| 1 \|\n/)
+    expect(text).toMatch(/\| normal \| 0 \|.* \| 2 \| 1 \|\n/)
+    expect(text).toMatch(/\| full \| 0 \|.* \| 0 \| 0 \|\n/)
   })
 
   it('the median of an odd number of lead times is the middle one', async () => {

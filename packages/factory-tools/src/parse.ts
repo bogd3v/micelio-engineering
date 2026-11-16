@@ -133,18 +133,41 @@ export function withoutLaneLine(body: string): string {
  * @returns The lane, or `null` when the comment is not a `Gate 1` one or has no valid `lane:` line.
  */
 export function parseLane(body: string): Lane | null {
+  return parseLaneLine(body)?.lane ?? null
+}
+
+/** The lane line of a `Gate 1` comment: the lane, and whether calibration sends it through `full`. */
+export interface LaneLine {
+  lane: Lane
+  /** The line reads `lane: <lane> (calibration: full)`, with `<lane>` `express` or `normal`. */
+  calibration: boolean
+}
+
+/**
+ * The last valid `lane: <lane>` line of a `Gate 1` comment, with its calibration mark: an
+ * `express` or `normal` issue whose number is a multiple of 5 runs every gate of `full`, and the
+ * master writes `lane: <lane> (calibration: full)` (`docs/factory.md`, "Lanes"). The mark on a
+ * `full` lane is ignored: that issue is not a sample.
+ *
+ * @returns The lane line, or `null` when the comment is not a `Gate 1` one or has no valid one.
+ */
+export function parseLaneLine(body: string): LaneLine | null {
   const first = (body.split(/\r?\n/, 1)[0] ?? '')
     .replaceAll(/<[^>]*>/g, '')
     .replaceAll('*', '')
     .replace(/^\s*#+\s*/, '')
   if (!first.toLowerCase().startsWith('gate 1')) return null
-  let lane: Lane | null = null
+  let found: LaneLine | null = null
   for (const line of body.split(/\r?\n/)) {
-    const word = /^\s*(?:[-*]\s+)?lane:\s*`?([a-z]+)`?\s*$/i.exec(line)?.[1]?.toLowerCase()
-    const found = LANES.find((name) => name === word)
-    if (found !== undefined) lane = found
+    const match = /^\s*(?:[-*]\s+)?lane:\s*`?([a-z]+)`?(\s*\(calibration:\s*full\))?\s*$/i.exec(
+      line
+    )
+    const word = match?.[1]?.toLowerCase()
+    const lane = LANES.find((name) => name === word)
+    if (lane !== undefined)
+      found = { lane, calibration: match?.[2] !== undefined && lane !== 'full' }
   }
-  return lane
+  return found
 }
 
 /** One `tokens |` line: what the session of one agent reported, as the master records it. */

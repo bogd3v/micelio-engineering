@@ -25,6 +25,13 @@ const STEPS: Record<string, string[]> = {
     `${SKILLS}verify-pr/SKILL.md`,
     'herdr/master.md',
   ],
+  calibration: [`${AGENTS}master.md`, 'herdr/master.md', 'docs/factory.md'],
+  '(calibration: full)': [
+    `${AGENTS}master.md`,
+    'herdr/master.md',
+    'docs/factory.md',
+    'packages/factory-tools/README.md',
+  ],
   'lint-lane': [`${AGENTS}master.md`, 'herdr/master.md', 'docs/factory.md'],
   'verify-draft': [
     `${AGENTS}master.md`,
