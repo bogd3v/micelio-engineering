@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Herdr window with the factory panel</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:var(--cyan)}a:hover{color:var(--magenta)}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+  <div style="height: 40px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--surface); font-size: 12px">
+    <div style="display: flex; align-items: center; gap: 8px; width: 236px; font-family: 'Chakra Petch', sans-serif; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--magenta)" stroke-width="2" aria-hidden="true"><path d="M4 14c0-4 3.5-7 8-7s8 3 8 7"></path><path d="M3 14h18"></path><path d="M7 14v4M17 14v4M12 14v5"></path></svg>
+      Herdr
+    </div>
+    <div style="padding: 4px 10px; border: 1px solid var(--line); background: var(--surface2)">micelio · master</div>
+    <div style="flex-grow: 1"></div>
+    <span style="color: var(--muted)">Files</span>
+    <span style="color: var(--muted)">Changes</span>
+    <span style="padding: 4px 10px; border: 1px solid var(--cyan); color: var(--cyan); font-family: 'Chakra Petch', sans-serif; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase">Factory</span>
+  </div>
+
+  <div style="flex-grow: 1; min-height: 0; display: flex; flex-wrap: wrap">
+    <nav aria-label="Spaces and agents" style="width: 260px; flex: 0 0 260px; box-sizing: border-box; padding: 12px 8px; border-right: 1px solid var(--line); background: var(--surface); font-size: 12px; display: flex; flex-direction: column; gap: 4px; overflow: hidden">
+      <div style="padding: 4px 8px; font-family: 'Chakra Petch', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cyan)">// Spaces</div>
+      <sc-for list="{{spaces}}" as="s" hint-placeholder-count="3">
+        <div style="{{s.rowStyle}}">
+          <span style="{{s.badgeStyle}}">{{s.letter}}</span>
+          <span>{{s.name}}</span>
+        </div>
+      </sc-for>
+      <div style="padding: 16px 8px 4px; font-family: 'Chakra Petch', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cyan)">// Agents</div>
+      <sc-for list="{{agents}}" as="a" hint-placeholder-count="8">
+        <div style="{{a.rowStyle}}">
+          <span>{{a.name}}</span>
+          <span style="{{a.dotStyle}}" aria-hidden="true"></span>
+        </div>
+      </sc-for>
+    </nav>
+
+    <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; background: var(--bg)">
+      <div style="height: 32px; display: flex; align-items: center; padding: 0 14px; border-bottom: 1px solid var(--line); font-size: 11px; color: var(--muted)">Claude Code · ~/Git · master</div>
+      <div style="flex-grow: 1; padding: 20px 24px; font-size: 13px; line-height: 1.7; color: var(--fg); white-space: pre-wrap; overflow: hidden">● Run 5 of npm run check passed: 1932 tests, exit 0.
+  The load fell from 31 to 15.
+
+● Gate 2 passed for cms#393. Gates 3 and 4 are next.
+
+  Issue     Gate · round   State
+  cms#393   3–4 · r1       Reviewer and verifier running
+  m#792     2 · r2         Worker t72 on the strict tab-order check
+  m#788     —              Waits for cms#393
+
+  Merged PRs: 1 of 4.
+
+* Baked for 36s · done 12:31 PM</div>
+      <div style="padding: 12px 24px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted)">Model: Opus 5.5 · Ctx: 201.6k · auto mode on</div>
+    </main>
+
+    <aside aria-label="Factory panel" style="width: 380px; flex: 0 0 380px; border-left: 1px solid var(--cyan); overflow-y: auto; height: 958px">
+      <dc-import name="Panel" estado="normal" theme="{{theme}}" hint-size="380px,2700px"></dc-import>
+    </aside>
+  </div>
+  <div role="status" style="position: absolute; top: 52px; right: 396px; width: 300px; box-sizing: border-box; padding: 12px; background: var(--surface); border: 1px solid var(--magenta); box-shadow: var(--glow-m); font-size: 12px">
+    <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--muted)"><span style="font-family: 'Chakra Petch', sans-serif; font-weight: 700; letter-spacing: 0.12em; color: var(--magenta)">FACTORY</span><span>now</span></div>
+    <div style="margin-top: 6px; font-weight: 700; line-height: 1.45">cms#389 is ready for your sign-off.</div>
+    <div style="margin-top: 2px; color: var(--muted)">Reviewer and verifier green · read the diff</div>
+    <div style="display: flex; gap: 6px; margin-top: 10px">
+      <button type="button" style="min-height: 32px; padding: 0 12px; border: 0; background: var(--btn-bg); color: var(--btn-fg); font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 12px; letter-spacing: 0.08em">OPEN</button>
+      <button type="button" style="min-height: 32px; padding: 0 12px; border: 1px solid var(--line); background: transparent; color: var(--fg); font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 12px; letter-spacing: 0.08em">DISMISS</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    function pal(t) {
+      var d = { bg: '#07080d', surface: '#0f111a', surface2: '#151827', line: '#262b40', fg: '#e8f0ff', muted: '#909cba', cyan: '#00e5ff', 'cyan-dim': '#0f5a6b', magenta: '#ff3df0', 'magenta-bg': '#240a26', 'warn-fill': '#eaff2e', 'warn-fg': '#05060a', red: '#ff4d6d', 'red-bg': '#2a0a13', 'btn-bg': '#00e5ff', 'btn-fg': '#05060a', 'badge-fg': '#05060a', spM: '#4d8dff', spF: '#ff9a1f', spP: '#14e39a', track: '#1b1f30', glow: '0 0 14px rgba(0,229,255,0.45)', 'glow-m': '0 0 14px rgba(255,61,240,0.4)', scan: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 3px)' };
+      var l = { bg: '#eeede6', surface: '#ffffff', surface2: '#f6f5ef', line: '#cdcbbf', fg: '#0b0c10', muted: '#4a4f5e', cyan: '#00687a', 'cyan-dim': '#a6dbe4', magenta: '#a8006a', 'magenta-bg': '#ffe6f7', 'warn-fill': '#e4ff1a', 'warn-fg': '#0b0c10', red: '#c4002b', 'red-bg': '#ffe6eb', 'btn-bg': '#0b0c10', 'btn-fg': '#e4ff1a', 'badge-fg': '#ffffff', spM: '#1f4fd1', spF: '#a84f00', spP: '#00785a', track: '#e2e0d6', glow: 'none', 'glow-m': 'none', scan: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.03) 0 1px, transparent 1px 3px)' };
+      var p = t === 'light' ? l : d;
+      return Object.keys(p).map(function (k) { return '--' + k + ':' + p[k]; }).join(';');
+    }
+    var theme = this.props.theme ?? 'dark';
+    var spaces = [['P', 'micelio-plugin-core', 0], ['F', 'micelio-plugin-fediverse', 0], ['M', 'micelio', 1]].map(function (s) {
+      return { letter: s[0], name: s[1],
+        rowStyle: 'display:flex;align-items:center;gap:8px;padding:6px 8px;' + (s[2] ? 'background:var(--surface2);border-left:2px solid var(--cyan);font-weight:700' : ''),
+        badgeStyle: 'width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-family:Chakra Petch,sans-serif;font-size:11px;font-weight:700;color:var(--badge-fg);background:var(--sp' + s[0] + ')' };
+    });
+    var dot = { working: 'var(--cyan)', needs: 'var(--magenta)', idle: 'var(--muted)' };
+    var agents = [
+      ['micelio · master', 'working', 0], ['g2-build-m792-focus-order', 'needs', 1], ['g3-review-c393-ref-lang', 'working', 1], ['g4-verify-c393-ref-lang', 'working', 1],
+      ['micelio-plugin-fediverse', 'working', 0], ['g3-review-f3-site-actor-r4', 'working', 1], ['g4-verify-f3-site-actor-r4', 'working', 1],
+      ['micelio-plugin-core', 'idle', 0], ['g2-build-pc164-editorial', 'idle', 1], ['g2-build-pc165-review', 'idle', 1], ['g4-verify-pc167-status', 'idle', 1]
+    ].map(function (a) {
+      return { name: a[0],
+        rowStyle: 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 8px 5px ' + (a[2] ? '24px' : '8px') + ';font-size:11.5px;' + (a[2] ? 'color:var(--muted)' : 'font-weight:700'),
+        dotStyle: 'width:8px;height:8px;flex:0 0 8px;background:' + dot[a[1]] + ';' + (a[1] === 'idle' ? '' : 'box-shadow:0 0 8px ' + dot[a[1]]) };
+    });
+    return {
+      theme: theme,
+      rootStyle: pal(theme) + ';position:relative;width:100%;height:1000px;box-sizing:border-box;display:flex;flex-direction:column;font-family:JetBrains Mono,ui-monospace,monospace;color:var(--fg);background-color:var(--bg);background-image:var(--scan);border:1px solid var(--line)',
+      spaces: spaces, agents: agents
+    };
+  }
+}
+</script>
+</body>
+</html>

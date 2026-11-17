@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agent cats sheet</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:var(--cyan)}a:hover{color:var(--magenta)}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+
+  <div>
+    <h1 style="margin: 0; font-family: 'Chakra Petch', sans-serif; font-size: 26px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase">Maneki-neko agents</h1>
+    <p style="margin: 6px 0 0; color: var(--muted); line-height: 1.5">The body's colour is the role, and the object it holds says it again without colour. The paw is always raised, as a maneki-neko's is: wave marks while it works, a magenta bell and a glow when it calls you. Closed eyes and a dimmed body are an agent at rest; flat eyes are held (pause mark) or red (red outline). Under 32 px the cat is cropped to the head and the object moves to a round badge.</p>
+  </div>
+
+  <section aria-labelledby="h-grid">
+    <h2 id="h-grid" style="margin: 0 0 10px; font-family: 'Chakra Petch', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cyan)">// Roles by state</h2>
+    <div style="display: grid; grid-template-columns: 250px repeat(5, minmax(0, 1fr)); gap: 8px; align-items: stretch">
+      <span></span>
+      <sc-for list="{{states}}" as="s" hint-placeholder-count="5">
+        <div style="padding: 4px 6px">
+          <div style="font-family: 'Chakra Petch', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase">{{s.name}}</div>
+          <div style="font-size: 11px; color: var(--muted); margin-top: 2px">{{s.desc}}</div>
+        </div>
+      </sc-for>
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="6">
+        <div style="padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); display: flex; flex-direction: column; justify-content: center; gap: 3px">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span style="{{r.swatch}}" aria-hidden="true"></span>
+            <span style="font-family: 'Chakra Petch', sans-serif; font-size: 15px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase">{{r.name}}</span>
+          </div>
+          <div style="font-size: 11.5px; color: var(--muted)">{{r.colour}} · {{r.meaning}}</div>
+          <div style="font-size: 11.5px; color: var(--muted)">holds {{r.object}}</div>
+        </div>
+        <sc-for list="{{r.cells}}" as="c" hint-placeholder-count="5">
+          <div style="{{c.box}}">
+            <dc-import name="Cat" rol="{{c.rol}}" estado="{{c.estado}}" size="{{ 64 }}" hint-size="64px,64px"></dc-import>
+          </div>
+        </sc-for>
+      </sc-for>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-sizes">
+    <h2 id="h-sizes" style="margin: 0 0 10px; font-family: 'Chakra Petch', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cyan)">// Sizes: 48, 24 and 16 px (under 32 px it is cropped to the bust, with the object as a badge)</h2>
+    <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px">
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="6">
+        <div style="padding: 12px; background: var(--surface); border: 1px solid var(--line)">
+          <div style="font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase">{{r.name}}</div>
+          <div style="display: flex; align-items: flex-end; gap: 10px; margin-top: 8px">
+            <dc-import name="Cat" rol="{{r.id}}" estado="working" size="{{ 48 }}" hint-size="48px,48px"></dc-import>
+            <dc-import name="Cat" rol="{{r.id}}" estado="working" size="{{ 24 }}" hint-size="24px,24px"></dc-import>
+            <dc-import name="Cat" rol="{{r.id}}" estado="working" size="{{ 16 }}" hint-size="16px,16px"></dc-import>
+            <dc-import name="Cat" rol="{{r.id}}" estado="needs" size="{{ 16 }}" hint-size="16px,16px"></dc-import>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-context">
+    <h2 id="h-context" style="margin: 0 0 10px; font-family: 'Chakra Petch', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cyan)">// In the panel</h2>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start">
+
+      <div>
+        <div style="font-size: 11px; color: var(--muted); margin-bottom: 6px">A heavy slot</div>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--surface2); border-left: 2px solid var(--cyan)">
+          <span style="font-size: 11px; color: var(--muted)">01</span>
+          <dc-import name="Cat" rol="verifier" estado="working" size="{{ 24 }}" hint-size="24px,24px"></dc-import>
+          <div style="flex-grow: 1; min-width: 0">
+            <div style="font-weight: 700">g4-verify-c393</div>
+            <div style="font-size: 11px; color: var(--muted)">$ npm run check</div>
+          </div>
+          <span style="color: var(--cyan)">2:14</span>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size: 11px; color: var(--muted); margin-bottom: 6px">A card of Needs you</div>
+        <div style="padding: 10px; background: var(--surface); border: 1px solid var(--magenta)">
+          <div style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted)">
+            <dc-import name="Cat" rol="worker" estado="needs" size="{{ 24 }}" hint-size="24px,24px"></dc-import>
+            <span style="flex-grow: 1">m#792 · G2 · r2</span>
+            <span style="color: var(--magenta); font-weight: 700">8 min</span>
+          </div>
+          <div style="margin-top: 6px; font-weight: 700; line-height: 1.45">The worker asks: option A, B or C for the strict tab-order check.</div>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size: 11px; color: var(--muted); margin-bottom: 6px">The agents of an issue</div>
+        <div style="border: 1px solid var(--line); background: var(--surface)">
+          <sc-for list="{{agents}}" as="a" hint-placeholder-count="4">
+            <div style="display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--line); font-size: 12px">
+              <dc-import name="Cat" rol="{{a.rol}}" estado="{{a.estado}}" size="{{ 16 }}" hint-size="16px,16px"></dc-import>
+              <span style="flex-grow: 1">{{a.name}}</span>
+              <span style="{{a.stateStyle}}">{{a.state}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1100,"height":1320}}'>
+class Component extends DCLogic {
+  renderVals() {
+    function pal(t) {
+      var d = { bg: '#07080d', surface: '#0f111a', surface2: '#151827', line: '#262b40', fg: '#e8f0ff', muted: '#909cba', cyan: '#00e5ff', 'cyan-dim': '#0f5a6b', magenta: '#ff3df0', 'magenta-bg': '#240a26', 'warn-fill': '#eaff2e', 'warn-fg': '#05060a', red: '#ff4d6d', 'red-bg': '#2a0a13', 'btn-bg': '#00e5ff', 'btn-fg': '#05060a', 'badge-fg': '#05060a', spM: '#4d8dff', spF: '#ff9a1f', spP: '#14e39a', track: '#1b1f30', glow: '0 0 14px rgba(0,229,255,0.45)', 'glow-m': '0 0 14px rgba(255,61,240,0.4)', scan: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 3px)' };
+      var l = { bg: '#eeede6', surface: '#ffffff', surface2: '#f6f5ef', line: '#cdcbbf', fg: '#0b0c10', muted: '#4a4f5e', cyan: '#00687a', 'cyan-dim': '#a6dbe4', magenta: '#a8006a', 'magenta-bg': '#ffe6f7', 'warn-fill': '#e4ff1a', 'warn-fg': '#0b0c10', red: '#c4002b', 'red-bg': '#ffe6eb', 'btn-bg': '#0b0c10', 'btn-fg': '#e4ff1a', 'badge-fg': '#ffffff', spM: '#1f4fd1', spF: '#a84f00', spP: '#00785a', track: '#e2e0d6', glow: 'none', 'glow-m': 'none', scan: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.03) 0 1px, transparent 1px 3px)' };
+      var p = t === 'light' ? l : d;
+      return Object.keys(p).map(function (k) { return '--' + k + ':' + p[k]; }).join(';');
+    }
+    var theme = this.props.theme ?? 'dark';
+    var states = [
+      { id: 'working', name: 'Working', desc: 'paw up, waving' },
+      { id: 'needs', name: 'Needs you', desc: 'paw up, magenta bell, glow' },
+      { id: 'idle', name: 'Idle', desc: 'eyes closed, dimmed' },
+      { id: 'held', name: 'Held', desc: 'flat eyes, pause mark' },
+      { id: 'red', name: 'Red', desc: 'flat eyes, red outline' }
+    ];
+    var rows = [
+      ['planner', 'Planner', '#3b82f6', 'Blue', 'wisdom', 'a scroll'],
+      ['master', 'Master', '#f5b301', 'Gold', 'prosperity, the one who leads', 'the koban coin'],
+      ['worker', 'Worker', '#f4f4ee', 'White', 'the classic, the most common', 'a wrench'],
+      ['reviewer', 'Reviewer', '#15161c', 'Black', 'wards off evil: hunts defects', 'a magnifier'],
+      ['verifier', 'Verifier', '#19c37d', 'Green', 'safety and study', 'a check mark'],
+      ['scribe', 'Scribe', '#ff8fc7', 'Pink', 'looks after the record', 'a brush']
+    ].map(function (r) {
+      return { id: r[0], name: r[1], colour: r[3], meaning: r[4], object: r[5],
+        swatch: 'width:14px;height:14px;flex:0 0 14px;border:1px solid var(--fg);background:' + r[2],
+        cells: states.map(function (s) {
+          return { rol: r[0], estado: s.id, box: 'display:flex;align-items:center;justify-content:center;min-height:92px;background:var(--surface);border:1px solid ' + (s.id === 'needs' ? 'var(--magenta)' : 'var(--line)') };
+        }) };
+    });
+    var agents = [
+      ['master', 'working', 'micelio · master', 'working', 'var(--cyan)'],
+      ['worker', 'needs', 'g2-build-m792', 'needs you', 'var(--magenta)'],
+      ['reviewer', 'idle', 'g3-review-m792', 'done', 'var(--muted)'],
+      ['verifier', 'red', 'g4-verify-m792', 'red', 'var(--red)']
+    ].map(function (a) { return { rol: a[0], estado: a[1], name: a[2], state: a[3], stateStyle: 'font-weight:700;color:' + a[4] }; });
+    return {
+      rootStyle: pal(theme) + ';width:1100px;min-height:1320px;box-sizing:border-box;padding:32px;font-family:JetBrains Mono,ui-monospace,monospace;color:var(--fg);background-color:var(--bg);background-image:var(--scan);font-size:12.5px;display:flex;flex-direction:column;gap:28px',
+      states: states, rows: rows, agents: agents
+    };
+  }
+}
+</script>
+</body>
+</html>

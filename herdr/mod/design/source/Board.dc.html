@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Factory board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:var(--cyan)}a:hover{color:var(--magenta)}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+
+  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+    <h1 style="margin: 0; font-family: 'Chakra Petch', sans-serif; font-size: 22px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase">Factory board</h1>
+    <div style="flex-grow: 1"></div>
+    <sc-for list="{{stats}}" as="s" hint-placeholder-count="5">
+      <div style="display: flex; align-items: baseline; gap: 6px; padding: 6px 12px; background: var(--surface); border: 1px solid var(--line); border-left: 2px solid var(--cyan)">
+        <span style="font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase">{{s.label}}</span>
+        <span style="{{s.valueStyle}}">{{s.value}}</span>
+      </div>
+    </sc-for>
+    <button type="button" onClick="{{toggleTheme}}" style="min-height: 36px; padding: 0 12px; border: 1px solid var(--line); background: transparent; color: var(--fg); font-family: 'Chakra Petch', sans-serif; font-weight: 700; letter-spacing: 0.08em; cursor: pointer">{{themeLabel}}</button>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 8px" role="group" aria-label="Filter by space and lane">
+    <sc-for list="{{filters}}" as="f" hint-placeholder-count="4">
+      <button type="button" onClick="{{f.pick}}" aria-pressed="{{f.pressed}}" style="{{f.style}}">{{f.label}}</button>
+    </sc-for>
+    <span style="width: 1px; background: var(--line)" aria-hidden="true"></span>
+    <sc-for list="{{laneFilters}}" as="f" hint-placeholder-count="4">
+      <button type="button" onClick="{{f.pick}}" aria-pressed="{{f.pressed}}" style="{{f.style}}">{{f.label}}</button>
+    </sc-for>
+  </div>
+
+  <div style="overflow-x: auto; padding-bottom: 8px">
+    <div style="display: grid; grid-template-columns: repeat(7, minmax(180px, 1fr)); gap: 12px; min-width: 1330px">
+      <sc-for list="{{columns}}" as="col" hint-placeholder-count="7">
+        <div style="{{col.boxStyle}}">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 10px">
+            <span style="{{col.titleStyle}}">{{col.title}}</span>
+            <span style="font-size: 11px; color: var(--muted)">[{{col.count}}]</span>
+          </div>
+          <sc-for list="{{col.cards}}" as="c" hint-placeholder-count="2">
+            <div style="{{c.style}}">
+              <div style="display: flex; align-items: center; gap: 6px">
+                <span style="{{c.badgeStyle}}">{{c.letter}}</span>
+                <span style="font-size: 12px; font-weight: 700">{{c.id}}</span>
+                <span style="{{c.laneStyle}}">{{c.lane}}</span>
+                <span style="flex-grow: 1"></span>
+                <span style="font-size: 11px; color: var(--muted)">{{c.round}}</span>
+              </div>
+              <div style="margin-top: 6px; line-height: 1.45">{{c.text}}</div>
+              <div style="margin-top: 6px; display: flex; justify-content: space-between; font-size: 11px; color: var(--muted)">
+                <span style="display: flex; align-items: center; gap: 6px"><sc-if value="{{c.cat}}" hint-placeholder-val="{{ true }}"><dc-import name="Cat" rol="{{c.rol}}" estado="{{c.estado}}" size="{{ 16 }}" hint-size="16px,16px"></dc-import></sc-if><span>{{c.agent}}</span></span>
+                <span>{{c.time}}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { filter: 'all', lane: 'all', themeOverride: null };
+  }
+  renderVals() {
+    function pal(t) {
+      var d = { bg: '#07080d', surface: '#0f111a', surface2: '#151827', line: '#262b40', fg: '#e8f0ff', muted: '#909cba', cyan: '#00e5ff', 'cyan-dim': '#0f5a6b', magenta: '#ff3df0', 'magenta-bg': '#240a26', 'warn-fill': '#eaff2e', 'warn-fg': '#05060a', red: '#ff4d6d', 'red-bg': '#2a0a13', 'btn-bg': '#00e5ff', 'btn-fg': '#05060a', 'badge-fg': '#05060a', spM: '#4d8dff', spF: '#ff9a1f', spP: '#14e39a', track: '#1b1f30', glow: '0 0 14px rgba(0,229,255,0.45)', 'glow-m': '0 0 14px rgba(255,61,240,0.4)', scan: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 3px)' };
+      var l = { bg: '#eeede6', surface: '#ffffff', surface2: '#f6f5ef', line: '#cdcbbf', fg: '#0b0c10', muted: '#4a4f5e', cyan: '#00687a', 'cyan-dim': '#a6dbe4', magenta: '#a8006a', 'magenta-bg': '#ffe6f7', 'warn-fill': '#e4ff1a', 'warn-fg': '#0b0c10', red: '#c4002b', 'red-bg': '#ffe6eb', 'btn-bg': '#0b0c10', 'btn-fg': '#e4ff1a', 'badge-fg': '#ffffff', spM: '#1f4fd1', spF: '#a84f00', spP: '#00785a', track: '#e2e0d6', glow: 'none', 'glow-m': 'none', scan: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.03) 0 1px, transparent 1px 3px)' };
+      var p = t === 'light' ? l : d;
+      return Object.keys(p).map(function (k) { return '--' + k + ':' + p[k]; }).join(';');
+    }
+    var self = this, st = this.state;
+    var theme = st.themeOverride || (this.props.theme ?? 'dark');
+    var cards = [
+      ['ready', 'M', 'm#788', '', 'Blocked by cms#393', '--', ''],
+      ['ready', 'P', 'pc3', '', 'Planner on gate 0 with you', 'g0-plan-pc3', '23 min'],
+      ['g2', 'M', 'm#792', 'r2', 'Worker waits for your A/B/C decision', 'g2-build-m792', 'waiting 8 min', 'needs'],
+      ['g2', 'P', 'pc164', 'r1', 'Editorial workflow · calibration: runs the full lane', 'g2-build-pc164', '41 min'],
+      ['g2', 'P', 'pc165', 'r1 · HELD', 'Held: the check failed only on timeouts. Reruns once under load 24', 'g2-build-pc165', 'held 6 min', 'held'],
+      ['g3', 'M', 'cms#393', 'r1', 'Reference language · 96 lines', 'g3-review-c393', '4 min'],
+      ['g3', 'F', 'f3', 'r4', 'Site actor', 'g3-review-f3-r4', '6 min'],
+      ['g4', 'M', 'cms#393', 'r1', 'Verifier on a fresh clone', 'g4-verify-c393', '4 min'],
+      ['g4', 'F', 'f3', 'r4', 'Verifier rebuilding Docker', 'g4-verify-f3-r4', '6 min'],
+      ['g4', 'P', 'pc167', 'r1', 'Red: 3143 vs 3147 tests', 'g4-verify-pc167', 'done', 'red'],
+      ['g5', 'M', 'cms#389', 'r1', 'Green at G3 and G4 · touches a contract: read the diff', 'micelio · master', 'waiting 12 min', 'needs'],
+      ['g5', 'M', '3 express', '', 'Docs and project fields, 19 lines. One sign-off for the three', 'micelio · master', 'waiting 5 min', 'needs'],
+      ['g6', 'F', 'f3-main', '', 'CI running on the merge', 'g2-merge-f3-main', '2 min'],
+      ['merged', 'M', 'cms#390', '', 'Merged today', '', '10:12'],
+      ['merged', 'F', 'f2', '', 'Merged today', '', '09:40']
+    ];
+    function ln(l) {
+      var base = 'font-family:Chakra Petch,sans-serif;font-size:9.5px;font-weight:700;letter-spacing:0.08em;padding:1px 4px;box-sizing:border-box;white-space:nowrap;';
+      return base + (l === 'FULL' ? 'background:var(--fg);color:var(--bg);border:1px solid var(--fg)' : l === 'EXPRESS' ? 'border:1px dashed var(--muted);color:var(--muted)' : 'border:1px solid var(--fg);color:var(--fg)');
+    }
+    var laneOf = { 'm#788': 'NORMAL', 'pc3': 'NORMAL', 'm#792': 'NORMAL', 'pc164': 'NORMAL', 'pc165': 'NORMAL', '3 express': 'EXPRESS', 'cms#390': 'NORMAL', 'f2': 'FULL' };
+    var f = st.filter, lf = st.lane;
+    var visible = cards.filter(function (c) { return (f === 'all' || c[1] === f) && (lf === 'all' || (laneOf[c[2]] || 'FULL') === lf); });
+    function rolOf(n) { return /^g0/.test(n) ? 'planner' : /^g2-build/.test(n) ? 'worker' : /^g3/.test(n) ? 'reviewer' : /^g4/.test(n) ? 'verifier' : /master|^g2-merge/.test(n) ? 'master' : ''; }
+    var cols = [['ready', 'Ready'], ['g2', 'G2 · Worker'], ['g3', 'G3 · Review'], ['g4', 'G4 · Verify'], ['g5', 'G5 · Needs you'], ['g6', 'G6 · CI'], ['merged', 'Merged today']];
+    var columns = cols.map(function (col) {
+      var mine = visible.filter(function (c) { return c[0] === col[0]; }).map(function (c) {
+        var edge = c[7] === 'needs' ? 'border:1px solid var(--magenta);box-shadow:var(--glow-m);background:var(--magenta-bg)' : (c[7] === 'held' ? 'border:1px solid var(--fg);border-left:6px solid var(--warn-fill);background:var(--surface)' : c[7] === 'red' ? 'border:1px solid var(--red);background:var(--red-bg)' : 'border:1px solid var(--line);border-left:2px solid var(--cyan-dim);background:var(--surface)');
+        return { lane: laneOf[c[2]] || 'FULL', laneStyle: ln(laneOf[c[2]] || 'FULL'), letter: c[1], id: c[2], round: c[3], text: c[4], agent: c[5], rol: rolOf(c[5]), cat: rolOf(c[5]) !== '', estado: c[7] || 'working', time: c[6],
+          badgeStyle: 'width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;font-family:Chakra Petch,sans-serif;font-size:10px;font-weight:700;color:var(--badge-fg);background:var(--sp' + c[1] + ')',
+          style: 'padding:10px;margin-bottom:8px;font-size:12px;' + edge };
+      });
+      var isYou = col[0] === 'g5';
+      return { title: col[1], count: String(mine.length), cards: mine,
+        boxStyle: 'padding:10px;min-height:520px;' + (isYou ? 'background:var(--magenta-bg);border:1px dashed var(--magenta)' : 'background:var(--surface2);border:1px solid var(--line)'),
+        titleStyle: 'font-family:Chakra Petch,sans-serif;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;' + (isYou ? 'color:var(--magenta);text-shadow:var(--glow-m)' : 'color:var(--cyan)') };
+    });
+    var filters = [['all', 'ALL SPACES'], ['M', 'MICELIO · ctx 201k · 1/4'], ['F', 'FEDIVERSE · ctx 96k · 2/4'], ['P', 'PLUGIN-CORE · ctx 118k · 0/4']].map(function (x) {
+      var on = f === x[0];
+      return { label: x[1], pressed: on ? 'true' : 'false', pick: function () { self.setState({ filter: x[0] }); },
+        style: 'min-height:36px;padding:0 14px;font-family:Chakra Petch,sans-serif;font-weight:700;font-size:12px;letter-spacing:0.1em;cursor:pointer;' + (on ? 'background:var(--cyan);color:var(--badge-fg);border:1px solid var(--cyan)' : 'background:transparent;color:var(--fg);border:1px solid var(--line)') };
+    });
+    var laneFilters = [['all', 'ALL LANES'], ['EXPRESS', 'EXPRESS'], ['NORMAL', 'NORMAL'], ['FULL', 'FULL']].map(function (x) {
+      var on = lf === x[0];
+      return { label: x[1], pressed: on ? 'true' : 'false', pick: function () { self.setState({ lane: x[0] }); },
+        style: 'min-height:36px;padding:0 14px;font-family:Chakra Petch,sans-serif;font-weight:700;font-size:12px;letter-spacing:0.1em;cursor:pointer;' + (on ? 'background:var(--fg);color:var(--bg);border:1px solid var(--fg)' : 'background:transparent;color:var(--fg);border:1px solid var(--line)') };
+    });
+    var stats = [['Load', '26.1/32', 'var(--magenta)'], ['Heavy', '2/3', 'var(--fg)'], ['Workers', '4/6', 'var(--fg)'], ['Queue', '1', 'var(--fg)'], ['Orphans', '1', 'var(--red)'], ['Factory share', '22%', 'var(--fg)']].map(function (s) {
+      return { label: s[0], value: s[1], valueStyle: 'font-weight:700;font-variant-numeric:tabular-nums;color:' + s[2] };
+    });
+    return {
+      rootStyle: pal(theme) + ';width:100%;min-height:900px;box-sizing:border-box;padding:20px 24px;font-family:JetBrains Mono,ui-monospace,monospace;color:var(--fg);background-color:var(--bg);background-image:var(--scan);font-size:12.5px;display:flex;flex-direction:column;gap:16px',
+      themeLabel: theme === 'dark' ? 'LIGHT' : 'DARK',
+      toggleTheme: function () { self.setState({ themeOverride: theme === 'dark' ? 'light' : 'dark' }); },
+      columns: columns, filters: filters, laneFilters: laneFilters, stats: stats
+    };
+  }
+}
+</script>
+</body>
+</html>

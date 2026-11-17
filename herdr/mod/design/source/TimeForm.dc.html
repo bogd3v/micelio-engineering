@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Time note form</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:var(--cyan)}a:hover{color:var(--magenta)}
+</style>
+</helmet>
+<form onSubmit="{{submit}}" style="{{rootStyle}}">
+  <div style="font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cyan)">{{heading}}</div>
+
+  <fieldset style="border: 0; margin: 0; padding: 0">
+    <legend style="font-weight: 700; margin-bottom: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted)">Read first</legend>
+    <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap">
+      <sc-for list="{{readKinds}}" as="k" hint-placeholder-count="2">
+        <button type="button" onClick="{{k.pick}}" aria-pressed="{{k.pressed}}" style="{{k.style}}">{{k.label}}</button>
+      </sc-for>
+      <label for="read-min" style="position: absolute; left: -9999px">Minutes reading</label>
+      <input id="read-min" inputmode="numeric" value="{{readMin}}" onChange="{{setRead}}" style="width: 52px; min-height: 32px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--line); font: inherit; text-align: right; background: var(--surface); color: var(--fg)">
+      <span style="color: var(--muted)">min</span>
+    </div>
+    <div style="margin-top: 4px; font-size: 11px; color: var(--muted)">{{readHint}}</div>
+  </fieldset>
+
+  <sc-if value="{{showHands}}" hint-placeholder-val="{{ true }}">
+  <fieldset style="border: 0; margin: 0; padding: 0">
+    <legend style="font-weight: 700; margin-bottom: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted)">Hands-on check</legend>
+    <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap">
+      <sc-for list="{{handKinds}}" as="k" hint-placeholder-count="3">
+        <button type="button" onClick="{{k.pick}}" aria-pressed="{{k.pressed}}" style="{{k.style}}">{{k.label}}</button>
+      </sc-for>
+      <sc-if value="{{hasHands}}" hint-placeholder-val="{{ true }}">
+        <label for="hand-min" style="position: absolute; left: -9999px">Minutes of the hands-on check</label>
+        <input id="hand-min" inputmode="numeric" value="{{handMin}}" onChange="{{setHand}}" style="width: 52px; min-height: 32px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--line); font: inherit; text-align: right; background: var(--surface); color: var(--fg)">
+        <span style="color: var(--muted)">min</span>
+      </sc-if>
+    </div>
+    <sc-if value="{{hasHands}}" hint-placeholder-val="{{ true }}">
+      <button type="button" onClick="{{toggleTimer}}" style="margin-top: 6px; min-height: 32px; padding: 0 10px; border: 1px solid var(--magenta); background: transparent; color: var(--magenta); font: inherit; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; cursor: pointer">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="13" r="8"></circle><path d="M12 9v4l2 2M9 2h6"></path></svg>
+        {{timerLabel}}
+      </button>
+    </sc-if>
+  </fieldset>
+  </sc-if>
+  <sc-if value="{{noHands}}" hint-placeholder-val="{{ false }}">
+    <div style="font-size: 11.5px; color: var(--muted)">&gt; no hands-on check in the {{laneName}} lane: the diff does not reach the stack.</div>
+  </sc-if>
+
+  <div>
+    <label for="remark" style="display: block; font-weight: 700; margin-bottom: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted)">Remark <span style="font-weight: 400; text-transform: none; letter-spacing: 0">(optional)</span></label>
+    <input id="remark" value="{{remark}}" onChange="{{setRemark}}" placeholder="the admin page, headed Chromium" style="width: 100%; min-height: 32px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--line); font: inherit; background: var(--surface); color: var(--fg)">
+  </div>
+
+  <div>
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted)">{{previewTitle}}</div>
+    <div style="margin-top: 4px; padding: 8px; background: var(--bg); border-left: 2px solid var(--cyan); font-size: 11.5px; white-space: pre-wrap; line-height: 1.6; color: var(--cyan)">{{preview}}</div>
+    <sc-if value="{{invalid}}" hint-placeholder-val="{{ false }}">
+      <div role="alert" style="margin-top: 4px; font-size: 11.5px; color: var(--red)">! {{error}}</div>
+    </sc-if>
+  </div>
+
+  <sc-if value="{{idle}}" hint-placeholder-val="{{ true }}">
+    <button type="submit" disabled="{{invalid}}" style="{{submitStyle}}">{{submitLabel}}</button>
+  </sc-if>
+  <sc-if value="{{pending}}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="padding: 8px 10px; background: var(--surface); border: 1px dashed var(--magenta); display: flex; align-items: center; gap: 8px">
+      <span style="flex-grow: 1">{{pendingText}}<span style="display: block; margin-top: 6px; height: 3px; background: var(--track)"><span style="{{countBar}}"></span></span></span>
+      <button type="button" onClick="{{undo}}" style="min-height: 32px; padding: 0 10px; border: 1px solid var(--magenta); background: transparent; color: var(--magenta); font: inherit; font-weight: 700; cursor: pointer">UNDO</button>
+    </div>
+  </sc-if>
+  <sc-if value="{{sent}}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="padding: 8px 10px; background: var(--surface); border-left: 2px solid var(--cyan); color: var(--fg); line-height: 1.5">{{sentText}}</div>
+  </sc-if>
+</form>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"mode":{"editor":"enum","options":["signoff","log"],"default":"signoff"},"issue":{"editor":"text","default":"389"},"lane":{"editor":"enum","options":["full","normal","express"],"default":"full"},"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":326,"height":500}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    var log = (props.mode ?? 'signoff') === 'log';
+    this.state = { read: log ? 'none' : 'diff', readMin: log ? '' : '11', hand: log ? 'stack' : 'none', handMin: log ? '4' : '', remark: log ? 'the demo site' : '', timer: false, phase: 'idle' };
+  }
+  componentWillUnmount() { clearInterval(this._t); }
+  renderVals() {
+    function pal(t) {
+      var d = { bg: '#07080d', surface: '#0f111a', surface2: '#151827', line: '#262b40', fg: '#e8f0ff', muted: '#909cba', cyan: '#00e5ff', 'cyan-dim': '#0f5a6b', magenta: '#ff3df0', 'magenta-bg': '#240a26', 'warn-fill': '#eaff2e', 'warn-fg': '#05060a', red: '#ff4d6d', 'red-bg': '#2a0a13', 'btn-bg': '#00e5ff', 'btn-fg': '#05060a', 'badge-fg': '#05060a', spM: '#4d8dff', spF: '#ff9a1f', spP: '#14e39a', track: '#1b1f30', glow: '0 0 14px rgba(0,229,255,0.45)', 'glow-m': '0 0 14px rgba(255,61,240,0.4)', scan: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 3px)' };
+      var l = { bg: '#eeede6', surface: '#ffffff', surface2: '#f6f5ef', line: '#cdcbbf', fg: '#0b0c10', muted: '#4a4f5e', cyan: '#00687a', 'cyan-dim': '#a6dbe4', magenta: '#a8006a', 'magenta-bg': '#ffe6f7', 'warn-fill': '#e4ff1a', 'warn-fg': '#0b0c10', red: '#c4002b', 'red-bg': '#ffe6eb', 'btn-bg': '#0b0c10', 'btn-fg': '#e4ff1a', 'badge-fg': '#ffffff', spM: '#1f4fd1', spF: '#a84f00', spP: '#00785a', track: '#e2e0d6', glow: 'none', 'glow-m': 'none', scan: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.03) 0 1px, transparent 1px 3px)' };
+      var p = t === 'light' ? l : d;
+      return Object.keys(p).map(function (k) { return '--' + k + ':' + p[k]; }).join(';');
+    }
+    var self = this, st = this.state;
+    var theme = this.props.theme ?? 'dark';
+    var log = (this.props.mode ?? 'signoff') === 'log';
+    var n = this.props.issue ?? '389';
+    function pill(on) {
+      return 'min-height:32px;padding:0 10px;font:inherit;font-weight:700;cursor:pointer;' + (on ? 'background:var(--cyan);color:var(--badge-fg);border:1px solid var(--cyan)' : 'background:transparent;color:var(--fg);border:1px solid var(--line)');
+    }
+    var readOpts = log ? [['none', 'Noted'], ['diff', 'Diff'], ['report', 'Reports']] : [['diff', 'Diff'], ['report', 'Reports']];
+    var readKinds = readOpts.map(function (o) { return { label: o[1], pressed: st.read === o[0] ? 'true' : 'false', style: pill(st.read === o[0]), pick: function () { self.setState({ read: o[0] }); } }; });
+    var handKinds = [['none', 'None'], ['stack', 'Stack'], ['test', 'Test']].map(function (o) { return { label: o[1], pressed: st.hand === o[0] ? 'true' : 'false', style: pill(st.hand === o[0]), pick: function () { self.setState({ hand: o[0] }); } }; });
+    var lane = this.props.lane ?? 'full';
+    var showHands = lane === 'full';
+    var hand = showHands ? st.hand : 'none';
+    var whole = /^\d{1,3}$/;
+    var clauses = [], error = '';
+    if (st.read !== 'none') { if (!whole.test(st.readMin)) error = 'Reading minutes: a whole number.'; else clauses.push(st.readMin + 'm ' + st.read); }
+    if (hand !== 'none') { if (!whole.test(st.handMin)) error = error || 'Hands-on minutes: a whole number.'; else clauses.push(st.handMin + 'm ' + hand); }
+    if (!clauses.length && !error) error = 'Give at least one time.';
+    var line = 'time: ' + (clauses.length ? clauses.join(', ') : '…') + (st.remark ? ' (' + st.remark + ')' : '');
+    var invalid = !!error;
+    return {
+      rootStyle: pal(theme) + ';width:326px;box-sizing:border-box;padding:12px;margin:0;background:var(--surface2);border:1px solid var(--line);font-family:JetBrains Mono,ui-monospace,monospace;color:var(--fg);font-size:12px;display:flex;flex-direction:column;gap:12px',
+      heading: log ? '// Log time · PR of #' + n : '// Time for #' + n,
+      readKinds: readKinds, handKinds: handKinds,
+      readMin: st.readMin, handMin: st.handMin, remark: st.remark,
+      hasHands: hand !== 'none', showHands: showHands, noHands: !showHands, laneName: lane,
+      readHint: log ? 'Only if not noted yet; a later note keeps it.' : (st.read === 'diff' ? 'Tracked 11 min since you opened the diff.' : 'Reports first, before any diff.'),
+      setRead: function (e) { self.setState({ readMin: e.target.value.trim() }); },
+      setHand: function (e) { self.setState({ handMin: e.target.value.trim() }); },
+      setRemark: function (e) { self.setState({ remark: e.target.value.replace(/[()]/g, '') }); },
+      timerLabel: st.timer ? 'STOP · 0:42' : 'START TIMER',
+      toggleTimer: function () { self.setState(st.timer ? { timer: false, handMin: String((parseInt(st.handMin, 10) || 0) + 1) } : { timer: true }); },
+      previewTitle: log ? '> posted on the PR' : '> sent to micelio · master',
+      preview: log ? line : 'approved, sign off #' + n + '\n' + line,
+      invalid: invalid, error: error,
+      submitLabel: log ? 'Post time note' : 'Approve & sign off #' + n,
+      submitStyle: 'min-height:42px;padding:0 14px;border:0;font-family:Chakra Petch,sans-serif;font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));' + (invalid ? 'background:var(--track);color:var(--muted);cursor:not-allowed' : 'background:var(--btn-bg);color:var(--btn-fg);cursor:pointer'),
+      idle: st.phase === 'idle', pending: st.phase === 'pending', sent: st.phase === 'sent',
+      pendingText: (log ? 'Posting in ' : 'Sending to the master in ') + (st.count || 10) + ' s',
+      countBar: 'display:block;height:3px;background:var(--magenta);width:' + ((st.count || 10) * 10) + '%',
+      sentText: log ? 'Posted as a review comment on the PR.' : 'Sent. The master checks the committer, commits with sign-off, pushes, opens the PR and posts the time line.',
+      submit: function (e) {
+        if (e && e.preventDefault) e.preventDefault();
+        if (invalid) return;
+        self.setState({ phase: 'pending', count: 10 });
+        clearInterval(self._t);
+        self._t = setInterval(function () {
+          if (self.state.phase !== 'pending') { clearInterval(self._t); return; }
+          if (self.state.count <= 1) { clearInterval(self._t); self.setState({ phase: 'sent' }); }
+          else self.setState({ count: self.state.count - 1 });
+        }, 1000);
+      },
+      undo: function () { clearInterval(self._t); self.setState({ phase: 'idle' }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

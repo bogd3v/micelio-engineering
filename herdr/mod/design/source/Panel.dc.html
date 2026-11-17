@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Factory panel</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:var(--cyan)}a:hover{color:var(--magenta)}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+
+  <div style="position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--line)">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 12px 16px 10px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M12 2l9 5v10l-9 5-9-5V7z"></path><path d="M12 8v4l4 2M12 12l-4 2"></path></svg>
+      <div style="font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 16px; letter-spacing: 0.16em; text-transform: uppercase">Factory</div>
+      <div style="flex-grow: 1"></div>
+      <div style="{{syncStyle}}">{{syncText}}</div>
+      <button type="button" onClick="{{toggleTheme}}" aria-label="{{themeLabel}}" style="width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); background: var(--surface2); color: var(--fg); padding: 0; cursor: pointer">
+        <sc-if value="{{isDark}}" hint-placeholder-val="{{ true }}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg>
+        </sc-if>
+        <sc-if value="{{isLight}}" hint-placeholder-val="{{ false }}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path></svg>
+        </sc-if>
+      </button>
+      <a href="Customize.dc.html" aria-label="Customize the panel" style="width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); background: var(--surface2); color: var(--fg)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"></path><circle cx="16" cy="6" r="2"></circle><circle cx="10" cy="12" r="2"></circle><circle cx="18" cy="18" r="2"></circle></svg>
+      </a>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 1px solid var(--line)" role="group" aria-label="Summary">
+      <sc-for list="{{strip}}" as="c" hint-placeholder-count="5">
+        <div style="{{c.style}}">
+          <div style="font-size: 9.5px; letter-spacing: 0.1em; color: var(--muted)">{{c.label}}</div>
+          <div style="{{c.valueStyle}}">{{c.value}}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <sc-if value="{{saturated}}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="margin: 12px 16px 0; padding: 10px 12px; background: var(--warn-fill); color: var(--warn-fg); font-size: 12px; line-height: 1.5; display: flex; gap: 8px">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex: 0 0 16px; margin-top: 1px" aria-hidden="true"><path d="M12 9v4M12 17h.01"></path><path d="M12 3l10 18H2z"></path></svg>
+      <div><strong style="font-family: 'Chakra Petch', sans-serif; letter-spacing: 0.08em; text-transform: uppercase">Load 81 / 32 threads.</strong> Tests time out at this load. Heavy commands wait their turn; a check that fails only on timeouts is held, not red.</div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{stale}}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="margin: 12px 16px 0; padding: 10px 12px; border: 1px solid var(--red); background: var(--red-bg); font-size: 12px; line-height: 1.5">
+      <strong style="color: var(--red)">GitHub: no data for 3 min.</strong> Gates and pull requests below are as of 05:12 (gh: network error). The machine, slots and stacks are live.
+      <div style="margin-top: 8px"><button type="button" style="{{btnGhost}}">Retry now</button></div>
+    </div>
+  </sc-if>
+
+  <div style="display: flex; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line)">
+    <button type="button" role="switch" aria-checked="{{pausedAria}}" onClick="{{togglePause}}" style="{{pauseStyle}}">{{pauseLabel}}</button>
+    <button type="button" aria-pressed="{{reservedAria}}" onClick="{{toggleReserve}}" style="{{reserveStyle}}">{{reserveLabel}}</button>
+  </div>
+  <sc-if value="{{paused}}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="padding: 8px 16px; font-size: 11.5px; color: var(--magenta); border-bottom: 1px solid var(--line)">&gt; paused: masters start no new worker. Running agents and gates continue.</div>
+  </sc-if>
+
+  <section aria-labelledby="h-needs" style="padding: 14px 16px; border-bottom: 1px solid var(--line); background: var(--magenta-bg)">
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <h2 id="h-needs" style="margin: 0; font-family: 'Chakra Petch', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--magenta); text-shadow: var(--glow-m)">// Needs you</h2>
+      <span style="font-size: 11px; color: var(--magenta)">[{{needsCount}}] oldest first</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px">
+
+      <div style="padding: 10px; background: var(--surface); border: 1px solid var(--line)">
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted)"><dc-import name="Cat" rol="master" estado="needs" size="{{ 24 }}" hint-size="24px,24px"></dc-import><span style="{{bP}}">P</span><span style="flex-grow: 1">plugin-core · master idle</span><span style="color: var(--magenta); font-weight: 700">23 min</span></div>
+        <div style="margin-top: 4px; font-weight: 700; line-height: 1.45">Waiting for your reply in its pane.</div>
+        <div style="margin-top: 8px"><button type="button" style="{{btnGhost}}">Go to master</button></div>
+      </div>
+
+      <div style="padding: 1px; background: var(--magenta); clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))">
+        <div style="padding: 10px; background: var(--surface); clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))">
+          <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted)"><dc-import name="Cat" rol="master" estado="needs" size="{{ 24 }}" hint-size="24px,24px"></dc-import><span style="{{bM}}">M</span><span>cms#389 · G5</span><span style="{{lnFull}}">FULL</span><span style="flex-grow: 1"></span><span style="color: var(--magenta); font-weight: 700">12 min</span></div>
+          <div style="margin-top: 4px; font-weight: 700; line-height: 1.45">Ready for your sign-off. 142 lines.</div>
+          <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 4px; font-size: 11.5px">
+            <div style="display: flex; gap: 8px; padding: 6px 8px; background: var(--surface2); border-left: 2px solid var(--cyan)"><span style="width: 64px; flex: 0 0 64px; color: var(--muted)">REVIEW</span><span style="flex-grow: 1">0 Blocking · 2 Important, fixed in r2 · 1 Suggestion</span></div>
+            <div style="display: flex; gap: 8px; padding: 6px 8px; background: var(--surface2); border-left: 2px solid var(--cyan)"><span style="width: 64px; flex: 0 0 64px; color: var(--muted)">VERIFY</span><span style="flex-grow: 1">7 of 7 commands match · 1932 tests</span></div>
+            <div style="display: flex; gap: 8px; padding: 6px 8px; background: var(--surface2); border-left: 2px solid var(--magenta)"><span style="width: 64px; flex: 0 0 64px; color: var(--muted)">LANE</span><span style="flex-grow: 1">Full: a content-type schema, so a contract and the stack. Read the diff, then test on the stack</span></div>
+            <div style="display: flex; gap: 8px; padding: 6px 8px; background: var(--surface2); border-left: 2px solid var(--line)"><span style="width: 64px; flex: 0 0 64px; color: var(--muted)">COMMIT</span><span style="flex-grow: 1">[COMMIT SUBJECT FROM commit-message.txt]</span></div>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px">
+            <button type="button" onClick="{{openDiff}}" style="{{btnCyan}}">{{diffLabel}}</button>
+            <button type="button" style="{{btnGhost}}">Reports</button>
+          </div>
+          <sc-if value="{{locked}}" hint-placeholder-val="{{ true }}">
+            <div style="margin-top: 6px; font-size: 11px; color: var(--muted)">Time form and sign-off unlock after the diff.</div>
+          </sc-if>
+          <sc-if value="{{diffOpened}}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top: 8px">
+              <dc-import name="TimeForm" mode="signoff" issue="389" theme="{{theme}}" hint-size="326px,500px"></dc-import>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+
+      <div style="padding: 1px; background: var(--magenta); clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))">
+        <div style="padding: 10px; background: var(--surface); clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))">
+          <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted)"><dc-import name="Cat" rol="worker" estado="needs" size="{{ 24 }}" hint-size="24px,24px"></dc-import><span style="{{bM}}">M</span><span>m#792 · G2 · r2</span><span style="{{lnNormal}}">NORMAL</span><span style="flex-grow: 1"></span><span style="color: var(--magenta); font-weight: 700">8 min</span></div>
+          <div style="margin-top: 4px; font-weight: 700; line-height: 1.45">The worker asks: option A, B or C for the strict tab-order check.</div>
+          <div style="margin-top: 8px">
+            <a href="IssueDetail.dc.html" style="min-height: 36px; box-sizing: border-box; display: inline-flex; align-items: center; padding: 0 12px; background: var(--btn-bg); color: var(--btn-fg); font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; text-decoration: none">Answer through the master</a>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding: 10px; background: var(--surface); border: 1px solid var(--magenta)">
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted)"><dc-import name="Cat" rol="master" estado="needs" size="{{ 24 }}" hint-size="24px,24px"></dc-import><span style="{{lnExpress}}">EXPRESS</span><span style="flex-grow: 1">3 changes · G5 · no reviewer, no stack</span><span style="color: var(--magenta); font-weight: 700">5 min</span></div>
+        <div style="margin-top: 4px; font-weight: 700; line-height: 1.45">3 express changes are green. 19 lines in all.</div>
+        <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 4px; font-size: 11.5px">
+          <div style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; background: var(--surface2)"><span style="{{bM}}">M</span><span style="flex-grow: 1">m#901 · project fields of a milestone</span><span style="color: var(--muted)">3 lines</span></div>
+          <div style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; background: var(--surface2)"><span style="{{bM}}">M</span><span style="flex-grow: 1">cms#451 · README, a broken link</span><span style="color: var(--muted)">12 lines</span></div>
+          <div style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; background: var(--surface2)"><span style="{{bP}}">P</span><span style="flex-grow: 1">pc#210 · mark an ADR as Accepted</span><span style="color: var(--muted)">4 lines</span></div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px">
+          <button type="button" onClick="{{exRead}}" style="{{btnCyan}}">{{exReadLabel}}</button>
+          <button type="button" onClick="{{exSign}}" disabled="{{exLocked}}" style="{{exSignStyle}}">Sign off 3 express</button>
+        </div>
+        <sc-if value="{{exLocked}}" hint-placeholder-val="{{ true }}">
+          <div style="margin-top: 6px; font-size: 11px; color: var(--muted)">One sign-off for the three once you have read their diffs. No hands-on check in this lane.</div>
+        </sc-if>
+        <sc-if value="{{exSent}}" hint-placeholder-val="{{ false }}">
+          <div role="status" style="margin-top: 8px; padding: 8px 10px; background: var(--surface2); border-left: 2px solid var(--cyan); font-size: 11.5px; line-height: 1.5; display: flex; gap: 8px; align-items: center">
+            <span style="flex-grow: 1">&gt; sent to the micelio and plugin-core masters: approved, sign off #901 #451 #210 · time: 2m diff (tracked), one note per pull request</span>
+            <button type="button" onClick="{{exUndo}}" style="{{btnGhost}}">Undo</button>
+          </div>
+        </sc-if>
+      </div>
+
+      <sc-if value="{{saturated}}" hint-placeholder-val="{{ false }}">
+        <div style="padding: 10px; background: var(--surface); border: 1px solid var(--fg); border-left: 6px solid var(--warn-fill)">
+          <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted)"><span style="{{bM}}">M</span><span>cms#393 · G2 · HELD</span><span style="{{lnFull}}">FULL</span><span style="flex-grow: 1"></span><span style="color: var(--magenta); font-weight: 700">6 min</span></div>
+          <div style="margin-top: 4px; font-weight: 700; line-height: 1.45">6 runs of npm run check failed only on hook timeouts (load 29 to 81). The 4 named tests pass alone.</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px">
+            <button type="button" onClick="{{armRetry}}" aria-pressed="{{armedAria}}" style="{{btnCyan}}">{{retryLabel}}</button>
+            <button type="button" style="{{btnGhost}}">Run now</button>
+          </div>
+          <sc-if value="{{armed}}" hint-placeholder-val="{{ false }}">
+            <div role="status" style="margin-top: 6px; font-size: 11.5px; color: var(--cyan)">&gt; armed: the master reruns it once, in a slot, when the load is under 24.</div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <div style="padding: 10px; background: var(--surface); border: 1px solid var(--line)">
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted)"><span style="{{bF}}">F</span><span style="flex-grow: 1">f3-main · PR open · G6</span><span style="color: var(--magenta); font-weight: 700">2 min</span></div>
+        <div style="margin-top: 4px; font-weight: 700; line-height: 1.45">No time note from you on this pull request yet.</div>
+        <div style="margin-top: 8px">
+          <a href="TimeLog.dc.html" style="min-height: 36px; box-sizing: border-box; display: inline-flex; align-items: center; padding: 0 12px; border: 1px solid var(--line); color: var(--fg); font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; text-decoration: none">Log time</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-label="Machine" style="padding: 14px 16px; border-bottom: 1px solid var(--line)">
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+      <h2 style="margin: 0"><button type="button" onClick="{{tg.machine}}" aria-expanded="{{ex.machine}}" style="{{hBtn}}">// Machine {{chev.machine}}</button></h2>
+      <span style="{{m.pillStyle}}">{{m.pill}}</span>
+    </div>
+    <sc-if value="{{closed.machine}}" hint-placeholder-val="{{ true }}">
+      <div style="margin-top: 8px; font-size: 12px; color: var(--muted)"><span style="color: var(--cyan); font-weight: 700">{{m.load}}</span> / 32 · RAM {{m.ram}} · {{m.temp}} · {{m.agents}} agents</div>
+    </sc-if>
+    <sc-if value="{{open.machine}}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; align-items: baseline; gap: 8px; margin-top: 10px">
+        <span style="{{m.loadStyle}}">{{m.load}}</span>
+        <span style="color: var(--muted); font-size: 12px">load / 32 threads · wait &gt; 24</span>
+      </div>
+      <div style="position: relative; height: 8px; margin-top: 8px; background: var(--track)">
+        <div style="{{m.barStyle}}"></div>
+        <div style="position: absolute; left: 75%; top: -4px; width: 2px; height: 16px; background: var(--fg)" aria-hidden="true"></div>
+      </div>
+      <div style="display: flex; align-items: flex-end; gap: 2px; height: 36px; margin-top: 12px" role="img" aria-label="Load over the last 15 minutes">
+        <sc-for list="{{m.spark}}" as="b" hint-placeholder-count="30">
+          <div style="{{b.style}}"></div>
+        </sc-for>
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px"><span>-15 min</span><span>now</span></div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px">
+        <div style="padding: 8px; background: var(--surface2); border-left: 2px solid var(--cyan)"><div style="font-size: 11px; color: var(--muted)">RAM</div><div style="font-weight: 700">{{m.ram}} GB</div></div>
+        <div style="padding: 8px; background: var(--surface2); border-left: 2px solid var(--cyan)"><div style="font-size: 11px; color: var(--muted)">AGENTS</div><div style="font-weight: 700">{{m.agents}}</div></div>
+        <div style="padding: 8px; background: var(--surface2); border-left: 2px solid var(--cyan)"><div style="font-size: 11px; color: var(--muted)">CPU TEMP</div><div style="font-weight: 700">{{m.temp}}</div></div>
+      </div>
+    </sc-if>
+  </section>
+
+  <section aria-label="Heavy slots" style="padding: 14px 16px; border-bottom: 1px solid var(--line)">
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+      <h2 style="margin: 0"><button type="button" onClick="{{tg.slots}}" aria-expanded="{{ex.slots}}" style="{{hBtn}}">// Heavy slots {{chev.slots}}</button></h2>
+      <span style="font-size: 11px; color: var(--muted)">{{slotsUsed}} · 10 vitest workers each</span>
+    </div>
+    <sc-if value="{{open.slots}}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 10px">
+        <sc-for list="{{slots}}" as="s" hint-placeholder-count="3">
+          <div style="{{s.rowStyle}}">
+            <span style="font-size: 11px; color: var(--muted); width: 14px">0{{s.n}}</span>
+            <sc-if value="{{s.free}}" hint-placeholder-val="{{ false }}">
+              <span style="color: var(--muted)">[ free ]</span>
+            </sc-if>
+            <sc-if value="{{s.busy}}" hint-placeholder-val="{{ true }}">
+              <span style="{{s.badgeStyle}}">{{s.letter}}</span>
+              <sc-if value="{{s.cat}}" hint-placeholder-val="{{ true }}">
+                <dc-import name="Cat" rol="{{s.rol}}" estado="working" size="{{ 24 }}" hint-size="24px,24px"></dc-import>
+              </sc-if>
+              <div style="flex-grow: 1; min-width: 0">
+                <div style="font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{s.agent}}</div>
+                <div style="font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{s.cmd}}</div>
+              </div>
+              <span style="font-variant-numeric: tabular-nums; color: var(--cyan)">{{s.time}}</span>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+      <div style="margin-top: 10px; font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase">{{queueTitle}}</div>
+      <sc-for list="{{queue}}" as="q" hint-placeholder-count="0">
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 12px; border-top: 1px dashed var(--line)">
+          <span style="font-size: 11px; color: var(--muted)">{{q.pos}}</span>
+          <span style="{{q.badgeStyle}}">{{q.letter}}</span>
+          <dc-import name="Cat" rol="{{q.rol}}" estado="idle" size="{{ 16 }}" hint-size="16px,16px"></dc-import>
+          <span style="flex-grow: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{q.agent}} <span style="color: var(--muted)">{{q.cmd}}</span></span>
+          <span style="color: var(--magenta); font-variant-numeric: tabular-nums">{{q.wait}}</span>
+        </div>
+      </sc-for>
+    </sc-if>
+  </section>
+
+  <section aria-label="Worker leases" style="padding: 14px 16px; border-bottom: 1px solid var(--line)">
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+      <h2 style="margin: 0"><button type="button" onClick="{{tg.workers}}" aria-expanded="{{ex.workers}}" style="{{hBtn}}">// Worker leases {{chev.workers}}</button></h2>
+      <span style="font-size: 11px; color: var(--muted)">{{leasesUsed}}</span>
+    </div>
+    <sc-if value="{{open.workers}}" hint-placeholder-val="{{ true }}">
+      <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin-top: 10px">
+        <sc-for list="{{leases}}" as="l" hint-placeholder-count="6">
+          <div style="{{l.style}}" title="{{l.title}}">{{l.label}}</div>
+        </sc-for>
+      </div>
+    </sc-if>
+  </section>
+
+  <section aria-label="Milestones" style="padding: 14px 16px; border-bottom: 1px solid var(--line)">
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+      <h2 style="margin: 0"><button type="button" onClick="{{tg.milestones}}" aria-expanded="{{ex.milestones}}" style="{{hBtn}}">// Milestones {{chev.milestones}}</button></h2>
+      <a href="Board.dc.html" style="font-size: 11px; font-weight: 700; color: var(--cyan)">OPEN BOARD &gt;</a>
+    </div>
+    <sc-if value="{{open.milestones}}" hint-placeholder-val="{{ true }}">
+      <sc-if value="{{stale}}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top: 8px; font-size: 11px; color: var(--red)">! as of 05:12 · not live</div>
+      </sc-if>
+      <sc-for list="{{spaces}}" as="sp" hint-placeholder-count="3">
+        <div style="{{sp.boxStyle}}">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span style="{{sp.badgeStyle}}">{{sp.letter}}</span>
+            <dc-import name="Cat" rol="master" estado="{{sp.master}}" size="{{ 24 }}" hint-size="24px,24px"></dc-import>
+            <span style="font-weight: 700; flex-grow: 1">{{sp.name}}</span>
+            <span style="{{sp.ctxStyle}}">ctx {{sp.ctx}}</span>
+            <span style="font-size: 11px; color: var(--muted)">PRs {{sp.merged}}</span>
+          </div>
+          <sc-for list="{{sp.issues}}" as="i" hint-placeholder-count="3">
+            <div style="padding: 7px 0 7px 26px; border-bottom: 1px solid var(--line)">
+              <div style="display: flex; align-items: center; gap: 10px">
+                <span style="font-size: 12px; width: 62px; flex: 0 0 62px">{{i.id}}</span>
+                <div style="display: flex; gap: 2px" role="img" aria-label="{{i.aria}}">
+                  <sc-for list="{{i.gates}}" as="g" hint-placeholder-count="6">
+                    <span style="{{g.style}}"></span>
+                  </sc-for>
+                </div>
+                <span style="flex-grow: 1"></span>
+                <span style="{{i.labelStyle}}">{{i.label}}</span>
+              </div>
+              <div style="margin-top: 3px; display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted)"><sc-for list="{{i.cats}}" as="k" hint-placeholder-count="1"><dc-import name="Cat" rol="{{k.rol}}" estado="{{k.estado}}" size="{{ 16 }}" hint-size="16px,16px"></dc-import></sc-for><span style="{{i.laneStyle}}">{{i.lane}}</span><span>{{i.note}}</span></div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; font-size: 11px; color: var(--muted)">
+        <span style="display: inline-flex; align-items: center; gap: 4px"><span style="width: 14px; height: 6px; background: var(--cyan-dim)"></span>passed</span>
+        <span style="display: inline-flex; align-items: center; gap: 4px"><span style="width: 14px; height: 6px; background: var(--cyan); box-shadow: var(--glow)"></span>running</span>
+        <span style="display: inline-flex; align-items: center; gap: 4px"><span style="width: 14px; height: 6px; background: var(--magenta)"></span>needs you</span>
+        <span style="display: inline-flex; align-items: center; gap: 4px"><span style="width: 14px; height: 6px; box-sizing: border-box; background: var(--warn-fill); border: 1px solid var(--fg)"></span>held</span>
+        <span style="display: inline-flex; align-items: center; gap: 4px"><span style="width: 14px; height: 6px; box-sizing: border-box; border: 1px dashed var(--muted)"></span>omitted by lane</span>
+        <span style="display: inline-flex; align-items: center; gap: 4px"><span style="width: 14px; height: 6px; box-sizing: border-box; background: repeating-linear-gradient(45deg, var(--red) 0 2px, transparent 2px 4px); border: 1px solid var(--red)"></span>red</span>
+      </div>
+    </sc-if>
+  </section>
+
+  <section aria-label="Stacks up" style="padding: 14px 16px; border-bottom: 1px solid var(--line)">
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+      <h2 style="margin: 0"><button type="button" onClick="{{tg.stacks}}" aria-expanded="{{ex.stacks}}" style="{{hBtn}}">// Stacks up {{chev.stacks}}</button></h2>
+      <span style="font-size: 11px; color: var(--muted)">5 · 14.8 GB · <span style="color: var(--magenta)">1 unowned</span></span>
+    </div>
+    <sc-if value="{{open.stacks}}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; flex-direction: column; margin-top: 6px">
+        <sc-for list="{{stacks}}" as="k" hint-placeholder-count="5">
+          <div style="display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line)">
+            <span style="font-size: 12px; flex-grow: 1">{{k.name}}</span>
+            <span style="{{k.ownerStyle}}">{{k.owner}}</span>
+            <span style="font-size: 11px; color: var(--muted); width: 48px; text-align: right">{{k.mem}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="margin-top: 8px"><button type="button" style="{{btnGhost}}">Bring down wt-pc160…</button></div>
+    </sc-if>
+  </section>
+
+  <section aria-label="Orphans" style="padding: 14px 16px">
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+      <h2 style="margin: 0"><button type="button" onClick="{{tg.orphans}}" aria-expanded="{{ex.orphans}}" style="{{hBtnRed}}">// Orphans {{chev.orphans}}</button></h2>
+      <span style="font-size: 12px; font-weight: 700; color: var(--red)">[1]</span>
+    </div>
+    <sc-if value="{{open.orphans}}" hint-placeholder-val="{{ true }}">
+      <div style="margin-top: 10px; padding: 1px; background: var(--red); clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))">
+        <div style="padding: 10px; background: var(--red-bg); clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))">
+          <div style="font-size: 12px; color: var(--red); font-weight: 700">vitest · ~/Git/factory/tmp/r4-late</div>
+          <div style="margin-top: 4px; font-size: 12px; color: var(--fg)">10 cores · 47 min · no slot · no owner</div>
+          <div style="display: flex; gap: 6px; margin-top: 8px">
+            <button type="button" style="{{btnGhost}}">Show process</button>
+            <button type="button" style="min-height: 36px; padding: 0 12px; border: 0; background: var(--red); color: var(--btn-fg); font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase">Terminate…</button>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+    <div style="margin-top: 14px; display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 11px; color: var(--muted)">
+      <span><span style="color: var(--fg)">[N]</span> next pending</span>
+      <span><span style="color: var(--fg)">[S]</span> sign off</span>
+      <span><span style="color: var(--fg)">[P]</span> pause</span>
+      <span><span style="color: var(--fg)">[R]</span> reserve</span>
+      <span><span style="color: var(--fg)">[L]</span> <a href="LogForm.dc.html">log a correction</a></span>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"estado":{"editor":"enum","options":["normal","saturated"],"default":"normal"},"datos":{"editor":"enum","options":["fresh","stale"],"default":"fresh"},"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":380,"height":2700}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { exRead: false, exSent: false, diffOpened: false, themeOverride: null, openOv: {}, paused: false, reserved: false, armed: false };
+  }
+  renderVals() {
+    function pal(t) {
+      var d = { bg: '#07080d', surface: '#0f111a', surface2: '#151827', line: '#262b40', fg: '#e8f0ff', muted: '#909cba', cyan: '#00e5ff', 'cyan-dim': '#0f5a6b', magenta: '#ff3df0', 'magenta-bg': '#240a26', 'warn-fill': '#eaff2e', 'warn-fg': '#05060a', red: '#ff4d6d', 'red-bg': '#2a0a13', 'btn-bg': '#00e5ff', 'btn-fg': '#05060a', 'badge-fg': '#05060a', spM: '#4d8dff', spF: '#ff9a1f', spP: '#14e39a', track: '#1b1f30', glow: '0 0 14px rgba(0,229,255,0.45)', 'glow-m': '0 0 14px rgba(255,61,240,0.4)', scan: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 3px)' };
+      var l = { bg: '#eeede6', surface: '#ffffff', surface2: '#f6f5ef', line: '#cdcbbf', fg: '#0b0c10', muted: '#4a4f5e', cyan: '#00687a', 'cyan-dim': '#a6dbe4', magenta: '#a8006a', 'magenta-bg': '#ffe6f7', 'warn-fill': '#e4ff1a', 'warn-fg': '#0b0c10', red: '#c4002b', 'red-bg': '#ffe6eb', 'btn-bg': '#0b0c10', 'btn-fg': '#e4ff1a', 'badge-fg': '#ffffff', spM: '#1f4fd1', spF: '#a84f00', spP: '#00785a', track: '#e2e0d6', glow: 'none', 'glow-m': 'none', scan: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.03) 0 1px, transparent 1px 3px)' };
+      var p = t === 'light' ? l : d;
+      return Object.keys(p).map(function (k) { return '--' + k + ':' + p[k]; }).join(';');
+    }
+    var self = this, st = this.state;
+    var theme = st.themeOverride || (this.props.theme ?? 'dark');
+    var sat = (this.props.estado ?? 'normal') === 'saturated';
+    var stale = (this.props.datos ?? 'fresh') === 'stale';
+    function badge(letter, size) {
+      var s = size || 18;
+      var col = letter === 'Y' ? 'color:var(--warn-fg);background:var(--warn-fill)' : 'color:var(--badge-fg);background:var(--sp' + letter + ')';
+      return 'width:' + s + 'px;height:' + s + 'px;flex:0 0 ' + s + 'px;display:inline-flex;align-items:center;justify-content:center;font-family:Chakra Petch,sans-serif;font-size:11px;font-weight:700;' + col;
+    }
+    function ln(l) {
+      var base = 'font-family:Chakra Petch,sans-serif;font-size:9.5px;font-weight:700;letter-spacing:0.08em;padding:1px 4px;box-sizing:border-box;white-space:nowrap;';
+      return base + (l === 'FULL' ? 'background:var(--fg);color:var(--bg);border:1px solid var(--fg)' : l === 'EXPRESS' ? 'border:1px dashed var(--muted);color:var(--muted)' : 'border:1px solid var(--fg);color:var(--fg)');
+    }
+    var btnBase = 'min-height:36px;padding:0 12px;font-family:Chakra Petch,sans-serif;font-weight:700;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;';
+    var names = ['needs', 'machine', 'slots', 'workers', 'milestones', 'stacks', 'orphans'];
+    var open = {}, closed = {}, ex = {}, chev = {}, tg = {};
+    names.forEach(function (k) {
+      var def = k === 'machine' ? sat : true;
+      var o = st.openOv[k] === undefined ? def : st.openOv[k];
+      open[k] = o; closed[k] = !o; ex[k] = o ? 'true' : 'false'; chev[k] = o ? '[-]' : '[+]';
+      tg[k] = function () { var n = Object.assign({}, st.openOv); n[k] = !o; self.setState({ openOv: n }); };
+    });
+    var load = sat ? 81.3 : 10.4;
+    var series = sat
+      ? [22,25,31,29,35,42,48,55,61,58,64,70,74,79,83,88,92,96,101,108,110,104,97,90,86,84,82,80,81,81]
+      : [61,58,55,49,44,40,37,33,31,29,27,24,22,20,19,18,17,16,15,15,14,13,12,12,11,11,10,11,10,10];
+    var spark = series.map(function (v) {
+      var c = v > 32 ? 'var(--red)' : (v > 24 ? 'var(--magenta)' : 'var(--cyan)');
+      return { style: 'flex:1 1 0;background:' + c + ';height:' + Math.max(4, Math.round(v / 110 * 100)) + '%' };
+    });
+    var m = {
+      load: load.toFixed(1),
+      loadStyle: 'font-family:Chakra Petch,sans-serif;font-size:34px;font-weight:700;font-variant-numeric:tabular-nums;color:' + (sat ? 'var(--red)' : 'var(--cyan)'),
+      pill: sat ? 'SATURATED' : 'NOMINAL',
+      pillStyle: 'font-family:Chakra Petch,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.12em;padding:2px 8px;' + (sat ? 'background:var(--warn-fill);color:var(--warn-fg)' : 'border:1px solid var(--cyan);color:var(--cyan)'),
+      barStyle: 'position:absolute;left:0;top:0;bottom:0;background:' + (sat ? 'var(--red)' : 'var(--cyan)') + ';width:' + Math.min(100, load / 32 * 100) + '%',
+      spark: spark, ram: sat ? '47/64' : '31/64', agents: sat ? '15' : '11', temp: sat ? '94 °C' : '71 °C'
+    };
+    var slotData = sat
+      ? [['M', 'g4-verify-c393', '$ npm run check', '3:52'], ['P', 'g2-build-pc164', '$ docker compose build', '2:10'], ['F', 'g4-verify-f3-r4', '$ build-scratch.sh', '1:31']]
+      : [['M', 'g4-verify-c393', '$ npm run check', '2:14'], ['P', 'g2-build-pc164', '$ docker compose build', '0:41'], st.reserved ? ['Y', 'you', 'reserved for your hands-on test', '0:12'] : null];
+    function rolOf(n) { return /^g0/.test(n) ? 'planner' : /^g2-build/.test(n) ? 'worker' : /^g3/.test(n) ? 'reviewer' : /^g4/.test(n) ? 'verifier' : /master|^g2-merge/.test(n) ? 'master' : ''; }
+    var slots = slotData.map(function (s, i) {
+      return s ? { n: i + 1, busy: true, free: false, letter: s[0], badgeStyle: badge(s[0]), agent: s[1], rol: rolOf(s[1]), cat: rolOf(s[1]) !== '', cmd: s[2], time: s[3], rowStyle: 'display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border-left:2px solid ' + (s[0] === 'Y' ? 'var(--warn-fill)' : 'var(--cyan)') }
+               : { n: i + 1, busy: false, free: true, rowStyle: 'display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px dashed var(--line);min-height:40px;box-sizing:border-box' };
+    });
+    var queue = sat ? [['M', 'g2-build-m792', '$ npx vitest run e2e', '2:40'], ['P', 'g4-verify-pc167', '$ docker compose build', '1:05'], ['F', 'g2-merge-f3-main', '$ npm run check', '0:22']] : [];
+    if (sat && st.reserved) queue.push(['Y', 'you', 'hands-on test', '0:03']);
+    queue = queue.map(function (q, i) { return { pos: '0' + (i + 1), letter: q[0], badgeStyle: badge(q[0], 16), agent: q[1], rol: rolOf(q[1]), cmd: q[2], wait: q[3] }; });
+    var heavyUsed = sat ? 3 : (st.reserved ? 3 : 2);
+    var leaseData = sat ? ['M', 'M', 'F', 'P', 'P', 'P'] : ['M', 'M', 'F', 'P', null, null];
+    var leaseTitles = ['m792', 'm788', 'f3', 'pc164', 'pc165', 'pc167'];
+    var leases = leaseData.map(function (l, i) {
+      return l ? { label: l, title: leaseTitles[i], style: 'height:32px;display:flex;align-items:center;justify-content:center;font-family:Chakra Petch,sans-serif;font-size:13px;font-weight:700;color:var(--badge-fg);background:var(--sp' + l + ')' }
+               : { label: st.paused ? '||' : '--', title: st.paused ? 'paused' : 'free', style: 'height:32px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:11px;border:1px dashed ' + (st.paused ? 'var(--magenta);color:var(--magenta)' : 'var(--line);color:var(--muted)') };
+    });
+    var gc = { p: 'background:var(--cyan-dim)', r: 'background:var(--cyan);box-shadow:var(--glow)', n: 'background:var(--magenta);box-shadow:var(--glow-m)', h: 'background:var(--warn-fill);border:1px solid var(--fg);box-sizing:border-box', x: 'background:repeating-linear-gradient(45deg, var(--red) 0 2px, transparent 2px 4px);border:1px solid var(--red);box-sizing:border-box', t: 'background:var(--track)', s: 'background:transparent;border:1px dashed var(--muted);box-sizing:border-box' };
+    var gname = { p: 'passed', r: 'running', n: 'needs you', h: 'held', x: 'red', t: 'not reached', s: 'omitted by lane' };
+    var lcol = { r: 'var(--cyan)', n: 'var(--magenta)', h: 'var(--fg)', x: 'var(--red)', t: 'var(--muted)', p: 'var(--muted)' };
+    function track(code) { return code.split('').map(function (c) { return { style: 'width:14px;height:6px;' + gc[c] }; }); }
+    function aria(code) { return code.split('').map(function (c, i) { return 'G' + (i + 1) + ' ' + gname[c]; }).join(', '); }
+    var c393 = sat ? ['cms#393', 'phtttt', 'G2·r1 HELD', 'h', 'held: timeouts under load, not a red', 'FULL', 'worker:held'] : ['cms#393', 'pprrtt', 'G3-4·r1', 'r', 'reviewer + verifier', 'FULL', 'reviewer:working verifier:working'];
+    var spaces = [
+      { letter: 'M', name: 'micelio', master: 'needs', merged: '1/4', ctx: '201k', hot: true, issues: [['cms#389', 'ppppnt', 'G5·r1', 'n', 'waits for your sign-off', 'FULL', 'master:needs'], c393, ['m#792', 'pntttt', 'G2·r2', 'n', 'worker waits for your decision', 'NORMAL', 'worker:needs'], ['m#788', 'tttttt', 'BLOCKED', 't', 'blocked by cms#393', 'NORMAL'], ['m#901', 'ppssnt', 'G5', 'n', 'docs · in the express batch · G3, G4 omitted', 'EXPRESS', 'master:needs']] },
+      { letter: 'F', name: 'fediverse', master: 'working', merged: '2/4', ctx: '96k', hot: false, issues: [['f3', 'pprrtt', 'G3-4·r4', 'r', 'site actor · review + verify', 'FULL', 'reviewer:working verifier:working'], ['f3-main', 'pppppr', 'G6', 'r', 'CI on the merge', 'FULL', 'master:working']] },
+      { letter: 'P', name: 'plugin-core', master: 'needs', merged: '0/4', ctx: '118k', hot: false, issues: [['pc164', 'prtttt', 'G2·r1', 'r', 'worker · calibration: runs the full lane', 'NORMAL', 'worker:working'], ['pc165', 'prtttt', 'G2·r1', 'r', 'worker · review queue', 'NORMAL', 'worker:working'], ['pc167', 'pppxtt', 'G4·r1 RED', 'x', 'verifier: 3143 vs 3147 tests', 'FULL', 'verifier:red']] }
+    ].map(function (sp) {
+      return { letter: sp.letter, name: sp.name, master: sp.master, merged: sp.merged, ctx: sp.ctx, badgeStyle: badge(sp.letter),
+        boxStyle: 'margin-top:12px;' + (stale ? 'opacity:0.6' : ''),
+        ctxStyle: 'font-size:11px;' + (sp.hot ? 'color:var(--magenta);font-weight:700' : 'color:var(--muted)'),
+        issues: sp.issues.map(function (i) { return { id: i[0], gates: track(i[1]), aria: aria(i[1]), label: i[2], labelStyle: 'font-size:11px;font-weight:700;white-space:nowrap;color:' + lcol[i[3]], note: i[4], lane: i[5], laneStyle: ln(i[5]), cats: (i[6] ? i[6].split(' ') : []).map(function (c) { var p = c.split(':'); return { rol: p[0], estado: p[1] }; }) }; }) };
+    });
+    var stacks = [['wt-c393', 'g4-verify-c393', '3.4 GB', 1], ['wt-m792', 'g2-build-m792', '2.9 GB', 1], ['wt-pc164', 'g2-build-pc164', '3.1 GB', 1], ['wt-pc165', 'g2-build-pc165', '2.8 GB', 1], ['wt-pc160', 'NO AGENT · 3 h', '2.6 GB', 0]].map(function (k) {
+      return { name: k[0], owner: k[1], mem: k[2], ownerStyle: 'font-size:11px;' + (k[3] ? 'color:var(--muted)' : 'color:var(--magenta);font-weight:700') };
+    });
+    var needsCount = sat ? 6 : 5;
+    function cell(label, value, color, alarm) {
+      return { label: label, value: value, style: 'padding:6px 4px;text-align:center;border-right:1px solid var(--line);' + (alarm ? 'background:' + alarm : ''), valueStyle: 'font-family:Chakra Petch,sans-serif;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;color:' + color };
+    }
+    var strip = [
+      cell('LOAD', load.toFixed(0), sat ? 'var(--warn-fg)' : 'var(--cyan)', sat ? 'var(--warn-fill)' : ''),
+      cell('HEAVY', heavyUsed + '/3', 'var(--fg)'),
+      cell('WORKERS', (sat ? 6 : 4) + '/6', st.paused ? 'var(--magenta)' : 'var(--fg)'),
+      cell('NEEDS', String(needsCount), 'var(--magenta)', 'var(--magenta-bg)'),
+      cell('ORPHANS', '1', 'var(--red)')
+    ];
+    return {
+      rootStyle: pal(theme) + ';width:380px;box-sizing:border-box;font-family:JetBrains Mono,ui-monospace,monospace;color:var(--fg);background-color:var(--bg);background-image:var(--scan);font-size:12.5px',
+      theme: theme, isDark: theme === 'dark', isLight: theme === 'light',
+      themeLabel: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme',
+      toggleTheme: function () { self.setState({ themeOverride: theme === 'dark' ? 'light' : 'dark' }); },
+      syncText: stale ? 'GH STALE 3 MIN' : 'sync 4 s',
+      syncStyle: 'font-size:11px;' + (stale ? 'color:var(--red);font-weight:700' : 'color:var(--muted)'),
+      stale: stale, strip: strip,
+      hBtn: 'border:0;background:transparent;padding:0;cursor:pointer;font-family:Chakra Petch,sans-serif;font-size:12px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:var(--cyan);min-height:24px',
+      hBtnRed: 'border:0;background:transparent;padding:0;cursor:pointer;font-family:Chakra Petch,sans-serif;font-size:12px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:var(--red);min-height:24px',
+      btnGhost: btnBase + 'border:1px solid var(--line);background:transparent;color:var(--fg)',
+      btnCyan: btnBase + 'border:1px solid var(--cyan);background:transparent;color:var(--cyan)',
+      open: open, closed: closed, ex: ex, chev: chev, tg: tg,
+      paused: st.paused, pausedAria: st.paused ? 'true' : 'false',
+      togglePause: function () { self.setState({ paused: !st.paused }); },
+      pauseLabel: st.paused ? 'Resume workers' : 'Pause new workers',
+      pauseStyle: btnBase + 'flex:1 1 0;' + (st.paused ? 'border:1px solid var(--magenta);background:var(--magenta-bg);color:var(--magenta)' : 'border:1px solid var(--line);background:transparent;color:var(--fg)'),
+      reservedAria: st.reserved ? 'true' : 'false',
+      toggleReserve: function () { self.setState({ reserved: !st.reserved }); },
+      reserveLabel: st.reserved ? 'Release my slot' : 'Reserve a slot',
+      reserveStyle: btnBase + 'flex:1 1 0;' + (st.reserved ? 'border:1px solid var(--fg);background:var(--warn-fill);color:var(--warn-fg)' : 'border:1px solid var(--line);background:transparent;color:var(--fg)'),
+      lnFull: ln('FULL'), lnNormal: ln('NORMAL'), lnExpress: ln('EXPRESS'),
+      exRead: function () { self.setState({ exRead: true }); },
+      exReadLabel: st.exRead ? '3 diffs read' : 'Read the 3 diffs',
+      exLocked: !st.exRead, exSent: st.exSent,
+      exSign: function () { if (st.exRead) self.setState({ exSent: true }); },
+      exUndo: function () { self.setState({ exSent: false }); },
+      exSignStyle: btnBase + 'border:0;' + (st.exRead ? 'background:var(--btn-bg);color:var(--btn-fg)' : 'background:var(--track);color:var(--muted);cursor:not-allowed'),
+      bM: badge('M', 16), bF: badge('F', 16), bP: badge('P', 16),
+      needsCount: needsCount,
+      openDiff: function () { self.setState({ diffOpened: true }); },
+      diffOpened: st.diffOpened, diffLabel: st.diffOpened ? 'Diff read' : 'Open diff', locked: !st.diffOpened,
+      armed: st.armed, armedAria: st.armed ? 'true' : 'false',
+      armRetry: function () { self.setState({ armed: !st.armed }); },
+      retryLabel: st.armed ? 'Armed · cancel' : 'Retry when load < 24',
+      saturated: sat, m: m, slots: slots, slotsUsed: heavyUsed + '/3',
+      queue: queue, queueTitle: queue.length ? '> queue, arrival order' : '> queue empty',
+      leases: leases, leasesUsed: (sat ? '6/6 · next worker waits' : '4/6') + (st.paused ? ' · PAUSED' : ''),
+      spaces: spaces, stacks: stacks
+    };
+  }
+}
+</script>
+</body>
+</html>

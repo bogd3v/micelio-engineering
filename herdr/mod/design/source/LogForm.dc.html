@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Log a correction</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:var(--cyan)}a:hover{color:var(--magenta)}
+</style>
+</helmet>
+<form onSubmit="{{submit}}" style="{{rootStyle}}">
+  <div style="display: flex; align-items: center; gap: 8px">
+    <div style="flex-grow: 1; font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cyan)">// Log a correction</div>
+    <a href="Panel.dc.html" style="font-size: 11px; font-weight: 700">CLOSE</a>
+  </div>
+  <div style="font-size: 11.5px; color: var(--muted); line-height: 1.5">One line each time you send work back. The retro turns the ones that repeat into a test, a skill or a rule.</div>
+
+  <div>
+    <label for="lf-issue" style="display: block; font-weight: 700; margin-bottom: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted)">Issue</label>
+    <input id="lf-issue" value="{{issue}}" onChange="{{setIssue}}" style="width: 120px; min-height: 36px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--line); font: inherit; background: var(--surface); color: var(--fg)">
+  </div>
+
+  <div>
+    <label for="lf-what" style="display: block; font-weight: 700; margin-bottom: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted)">What was wrong <span style="font-weight: 400; text-transform: none; letter-spacing: 0">(not how it was fixed)</span></label>
+    <textarea id="lf-what" rows="3" value="{{what}}" onChange="{{setWhat}}" style="width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--line); font: inherit; resize: vertical; background: var(--surface); color: var(--fg)"></textarea>
+  </div>
+
+  <fieldset style="border: 0; margin: 0; padding: 0">
+    <legend style="font-weight: 700; margin-bottom: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted)">Category</legend>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px">
+      <sc-for list="{{cats}}" as="k" hint-placeholder-count="6">
+        <button type="button" onClick="{{k.pick}}" aria-pressed="{{k.pressed}}" style="{{k.style}}">{{k.label}}</button>
+      </sc-for>
+    </div>
+  </fieldset>
+
+  <div>
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted)">&gt; the master posts on the issue</div>
+    <div style="margin-top: 4px; padding: 8px; background: var(--bg); border-left: 2px solid var(--cyan); font-size: 11.5px; white-space: pre-wrap; word-break: break-word; line-height: 1.6; color: var(--cyan)">{{preview}}</div>
+    <div style="margin-top: 4px; font-size: 11px; color: var(--muted)">Destination stays “-” until the retro gives one.</div>
+    <sc-if value="{{invalid}}" hint-placeholder-val="{{ false }}">
+      <div role="alert" style="margin-top: 4px; font-size: 11.5px; color: var(--red)">! {{error}}</div>
+    </sc-if>
+  </div>
+
+  <sc-if value="{{idle}}" hint-placeholder-val="{{ true }}">
+    <button type="submit" disabled="{{invalid}}" style="{{submitStyle}}">Send to {{master}} · master</button>
+  </sc-if>
+  <sc-if value="{{sent}}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="padding: 8px 10px; background: var(--surface); border-left: 2px solid var(--cyan); line-height: 1.5">Sent. The master posts the line as a comment on the issue; the scribe step collects it at milestone close.</div>
+  </sc-if>
+</form>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":380,"height":620}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { issue: '#792', what: 'The draft reported 3147 tests from a copy with a theme pulled; a clean copy runs 3143', cat: 'test', sent: false };
+  }
+  renderVals() {
+    function pal(t) {
+      var d = { bg: '#07080d', surface: '#0f111a', surface2: '#151827', line: '#262b40', fg: '#e8f0ff', muted: '#909cba', cyan: '#00e5ff', 'cyan-dim': '#0f5a6b', magenta: '#ff3df0', 'magenta-bg': '#240a26', 'warn-fill': '#eaff2e', 'warn-fg': '#05060a', red: '#ff4d6d', 'red-bg': '#2a0a13', 'btn-bg': '#00e5ff', 'btn-fg': '#05060a', 'badge-fg': '#05060a', spM: '#4d8dff', spF: '#ff9a1f', spP: '#14e39a', track: '#1b1f30', glow: '0 0 14px rgba(0,229,255,0.45)', 'glow-m': '0 0 14px rgba(255,61,240,0.4)', scan: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 3px)' };
+      var l = { bg: '#eeede6', surface: '#ffffff', surface2: '#f6f5ef', line: '#cdcbbf', fg: '#0b0c10', muted: '#4a4f5e', cyan: '#00687a', 'cyan-dim': '#a6dbe4', magenta: '#a8006a', 'magenta-bg': '#ffe6f7', 'warn-fill': '#e4ff1a', 'warn-fg': '#0b0c10', red: '#c4002b', 'red-bg': '#ffe6eb', 'btn-bg': '#0b0c10', 'btn-fg': '#e4ff1a', 'badge-fg': '#ffffff', spM: '#1f4fd1', spF: '#a84f00', spP: '#00785a', track: '#e2e0d6', glow: 'none', 'glow-m': 'none', scan: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.03) 0 1px, transparent 1px 3px)' };
+      var p = t === 'light' ? l : d;
+      return Object.keys(p).map(function (k) { return '--' + k + ':' + p[k]; }).join(';');
+    }
+    var self = this, st = this.state;
+    var theme = this.props.theme ?? 'dark';
+    var cats = ['lint', 'test', 'skill', 'standard', 'issue', 'docs'].map(function (c) {
+      var on = st.cat === c;
+      return { label: c, pressed: on ? 'true' : 'false', pick: function () { self.setState({ cat: c, sent: false }); },
+        style: 'min-height:36px;font:inherit;font-weight:700;cursor:pointer;' + (on ? 'background:var(--cyan);color:var(--badge-fg);border:1px solid var(--cyan)' : 'background:transparent;color:var(--fg);border:1px solid var(--line)') };
+    });
+    var what = st.what.replace(/\s+/g, ' ').trim();
+    var error = '';
+    if (!/^([a-z0-9-]+)?#\d+$/.test(st.issue.trim())) error = 'Issue: #n, or repo#n for another repository.';
+    else if (!what) error = 'Say what was wrong, in one line.';
+    var invalid = !!error;
+    var line = 'factory-log | 2026-11-11 | ' + st.issue.trim() + ' | ' + (what ? what.replace(/\|/g, '\\|') : '…') + ' | ' + st.cat + ' | -';
+    return {
+      rootStyle: pal(theme) + ';width:380px;box-sizing:border-box;padding:16px;margin:0;background-color:var(--bg);background-image:var(--scan);border:1px solid var(--line);font-family:JetBrains Mono,ui-monospace,monospace;color:var(--fg);font-size:12px;display:flex;flex-direction:column;gap:14px',
+      issue: st.issue, what: st.what, cats: cats, preview: line,
+      setIssue: function (e) { self.setState({ issue: e.target.value, sent: false }); },
+      setWhat: function (e) { self.setState({ what: e.target.value, sent: false }); },
+      invalid: invalid, error: error, master: 'micelio',
+      submitStyle: 'min-height:42px;padding:0 14px;border:0;font-family:Chakra Petch,sans-serif;font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;' + (invalid ? 'background:var(--track);color:var(--muted);cursor:not-allowed' : 'background:var(--btn-bg);color:var(--btn-fg);cursor:pointer'),
+      idle: !st.sent, sent: st.sent,
+      submit: function (e) { if (e && e.preventDefault) e.preventDefault(); if (!invalid) self.setState({ sent: true }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Customize the factory mod</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:var(--cyan)}a:hover{color:var(--magenta)}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+
+  <div style="display: flex; align-items: center; gap: 10px">
+    <h1 style="margin: 0; font-family: 'Chakra Petch', sans-serif; font-size: 18px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; flex-grow: 1">Customize</h1>
+    <a href="Panel.dc.html" style="min-height: 36px; box-sizing: border-box; display: inline-flex; align-items: center; padding: 0 14px; background: var(--btn-bg); color: var(--btn-fg); font-family: 'Chakra Petch', sans-serif; font-weight: 700; letter-spacing: 0.1em; text-decoration: none; clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))">DONE</a>
+  </div>
+
+  <section aria-labelledby="h-theme">
+    <h2 id="h-theme" style="margin: 0 0 8px; font-family: 'Chakra Petch', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cyan)">// Theme</h2>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px" role="group" aria-label="Theme">
+      <sc-for list="{{themes}}" as="t" hint-placeholder-count="3">
+        <button type="button" onClick="{{t.pick}}" aria-pressed="{{t.pressed}}" style="{{t.style}}">{{t.label}}</button>
+      </sc-for>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-where">
+    <h2 id="h-where" style="margin: 0 0 8px; font-family: 'Chakra Petch', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cyan)">// Where it shows</h2>
+    <div style="border: 1px solid var(--line); background: var(--surface)">
+      <sc-for list="{{places}}" as="p" hint-placeholder-count="2">
+        <div style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--line)">
+          <div style="flex-grow: 1">
+            <div style="font-weight: 700">{{p.title}}</div>
+            <div style="font-size: 11.5px; color: var(--muted); margin-top: 2px">{{p.desc}}</div>
+          </div>
+          <button type="button" role="switch" aria-checked="{{p.checked}}" aria-label="{{p.title}}" onClick="{{p.toggle}}" style="{{p.trackStyle}}"><span style="{{p.knobStyle}}"></span></button>
+        </div>
+      </sc-for>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px">
+        <span style="flex-grow: 1; color: var(--muted)">Panel side</span>
+        <sc-for list="{{sides}}" as="sd" hint-placeholder-count="2">
+          <button type="button" onClick="{{sd.pick}}" aria-pressed="{{sd.pressed}}" style="{{sd.style}}">{{sd.label}}</button>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-sections">
+    <div style="display: flex; align-items: baseline; justify-content: space-between">
+      <h2 id="h-sections" style="margin: 0 0 8px; font-family: 'Chakra Petch', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cyan)">// Panel sections</h2>
+      <span style="font-size: 11px; color: var(--muted)">{{shownCount}} shown</span>
+    </div>
+    <div style="border: 1px solid var(--line); background: var(--surface)">
+      <sc-for list="{{sections}}" as="s" hint-placeholder-count="7">
+        <div style="{{s.rowStyle}}">
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <button type="button" aria-label="{{s.upLabel}}" onClick="{{s.up}}" disabled="{{s.first}}" style="{{s.arrowUpStyle}}">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M6 15l6-6 6 6"></path></svg>
+            </button>
+            <button type="button" aria-label="{{s.downLabel}}" onClick="{{s.down}}" disabled="{{s.last}}" style="{{s.arrowDownStyle}}">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+            </button>
+          </div>
+          <div style="flex-grow: 1; min-width: 0">
+            <div style="{{s.titleStyle}}">{{s.title}}</div>
+            <div style="font-size: 11.5px; color: var(--muted); margin-top: 2px">{{s.desc}}</div>
+          </div>
+          <button type="button" role="switch" aria-checked="{{s.checked}}" aria-label="{{s.title}}" onClick="{{s.toggle}}" style="{{s.trackStyle}}"><span style="{{s.knobStyle}}"></span></button>
+        </div>
+      </sc-for>
+    </div>
+    <div style="margin-top: 8px; font-size: 11.5px; color: var(--muted); line-height: 1.5">Needs you cannot be hidden while something waits for you; it collapses to a count. A hidden section that turns red still lights the Factory tab.</div>
+  </section>
+
+  <section aria-labelledby="h-alerts">
+    <h2 id="h-alerts" style="margin: 0 0 8px; font-family: 'Chakra Petch', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cyan)">// Alerts</h2>
+    <div style="border: 1px solid var(--line); background: var(--surface)">
+      <sc-for list="{{alerts}}" as="p" hint-placeholder-count="4">
+        <div style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--line)">
+          <div style="flex-grow: 1">
+            <div style="font-weight: 700">{{p.title}}</div>
+            <div style="font-size: 11.5px; color: var(--muted); margin-top: 2px">{{p.desc}}</div>
+          </div>
+          <button type="button" role="switch" aria-checked="{{p.checked}}" aria-label="{{p.title}}" onClick="{{p.toggle}}" style="{{p.trackStyle}}"><span style="{{p.knobStyle}}"></span></button>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-keys">
+    <h2 id="h-keys" style="margin: 0 0 8px; font-family: 'Chakra Petch', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cyan)">// Keys</h2>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; font-size: 12px">
+      <div style="padding: 8px; background: var(--surface); border: 1px solid var(--line)"><strong>N</strong> <span style="color: var(--muted)">next pending</span></div>
+      <div style="padding: 8px; background: var(--surface); border: 1px solid var(--line)"><strong>S</strong> <span style="color: var(--muted)">sign off</span></div>
+      <div style="padding: 8px; background: var(--surface); border: 1px solid var(--line)"><strong>P</strong> <span style="color: var(--muted)">pause workers</span></div>
+      <div style="padding: 8px; background: var(--surface); border: 1px solid var(--line)"><strong>R</strong> <span style="color: var(--muted)">reserve a slot</span></div>
+      <div style="padding: 8px; background: var(--surface); border: 1px solid var(--line)"><strong>L</strong> <span style="color: var(--muted)">log a correction</span></div>
+      <div style="padding: 8px; background: var(--surface); border: 1px solid var(--line)"><strong>B</strong> <span style="color: var(--muted)">open the board</span></div>
+    </div>
+    <div style="margin-top: 6px; font-size: 11px; color: var(--muted)">Active while the panel has focus. Rebind in Herdr's keys.json.</div>
+  </section>
+
+  <div style="display: flex; align-items: center; justify-content: space-between">
+    <button type="button" onClick="{{reset}}" style="min-height: 36px; padding: 0 12px; border: 1px solid var(--line); background: transparent; color: var(--fg); font-family: 'Chakra Petch', sans-serif; font-weight: 700; letter-spacing: 0.08em; cursor: pointer">RESTORE DEFAULTS</button>
+    <span style="font-size: 11px; color: var(--muted)">&gt; saved in mod storage</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":420,"height":1400}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = this.defaults();
+  }
+  defaults() {
+    return {
+      themeChoice: 'herdr', panel: true, board: true, side: 'right',
+      order: ['needs', 'machine', 'slots', 'workers', 'milestones', 'stacks', 'orphans'],
+      alerts: { needs: true, sat: true, held: true, sound: false },
+      on: { needs: true, machine: true, slots: true, workers: true, milestones: true, stacks: true, orphans: true }
+    };
+  }
+  renderVals() {
+    function pal(t) {
+      var d = { bg: '#07080d', surface: '#0f111a', surface2: '#151827', line: '#262b40', fg: '#e8f0ff', muted: '#909cba', cyan: '#00e5ff', 'cyan-dim': '#0f5a6b', magenta: '#ff3df0', 'magenta-bg': '#240a26', 'warn-fill': '#eaff2e', 'warn-fg': '#05060a', red: '#ff4d6d', 'red-bg': '#2a0a13', 'btn-bg': '#00e5ff', 'btn-fg': '#05060a', 'badge-fg': '#05060a', spM: '#4d8dff', spF: '#ff9a1f', spP: '#14e39a', track: '#1b1f30', glow: '0 0 14px rgba(0,229,255,0.45)', 'glow-m': '0 0 14px rgba(255,61,240,0.4)', scan: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 3px)' };
+      var l = { bg: '#eeede6', surface: '#ffffff', surface2: '#f6f5ef', line: '#cdcbbf', fg: '#0b0c10', muted: '#4a4f5e', cyan: '#00687a', 'cyan-dim': '#a6dbe4', magenta: '#a8006a', 'magenta-bg': '#ffe6f7', 'warn-fill': '#e4ff1a', 'warn-fg': '#0b0c10', red: '#c4002b', 'red-bg': '#ffe6eb', 'btn-bg': '#0b0c10', 'btn-fg': '#e4ff1a', 'badge-fg': '#ffffff', spM: '#1f4fd1', spF: '#a84f00', spP: '#00785a', track: '#e2e0d6', glow: 'none', 'glow-m': 'none', scan: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.03) 0 1px, transparent 1px 3px)' };
+      var p = t === 'light' ? l : d;
+      return Object.keys(p).map(function (k) { return '--' + k + ':' + p[k]; }).join(';');
+    }
+    var self = this, st = this.state;
+    var theme = st.themeChoice === 'herdr' ? (this.props.theme ?? 'dark') : st.themeChoice;
+    function sw(on) {
+      return {
+        track: 'position:relative;width:44px;height:24px;flex:0 0 44px;border:1px solid ' + (on ? 'var(--cyan)' : 'var(--line)') + ';padding:0;cursor:pointer;background:' + (on ? 'var(--cyan-dim)' : 'var(--track)') + ';',
+        knob: 'position:absolute;top:3px;left:' + (on ? '23px' : '3px') + ';width:16px;height:16px;background:' + (on ? 'var(--cyan)' : 'var(--muted)')
+      };
+    }
+    function pill(on) {
+      return 'min-height:36px;padding:0 12px;font-family:Chakra Petch,sans-serif;font-weight:700;letter-spacing:0.08em;cursor:pointer;' + (on ? 'background:var(--cyan);color:var(--badge-fg);border:1px solid var(--cyan)' : 'background:transparent;color:var(--fg);border:1px solid var(--line)');
+    }
+    var themes = [['dark', 'DARK'], ['light', 'LIGHT'], ['herdr', 'FOLLOW HERDR']].map(function (x) {
+      return { label: x[1], pressed: st.themeChoice === x[0] ? 'true' : 'false', style: pill(st.themeChoice === x[0]), pick: function () { self.setState({ themeChoice: x[0] }); } };
+    });
+    var places = [['panel', 'Side panel', 'Docked beside your panes'], ['board', 'Board tab', 'Every milestone by gate, in its own tab']].map(function (p) {
+      var on = st[p[0]], s = sw(on);
+      return { title: p[1], desc: p[2], checked: on ? 'true' : 'false', trackStyle: s.track, knobStyle: s.knob, toggle: function () { var u = {}; u[p[0]] = !st[p[0]]; self.setState(u); } };
+    });
+    var alerts = [['needs', 'Something needs you', 'Desktop notification when an item enters Needs you'], ['sat', 'Machine saturated', 'When the load stays above 32 for a minute'], ['held', 'Held or red gate', 'A check held by load, or a gate that turns red'], ['sound', 'Sound', 'A short tone with each notification']].map(function (p) {
+      var on = st.alerts[p[0]], s = sw(on);
+      return { title: p[1], desc: p[2], checked: on ? 'true' : 'false', trackStyle: s.track, knobStyle: s.knob, toggle: function () { var a = Object.assign({}, st.alerts); a[p[0]] = !a[p[0]]; self.setState({ alerts: a }); } };
+    });
+    var sides = [['left', 'LEFT'], ['right', 'RIGHT']].map(function (x) {
+      return { label: x[1], pressed: st.side === x[0] ? 'true' : 'false', style: pill(st.side === x[0]), pick: function () { self.setState({ side: x[0] }); } };
+    });
+    var info = {
+      needs: ['Needs you', 'Decisions, sign-off with reports, held checks'],
+      machine: ['Machine', 'Load, RAM, temperature, last 15 min'],
+      slots: ['Heavy slots', 'Who runs a heavy command, who waits'],
+      workers: ['Worker leases', 'The 6 workers across every master'],
+      milestones: ['Milestones', 'Issues per space with their gates'],
+      stacks: ['Stacks up', 'Compose projects and their owner'],
+      orphans: ['Orphans', 'Processes under factory/tmp with no slot']
+    };
+    function move(i, d) { var o = st.order.slice(); var t = o[i]; o[i] = o[i + d]; o[i + d] = t; self.setState({ order: o }); }
+    var n = st.order.length;
+    var sections = st.order.map(function (k, i) {
+      var on = st.on[k], s = sw(on);
+      var arrow = function (dis) { return 'width:24px;height:20px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);background:transparent;padding:0;' + (dis ? 'color:var(--line)' : 'color:var(--fg);cursor:pointer'); };
+      return {
+        title: info[k][0], desc: info[k][1], checked: on ? 'true' : 'false', trackStyle: s.track, knobStyle: s.knob,
+        titleStyle: 'font-weight:700;' + (on ? 'color:var(--fg)' : 'color:var(--muted);text-decoration:line-through'),
+        rowStyle: 'display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid var(--line)',
+        first: i === 0, last: i === n - 1,
+        upLabel: 'Move ' + info[k][0] + ' up', downLabel: 'Move ' + info[k][0] + ' down',
+        arrowUpStyle: arrow(i === 0), arrowDownStyle: arrow(i === n - 1),
+        up: function () { if (i > 0) move(i, -1); }, down: function () { if (i < n - 1) move(i, 1); },
+        toggle: function () { var on2 = Object.assign({}, st.on); on2[k] = !on2[k]; self.setState({ on: on2 }); }
+      };
+    });
+    var shown = st.order.filter(function (k) { return st.on[k]; }).length;
+    return {
+      rootStyle: pal(theme) + ';width:420px;min-height:1400px;box-sizing:border-box;padding:20px;font-family:JetBrains Mono,ui-monospace,monospace;color:var(--fg);background-color:var(--bg);background-image:var(--scan);font-size:12.5px;display:flex;flex-direction:column;gap:20px',
+      themes: themes, alerts: alerts, places: places, sides: sides, sections: sections, shownCount: shown + '/' + n,
+      reset: function () { self.setState(self.defaults()); }
+    };
+  }
+}
+</script>
+</body>
+</html>
