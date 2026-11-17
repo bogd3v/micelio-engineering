@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Issue detail m#792</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:var(--cyan)}a:hover{color:var(--magenta)}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+
+  <div style="display: flex; align-items: flex-start; gap: 12px">
+    <span style="width: 28px; height: 28px; flex: 0 0 28px; background: var(--spM); color: var(--badge-fg); font-family: 'Chakra Petch', sans-serif; font-weight: 700; display: inline-flex; align-items: center; justify-content: center">M</span>
+    <div style="flex-grow: 1">
+      <div style="font-size: 11px; color: var(--muted)"><span style="border: 1px solid var(--fg); color: var(--fg); font-family: 'Chakra Petch', sans-serif; font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; padding: 1px 4px">NORMAL</span> bogd3v/micelio#792 · fix/factory-792 · no stack needed · <span style="color: var(--cyan)">+196</span> <span style="color: var(--red)">−1</span></div>
+      <h1 style="margin: 2px 0 0; font-family: 'Chakra Petch', sans-serif; font-size: 22px; font-weight: 700; letter-spacing: 0.04em">[ISSUE TITLE]</h1>
+    </div>
+    <button type="button" onClick="{{toggleTheme}}" aria-label="Switch theme" style="min-height: 36px; padding: 0 12px; border: 1px solid var(--line); background: transparent; color: var(--fg); font: inherit; cursor: pointer">{{themeLabel}}</button>
+    <a href="Panel.dc.html" style="min-height: 36px; box-sizing: border-box; display: inline-flex; align-items: center; padding: 0 12px; border: 1px solid var(--line); color: var(--fg); font-family: 'Chakra Petch', sans-serif; font-weight: 700; letter-spacing: 0.1em; text-decoration: none">CLOSE</a>
+  </div>
+
+  <section aria-labelledby="h-gates">
+    <h2 id="h-gates" style="margin: 0 0 10px; font-family: 'Chakra Petch', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cyan)">// Gates by round</h2>
+    <div style="display: grid; grid-template-columns: 40px repeat(6, minmax(0, 1fr)); gap: 6px; align-items: center">
+      <span></span>
+      <sc-for list="{{gateNames}}" as="g" hint-placeholder-count="6">
+        <span style="font-size: 10.5px; font-weight: 700; color: var(--muted); letter-spacing: 0.06em">{{g}}</span>
+      </sc-for>
+      <sc-for list="{{rounds}}" as="r" hint-placeholder-count="2">
+        <span style="font-size: 12px; color: var(--muted)">{{r.name}}</span>
+        <sc-for list="{{r.cells}}" as="c" hint-placeholder-count="6">
+          <div style="{{c.style}}">{{c.text}}</div>
+        </sc-for>
+      </sc-for>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-decision" style="padding: 16px; border: 1px solid var(--magenta); background: var(--magenta-bg)">
+    <h2 id="h-decision" style="margin: 0; font-family: 'Chakra Petch', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--magenta); text-shadow: var(--glow-m)">// Decision for you · G2 · r2 · waiting 8 min</h2>
+    <p style="margin: 8px 0 12px; line-height: 1.6">The strict tab-order check wants the right column read first at desktop. At 390 px the join column sits above the form card and the subscribe form above the code sample, so one DOM cannot read top to bottom at both widths.</p>
+    <fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
+      <legend style="font-weight: 700; margin-bottom: 8px">Which option?</legend>
+      <sc-for list="{{options}}" as="o" hint-placeholder-count="3">
+        <button type="button" onClick="{{o.pick}}" aria-pressed="{{o.pressed}}" style="{{o.style}}">
+          <span style="{{o.keyStyle}}">{{o.key}}</span>
+          <span style="flex-grow: 1; text-align: left">
+            <span style="display: block; font-weight: 700">{{o.title}}</span>
+            <span style="display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px">{{o.cost}}</span>
+          </span>
+        </button>
+      </sc-for>
+    </fieldset>
+    <label for="note" style="display: block; margin-top: 12px; font-weight: 700">Note for the master <span style="font-weight: 400; color: var(--muted)">(optional)</span></label>
+    <textarea id="note" rows="2" style="margin-top: 6px; width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line); font: inherit; resize: vertical; background: var(--surface); color: var(--fg)">Then finish round 2.</textarea>
+    <div style="display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap">
+      <button type="button" onClick="{{send}}" style="min-height: 42px; padding: 0 16px; border: 0; background: var(--btn-bg); color: var(--btn-fg); font-family: 'Chakra Petch', sans-serif; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))">Send to micelio · master</button>
+      <span style="font-size: 11.5px; color: var(--muted)">Recorded in decisions.md and on the issue, then passed to the worker.</span>
+    </div>
+    <sc-if value="{{sent}}" hint-placeholder-val="{{ false }}">
+      <div role="status" style="margin-top: 10px; padding: 8px 10px; background: var(--surface); border-left: 2px solid var(--cyan); color: var(--cyan); font-weight: 700">&gt; sent: m#792: option {{picked}}. Then finish round 2.</div>
+    </sc-if>
+  </section>
+
+  <section aria-labelledby="h-agents">
+    <h2 id="h-agents" style="margin: 0 0 8px; font-family: 'Chakra Petch', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cyan)">// Agents on this issue</h2>
+    <div style="border: 1px solid var(--line)">
+      <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; padding: 8px 12px; background: var(--surface2); font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted)">
+        <span>Agent</span><span>Model</span><span>State</span><span>Context</span><span>Tokens</span>
+      </div>
+      <sc-for list="{{agents}}" as="a" hint-placeholder-count="3">
+        <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; padding: 9px 12px; border-top: 1px solid var(--line); align-items: center; font-size: 12px">
+          <span style="display: flex; align-items: center; gap: 8px"><dc-import name="Cat" rol="{{a.rol}}" estado="{{a.estado}}" size="{{ 24 }}" hint-size="24px,24px"></dc-import><span>{{a.name}}</span></span>
+          <span style="color: var(--muted)">{{a.model}}</span>
+          <span style="{{a.stateStyle}}">{{a.state}}</span>
+          <span style="{{a.ctxStyle}}">{{a.ctx}}</span>
+          <span style="color: var(--muted)">{{a.tokens}}</span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="margin-top: 6px; font-size: 11.5px; color: var(--magenta)">! worker context &gt; 150k: the master compacts it before round 2.</div>
+  </section>
+
+  <section aria-labelledby="h-packet">
+    <h2 id="h-packet" style="margin: 0 0 8px; font-family: 'Chakra Petch', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cyan)">// Packet</h2>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+      <sc-for list="{{packet}}" as="p" hint-placeholder-count="4">
+        <button type="button" style="min-height: 44px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding: 6px 10px; border: 1px solid var(--line); border-left: 2px solid var(--cyan); background: var(--surface); font: inherit; text-align: left; color: var(--fg)">
+          <span style="font-size: 10.5px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase">{{p.label}}</span>
+          <span style="font-size: 12px">{{p.path}}</span>
+        </button>
+      </sc-for>
+    </div>
+    <div style="margin-top: 10px; font-size: 11.5px; color: var(--muted)">The worker's pane opens read-only. Answers always go through the master. <a href="LogForm.dc.html">Log a correction</a></div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":760,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { picked: 'A', sent: false, themeOverride: null };
+  }
+  renderVals() {
+    function pal(t) {
+      var d = { bg: '#07080d', surface: '#0f111a', surface2: '#151827', line: '#262b40', fg: '#e8f0ff', muted: '#909cba', cyan: '#00e5ff', 'cyan-dim': '#0f5a6b', magenta: '#ff3df0', 'magenta-bg': '#240a26', 'warn-fill': '#eaff2e', 'warn-fg': '#05060a', red: '#ff4d6d', 'red-bg': '#2a0a13', 'btn-bg': '#00e5ff', 'btn-fg': '#05060a', 'badge-fg': '#05060a', spM: '#4d8dff', spF: '#ff9a1f', spP: '#14e39a', track: '#1b1f30', glow: '0 0 14px rgba(0,229,255,0.45)', 'glow-m': '0 0 14px rgba(255,61,240,0.4)', scan: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 3px)' };
+      var l = { bg: '#eeede6', surface: '#ffffff', surface2: '#f6f5ef', line: '#cdcbbf', fg: '#0b0c10', muted: '#4a4f5e', cyan: '#00687a', 'cyan-dim': '#a6dbe4', magenta: '#a8006a', 'magenta-bg': '#ffe6f7', 'warn-fill': '#e4ff1a', 'warn-fg': '#0b0c10', red: '#c4002b', 'red-bg': '#ffe6eb', 'btn-bg': '#0b0c10', 'btn-fg': '#e4ff1a', 'badge-fg': '#ffffff', spM: '#1f4fd1', spF: '#a84f00', spP: '#00785a', track: '#e2e0d6', glow: 'none', 'glow-m': 'none', scan: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.03) 0 1px, transparent 1px 3px)' };
+      var p = t === 'light' ? l : d;
+      return Object.keys(p).map(function (k) { return '--' + k + ':' + p[k]; }).join(';');
+    }
+    var self = this, st = this.state;
+    var theme = st.themeOverride || (this.props.theme ?? 'dark');
+    var cs = {
+      p: 'background:var(--surface2);color:var(--fg);border-left:2px solid var(--cyan-dim)',
+      r: 'background:var(--cyan);color:var(--badge-fg);box-shadow:var(--glow)',
+      n: 'background:var(--magenta-bg);color:var(--magenta);border:1px solid var(--magenta);box-shadow:var(--glow-m)',
+      x: 'background:var(--red-bg);color:var(--red);border:1px solid var(--red)',
+      t: 'background:transparent;color:var(--muted);border:1px dashed var(--line)'
+    };
+    function cells(list) { return list.map(function (c) { return { text: c[1], style: 'min-height:42px;box-sizing:border-box;padding:6px 8px;font-size:11px;line-height:1.35;display:flex;align-items:center;' + cs[c[0]] }; }); }
+    var rounds = [
+      { name: 'r1', cells: cells([['p', 'ready'], ['p', 'draft ok'], ['x', 'strict check · 4 suggestions'], ['x', '3143 vs 3147 tests'], ['t', '--'], ['t', '--']]) },
+      { name: 'r2', cells: cells([['p', 'frozen'], ['n', 'worker asks A/B/C'], ['t', 'waits'], ['t', 'waits'], ['t', '--'], ['t', '--']]) }
+    ];
+    var opts = [
+      ['A', 'Oracle accepts independent columns', 'Keeps DOM and baselines. Your strict rule no longer flags join/form and form/code.'],
+      ['B', 'Reorder the DOM for desktop', 'Form card and code first. Breaks the 390 px order; needs CSS order and grid placement.'],
+      ['C', 'Change the layout so first stops align', 'Changes the committed visual baselines, which the issue keeps.']
+    ];
+    var options = opts.map(function (o) {
+      var on = st.picked === o[0];
+      return { key: o[0], title: o[1], cost: o[2], pressed: on ? 'true' : 'false',
+        pick: function () { self.setState({ picked: o[0], sent: false }); },
+        style: 'display:flex;gap:10px;align-items:flex-start;min-height:44px;padding:10px 12px;font:inherit;cursor:pointer;color:var(--fg);background:var(--surface);' + (on ? 'border:1px solid var(--cyan);outline:1px solid var(--cyan)' : 'border:1px solid var(--line)'),
+        keyStyle: 'width:24px;height:24px;flex:0 0 24px;display:inline-flex;align-items:center;justify-content:center;font-family:Chakra Petch,sans-serif;font-weight:700;' + (on ? 'background:var(--cyan);color:var(--badge-fg)' : 'border:1px solid var(--line);color:var(--muted)') };
+    });
+    var agents = [
+      ['micelio · master', 'Opus 5.5', 'working', '201.6k', '1.9 M', 'var(--cyan)', 0, 'master', 'working'],
+      ['g2-build-m792', 'Sonnet 5.5', 'needs you', '165.9k', '2.4 M', 'var(--magenta)', 1, 'worker', 'needs'],
+      ['g4-verify (t7h)', 'Sonnet 5.5', 'done · red', '--', '0.6 M', 'var(--red)', 0, 'verifier', 'red']
+    ].map(function (a) {
+      return { name: a[0], rol: a[7], estado: a[8], model: a[1], state: a[2], ctx: a[3], tokens: a[4], stateStyle: 'font-weight:700;color:' + a[5], ctxStyle: a[6] ? 'font-weight:700;color:var(--magenta)' : 'color:var(--muted)' };
+    });
+    var packet = [['Worktree', '~/Git/wt-m792'], ['Draft', 'packets/792/draft.md'], ['Decisions', 'packets/792/r2/decisions.md'], ['Commit message', 'packets/792/commit-message.txt']].map(function (p) { return { label: p[0], path: p[1] }; });
+    return {
+      rootStyle: pal(theme) + ';width:760px;min-height:1000px;box-sizing:border-box;padding:24px;font-family:JetBrains Mono,ui-monospace,monospace;color:var(--fg);background-color:var(--bg);background-image:var(--scan);font-size:12.5px;display:flex;flex-direction:column;gap:20px',
+      themeLabel: theme === 'dark' ? 'LIGHT' : 'DARK',
+      toggleTheme: function () { self.setState({ themeOverride: theme === 'dark' ? 'light' : 'dark' }); },
+      gateNames: ['G1 READY', 'G2 WORKER', 'G3 REVIEW', 'G4 SCRIPT', 'G5 YOU', 'G6 CI'],
+      rounds: rounds, options: options, picked: st.picked, sent: st.sent,
+      send: function () { self.setState({ sent: true }); },
+      agents: agents, packet: packet
+    };
+  }
+}
+</script>
+</body>
+</html>
