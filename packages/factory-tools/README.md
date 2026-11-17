@@ -27,14 +27,18 @@ npx @micelio/factory-tools lint-issue bogd3v/micelio#729
 
 A target `owner/repo#n` is read with `gh issue view --json title,body`, so `gh` must be installed
 and signed in. `--file <path>` reads a Markdown file instead: the first line is `# <title>`, the
-rest is the body; add `--repo owner/repo` when its "Depends on" names a bare `#n`. The exit code is
+rest is the body; give `--repo owner/repo`, the issue's repository, for every issue outside the
+repository the command runs in: it resolves a bare `#n` in "Depends on" and sets the repository of
+the lane (below). The exit code is
 0 when every rule passes, 1 when one fails, 2 when the arguments are wrong or the issue cannot be
 read.
 
 The report starts with `lane: <lane>`, the lane of the issue (`lint-lane`'s function, from the
 `## Lanes` block of the `AGENTS.md` of the issue's own repository, read with `gh api`; with `--file`,
-from the `AGENTS.md` at the root of the repository the command runs in; with no such file or block
-the lane is `full`), so the `issue-ready` comment shows it.
+from the `AGENTS.md` at the root of the repository the command runs in, and with `--repo`, from that
+repository's, read with `gh api` as for a target, so `--file --repo` needs `gh` signed in (a 404 for
+`AGENTS.md` is no block; any other `gh` failure is exit 2); with no such file or block the lane is
+`full`), so the `issue-ready` comment shows it.
 
 ```text
 lane: full

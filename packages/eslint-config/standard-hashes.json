@@ -36,7 +36,7 @@
     }
   },
   "files": {
-    ".claude/agents/master.md": "f574cee481345cfacd51b5434cec7b924723381778595cd40f3443ecbf0a3027",
+    ".claude/agents/master.md": "1259f5498a06dbed658f3aa8a3b09ed5b93537e631b41d549ffb9a2305959747",
     ".claude/agents/planner.md": "c478b83b00e6d9881966c42b2008996c0fa7016f01864360720ea5696be92209",
     ".claude/agents/reviewer.md": "470e90af6d2922648da3efed01e49a119f792d9d2000a76dc7b21388de77c05a",
     ".claude/agents/verifier.md": "2d015b55acd7b5eee305d7c89fc392513be56f1d08b8b0c5e9c13869aea7a1b5",

@@ -84,6 +84,11 @@ const STEPS: Record<string, string[]> = {
     'docs/factory.md',
     'docs/factory-log.md',
   ],
+  '--repo owner/repo': [
+    `${AGENTS}master.md`,
+    'docs/factory.md',
+    'packages/factory-tools/README.md',
+  ],
   'lane:': ['packages/factory-tools/README.md', 'docs/factory.md'],
   'time:': [
     'packages/factory-tools/README.md',
