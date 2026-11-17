@@ -2,7 +2,9 @@ name: Verify draft
 
 # Gate 4 of the `normal` lane (docs/factory.md, ADR-0003) repeated by CI on a pull request: when the
 # diff fits the `normal` lane, runs `verify-draft` on the pull request's description, so a number the
-# code does not produce turns the check red. Call it from a workflow that runs on pull_request:
+# code does not produce turns the check red. The tools are built from the commit this workflow is
+# pinned at (job.workflow_sha); tools-ref and tools-repository are accepted, ignored and warned about
+# when they differ, until they go with #30. Call it from a workflow that runs on pull_request:
 #
 #   on:
 #     pull_request:
@@ -13,7 +15,6 @@ name: Verify draft
 #         pull-requests: read
 #       uses: bogd3v/micelio-engineering/.github/workflows/verify-draft.yml@<commit SHA> # <tag>
 #       with:
-#         tools-ref: <the same commit SHA>
 #         reuse: true # optional: install reuse 6.2.0 for the draft's commands
 #
 # It takes no secrets. The description is untrusted text: it reaches `verify-draft` through a file
@@ -25,11 +26,12 @@ on:
   workflow_call:
     inputs:
       tools-ref:
-        description: Commit SHA of the tools repository that holds @micelio/factory-tools (it is built from source until it is published)
+        description: Ignored; the tools are built from the commit this workflow is pinned at (job.workflow_sha). A value that differs prints a warning. Goes with #30
         type: string
-        required: true
+        required: false
+        default: ''
       tools-repository:
-        description: Repository that holds @micelio/factory-tools
+        description: Ignored; the tools come from the repository of this workflow (job.workflow_repository). A value that differs prints a warning. Goes with #30
         type: string
         default: bogd3v/micelio-engineering
       reuse:
@@ -55,11 +57,25 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Warn when tools-ref or tools-repository differs from the workflow
+        env:
+          TOOLS_REF: ${{ inputs.tools-ref }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          TOOLS_REPOSITORY: ${{ inputs.tools-repository }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+        run: |
+          if [ -n "$TOOLS_REF" ] && [ "$TOOLS_REF" != "$WORKFLOW_SHA" ]; then
+            echo "::warning::tools-ref ($TOOLS_REF) differs from the workflow's commit ($WORKFLOW_SHA): it is ignored and the tools are built from $WORKFLOW_SHA"
+          fi
+          if [ -n "$TOOLS_REPOSITORY" ] && [ "$TOOLS_REPOSITORY" != "$WORKFLOW_REPOSITORY" ]; then
+            echo "::warning::tools-repository ($TOOLS_REPOSITORY) differs from the workflow's repository ($WORKFLOW_REPOSITORY): it is ignored and the tools are built from $WORKFLOW_REPOSITORY"
+          fi
+
       - name: Checkout the tools
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: ${{ inputs.tools-repository }}
-          ref: ${{ inputs.tools-ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: .micelio-tools
           persist-credentials: false
 

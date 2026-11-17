@@ -68,7 +68,7 @@ export interface ReadyParams {
   /** `open` or `closed`. */
   state: string
   /**
-   * `.github/project-fields.json`, read at `tools-ref`: after the Status, Release line and Front of
+   * `.github/project-fields.json`, read from the commit the workflow is pinned at: after the Status, Release line and Front of
    * the issue's item are set from its milestone's entry. Without it no other field is read or set.
    */
   fields?: ProjectFields

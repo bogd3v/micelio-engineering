@@ -5,7 +5,9 @@ name: Issue ready
 # adds or removes the label `ready`, keeps one comment with the report and moves the organisation
 # project's Status to Ready (a fail moves a Ready issue back to Todo, never adds the issue), then sets
 # the item's Release line and Front, when empty, from the issue's milestone entry in
-# .github/project-fields.json of the tools at tools-ref. Call it from a workflow that runs on issues:
+# .github/project-fields.json of the tools. The tools are built from the commit this workflow is pinned
+# at (job.workflow_sha), so one pin is enough; tools-ref and tools-repository are accepted, ignored and
+# warned about when they differ, until they go with #30. Call it from a workflow that runs on issues:
 #
 #   on:
 #     issues:
@@ -16,8 +18,6 @@ name: Issue ready
 #         contents: read
 #         issues: read
 #       uses: bogd3v/micelio-engineering/.github/workflows/issue-ready.yml@<commit SHA> # <tag>
-#       with:
-#         tools-ref: <the same commit SHA>
 #       secrets:
 #         MICELIO_BOT_PRIVATE_KEY: ${{ secrets.MICELIO_BOT_PRIVATE_KEY }}
 #
@@ -30,11 +30,12 @@ on:
   workflow_call:
     inputs:
       tools-ref:
-        description: Commit SHA of the tools repository that holds @micelio/factory-tools (it is built from source until it is published)
+        description: Ignored; the tools are built from the commit this workflow is pinned at (job.workflow_sha). A value that differs prints a warning. Goes with #30
         type: string
-        required: true
+        required: false
+        default: ''
       tools-repository:
-        description: Repository that holds @micelio/factory-tools
+        description: Ignored; the tools come from the repository of this workflow (job.workflow_repository). A value that differs prints a warning. Goes with #30
         type: string
         default: bogd3v/micelio-engineering
       project-owner:
@@ -82,11 +83,25 @@ jobs:
       contents: read
       issues: read
     steps:
+      - name: Warn when tools-ref or tools-repository differs from the workflow
+        env:
+          TOOLS_REF: ${{ inputs.tools-ref }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          TOOLS_REPOSITORY: ${{ inputs.tools-repository }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+        run: |
+          if [ -n "$TOOLS_REF" ] && [ "$TOOLS_REF" != "$WORKFLOW_SHA" ]; then
+            echo "::warning::tools-ref ($TOOLS_REF) differs from the workflow's commit ($WORKFLOW_SHA): it is ignored and the tools are built from $WORKFLOW_SHA"
+          fi
+          if [ -n "$TOOLS_REPOSITORY" ] && [ "$TOOLS_REPOSITORY" != "$WORKFLOW_REPOSITORY" ]; then
+            echo "::warning::tools-repository ($TOOLS_REPOSITORY) differs from the workflow's repository ($WORKFLOW_REPOSITORY): it is ignored and the tools are built from $WORKFLOW_REPOSITORY"
+          fi
+
       - name: Checkout the tools
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: ${{ inputs.tools-repository }}
-          ref: ${{ inputs.tools-ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: tools
           persist-credentials: false
 
@@ -136,7 +151,7 @@ jobs:
           permission-issues: write
           permission-organization-projects: write
 
-      # .github/project-fields.json is read from the tools checkout, at tools-ref; the milestone
+      # .github/project-fields.json is read from the tools checkout, at the workflow's commit; the milestone
       # title is read by issue-ready through the API and compared as data.
       - name: Label, comment and set the Status and fields
         env:

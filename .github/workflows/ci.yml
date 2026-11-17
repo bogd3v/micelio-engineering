@@ -141,8 +141,6 @@ jobs:
       contents: read
       issues: read
     uses: ./.github/workflows/issue-ready.yml
-    with:
-      tools-ref: ${{ github.sha }}
     secrets:
       MICELIO_BOT_PRIVATE_KEY: ${{ secrets.MICELIO_BOT_PRIVATE_KEY }}
 
@@ -155,5 +153,4 @@ jobs:
       pull-requests: read
     uses: ./.github/workflows/verify-draft.yml
     with:
-      tools-ref: ${{ github.sha }}
       reuse: true

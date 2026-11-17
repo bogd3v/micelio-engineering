@@ -15,7 +15,5 @@ jobs:
       contents: read
       issues: read
     uses: bogd3v/micelio-engineering/.github/workflows/issue-ready.yml@{{engineering-ref}} # main
-    with:
-      tools-ref: {{engineering-ref}}
     secrets:
       MICELIO_BOT_PRIVATE_KEY: ${{ secrets.MICELIO_BOT_PRIVATE_KEY }}
