@@ -497,13 +497,13 @@ describe('verify-draft.yml', () => {
     expect(VERIFY).not.toMatch(/\$\{\{\s*secrets\./)
     expect(VERIFY).not.toMatch(/^ {4}secrets:/m)
     expect(VERIFY).not.toMatch(/github\.token|GITHUB_TOKEN|GH_TOKEN/)
-    expect(VERIFY).toMatch(/^ {6}tools-ref:\n(?: {8}.*\n)*? {8}required: true$/m)
+    expect(VERIFY).toMatch(/^ {6}tools-ref:\n(?: {8}.*\n)*? {8}required: false$/m)
     expect(VERIFY).toMatch(
       /^ {6}tools-repository:\n(?: {8}.*\n)*? {8}default: bogd3v\/micelio-engineering$/m
     )
     const ci = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8')
     expect(ci).toContain(
-      "  verify-draft:\n    if: ${{ github.event_name == 'pull_request' }}\n    permissions:\n      contents: read\n      pull-requests: read\n    uses: ./.github/workflows/verify-draft.yml\n    with:\n      tools-ref: ${{ github.sha }}\n"
+      "  verify-draft:\n    if: ${{ github.event_name == 'pull_request' }}\n    permissions:\n      contents: read\n      pull-requests: read\n    uses: ./.github/workflows/verify-draft.yml\n    with:\n      reuse: true\n"
     )
   })
 
@@ -650,7 +650,7 @@ describe('verify-draft.yml', () => {
   it('ci.yml calls verify-draft.yml with reuse: true', () => {
     const ci = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8')
     expect(ci).toContain(
-      '    uses: ./.github/workflows/verify-draft.yml\n    with:\n      tools-ref: ${{ github.sha }}\n      reuse: true\n'
+      '    uses: ./.github/workflows/verify-draft.yml\n    with:\n      reuse: true\n'
     )
   })
 
@@ -658,5 +658,92 @@ describe('verify-draft.yml', () => {
     expect(VERIFY).toMatch(/uses: actions\/checkout@/)
     expect(VERIFY).toMatch(/uses: actions\/setup-node@/)
     expect(unpinned(VERIFY)).toEqual([])
+  })
+})
+
+const ISSUE_READY = readFileSync(join(ROOT, '.github/workflows/issue-ready.yml'), 'utf8')
+const TOOLS_WORKFLOWS = { 'issue-ready.yml': ISSUE_READY, 'verify-draft.yml': VERIFY }
+
+/** The text of the step `name` of a workflow, up to the next step. */
+function stepOf(workflow: string, name: string): string {
+  const step = workflow.split(`- name: ${name}\n`)[1]?.split(/\n {6}- name: /)[0] ?? ''
+  expect(step, `step ${name}`).not.toBe('')
+  return step
+}
+
+describe('the tools of issue-ready.yml and verify-draft.yml come from the workflow own commit', () => {
+  it('issue-ready.yml and verify-draft.yml check out the tools at job.workflow_sha of job.workflow_repository', () => {
+    for (const [file, workflow] of Object.entries(TOOLS_WORKFLOWS)) {
+      const step = stepOf(workflow, 'Checkout the tools')
+      expect(step, file).toContain('uses: actions/checkout@')
+      expect(step, file).toContain('repository: ${{ job.workflow_repository }}\n')
+      expect(step, file).toContain('ref: ${{ job.workflow_sha }}\n')
+      expect(step, file).not.toMatch(/inputs\./)
+    }
+  })
+
+  it('tools-ref is optional in issue-ready.yml and verify-draft.yml', () => {
+    for (const [file, workflow] of Object.entries(TOOLS_WORKFLOWS)) {
+      expect(workflow, file).toMatch(
+        /^ {6}tools-ref:\n(?: {8}.*\n)*? {8}required: false\n(?: {8}.*\n)*? {8}default: ''$/m
+      )
+      expect(workflow, file).not.toMatch(/^ {6}tools-ref:\n(?: {8}.*\n)*? {8}required: true$/m)
+      expect(workflow, file).toMatch(/^ {6}tools-repository:\n/m)
+    }
+  })
+
+  it("a tools-ref that differs from the workflow's commit prints a warning and the step passes", () => {
+    const old = '0ce60010c72b13625ec223db96901e6b498c3409'
+    const current = '1c8b550ff6389f3dd4f534ba3eda9291fc3b2b07'
+    const repo = 'bogd3v/micelio-engineering'
+    for (const [file, workflow] of Object.entries(TOOLS_WORKFLOWS)) {
+      const step = stepOf(
+        workflow,
+        'Warn when tools-ref or tools-repository differs from the workflow'
+      )
+      // the inputs reach the script through env, never inside it
+      expect(step, file).toContain('TOOLS_REF: ${{ inputs.tools-ref }}')
+      expect(step, file).toContain('TOOLS_REPOSITORY: ${{ inputs.tools-repository }}')
+      const script = (step.split('run: |\n')[1] ?? '').replace(/^ {8}/gm, '')
+      expect(script, file).not.toMatch(/\$\{\{/)
+      const names = Object.keys(
+        Object.fromEntries(
+          workflow.split(/\n(?= {6}- name: )/).map((s) => [/- name: (.*)/.exec(s)?.[1], 1])
+        )
+      )
+      expect(
+        names.indexOf('Warn when tools-ref or tools-repository differs from the workflow'),
+        file
+      ).toBeLessThan(names.indexOf('Checkout the tools'))
+      const env = { WORKFLOW_SHA: current, WORKFLOW_REPOSITORY: repo, TOOLS_REPOSITORY: repo }
+      const differs = run(script, { ...env, TOOLS_REF: old })
+      expect(differs.status, file).toBe(0)
+      expect(differs.output, file).toContain('::warning::')
+      expect(differs.output, file).toContain(old)
+      expect(differs.output, file).toContain(current)
+      for (const same of [{ TOOLS_REF: current }, { TOOLS_REF: '' }]) {
+        const result = run(script, { ...env, ...same })
+        expect(result.status, file).toBe(0)
+        expect(result.output, file).not.toContain('::warning::')
+      }
+      const other = run(script, { ...env, TOOLS_REF: '', TOOLS_REPOSITORY: 'someone/fork' })
+      expect(other.status, file).toBe(0)
+      expect(other.output, file).toContain('::warning::')
+      expect(other.output, file).toContain('someone/fork')
+      expect(other.output, file).toContain(repo)
+    }
+  })
+
+  it("the template's issue-ready.yml caller and ci.yml pass no tools-ref", () => {
+    const template = readFileSync(join(ROOT, 'template/.github/workflows/issue-ready.yml'), 'utf8')
+    expect(template).toContain('issue-ready.yml@{{engineering-ref}} # main')
+    expect(template).not.toContain('tools-ref')
+    const ci = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8')
+    for (const name of ['issue-ready', 'verify-draft']) {
+      const jobText =
+        ci.split(new RegExp(`\\n {2}${name}:\\n`))[1]?.split(/\n {2}[a-z-]+:\n/)[0] ?? ''
+      expect(jobText, name).toContain(`uses: ./.github/workflows/${name}.yml`)
+      expect(jobText, name).not.toContain('tools-ref')
+    }
   })
 })
