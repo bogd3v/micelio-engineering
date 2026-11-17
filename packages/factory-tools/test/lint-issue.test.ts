@@ -463,6 +463,28 @@ describe('the lanes of the own repository of the issue', () => {
     await run(['lint-issue', '--file', 'test/fixtures/pass.md'], lanes)
     expect(seen).toEqual(['example/site', null])
   })
+
+  it('--file with --repo reads the lanes of that repository', async () => {
+    const seen: (string | null)[] = []
+    const lanes = { ...deps(), readLanes: async (repo: string | null) => (seen.push(repo), null) }
+    await run(['lint-issue', '--file', 'test/fixtures/pass.md', '--repo', 'example/site'], lanes)
+    expect(seen).toEqual(['example/site'])
+  })
+
+  it('the CLI with --file and --repo takes the lane from gh, not from the checkout', async () => {
+    const issue = issueFromMarkdown(await fixture('pass.md'), 'example/site')
+    await withFakeGh(issue, null, (env) => {
+      // The working directory is this repository, whose `## Lanes` block would give `normal`.
+      const result = spawnSync(
+        'node',
+        [CLI, 'lint-issue', '--file', `${FIXTURES}pass.md`, '--repo', 'example/site'],
+        { cwd: PACKAGE, encoding: 'utf8', env }
+      )
+      expect(result.stderr).toBe('')
+      expect(result.stdout.split('\n')[0]).toBe('lane: full')
+      expect(result.status).toBe(0)
+    })
+  })
 })
 
 describe('the lane rule', () => {

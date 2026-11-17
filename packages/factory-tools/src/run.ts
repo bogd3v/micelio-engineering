@@ -25,8 +25,8 @@ export interface RunDeps {
   /**
    * The `## Lanes` block of an `AGENTS.md`, for the `lane` rule; `null` when there is none, and
    * then every issue is `full`. Given the issue's repository, it reads that repository's
-   * `AGENTS.md` (the default asks `gh`); given `null`, for `--file`, the `AGENTS.md` at the root of
-   * the repository the command runs in.
+   * `AGENTS.md` (the default asks `gh`); given `null`, for `--file` without `--repo`, the
+   * `AGENTS.md` at the root of the repository the command runs in.
    */
   readLanes?: (repo: string | null) => Promise<LaneGlobs | null>
   /** The day of the run, `YYYY-MM-DD`. */
@@ -76,7 +76,9 @@ export async function run(argv: string[], deps: RunDeps = defaultDeps): Promise<
   }
   let globs: LaneGlobs | null
   try {
-    globs = await (deps.readLanes ?? defaultReadLanes)('file' in options ? null : options.ref.repo)
+    globs = await (deps.readLanes ?? defaultReadLanes)(
+      'file' in options ? options.repo : options.ref.repo
+    )
   } catch (error) {
     return { code: 2, stdout: '', stderr: `error: ${errorLine(error)}\n` }
   }
@@ -179,8 +181,8 @@ export async function repoRoot(cwd: string): Promise<string> {
 
 /**
  * The `## Lanes` block of an `AGENTS.md`: the one of `repo` on its default branch, read with
- * `gh api repos/<repo>/contents/AGENTS.md`; with no `repo` (`--file`), the one at the root of the
- * repository the command runs in (the working directory when it is not in one).
+ * `gh api repos/<repo>/contents/AGENTS.md` (the repository of a target, or of `--file --repo`); with
+ * no `repo` (`--file` alone), the one at the root of the repository the command runs in (the working directory when it is not in one).
  *
  * @returns `null` when there is no `AGENTS.md`, or none with a `## Lanes` block.
  * @throws `Error` when `gh` fails for any reason but a 404.
