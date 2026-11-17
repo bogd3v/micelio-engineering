@@ -1,0 +1,11 @@
+version = 1
+SPDX-PackageName = "{{title}}"
+
+# Licensing of every file, by path (REUSE specification 3.3). Later annotations win over earlier ones;
+# THIRD-PARTY.md explains the third-party entries.
+
+# {{license}} (LICENSE)
+[[annotations]]
+path = "**"
+SPDX-FileCopyrightText = "{{year}} {{copyright}}"
+SPDX-License-Identifier = "{{license}}"

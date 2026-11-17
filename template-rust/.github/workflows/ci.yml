@@ -1,0 +1,44 @@
+name: CI
+
+# The required checks of section 15 of the engineering standard, called from the reusable workflows of
+# micelio-engineering (docs/workflows.md there). The workflows are pinned by commit SHA.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  # Runs on the schedule too: the rust profile's `cargo audit --deny warnings` is the weekly check
+  # for new advisories (section 10).
+  check:
+    permissions:
+      contents: read
+    uses: bogd3v/micelio-engineering/.github/workflows/check.yml@{{engineering-ref}} # main
+    with:
+      profile: rust
+      standard: true
+      tools-ref: {{engineering-ref}}
+      lint-standard-version: {{eslint-config-version}}
+      reuse: true
+
+  dco:
+    if: ${{ github.event_name == 'pull_request' }}
+    permissions:
+      contents: read
+    uses: bogd3v/micelio-engineering/.github/workflows/dco.yml@{{engineering-ref}} # main
+
+  scorecard:
+    if: ${{ github.event_name != 'pull_request' }}
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+      id-token: write
+    uses: bogd3v/micelio-engineering/.github/workflows/scorecard.yml@{{engineering-ref}} # main

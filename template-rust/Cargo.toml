@@ -1,0 +1,8 @@
+[package]
+name = "{{repo}}"
+version = "0.1.0"
+edition = "2024"
+rust-version = "{{rust-toolchain}}"
+description = "{{description}}"
+license = "{{license}}"
+publish = false
