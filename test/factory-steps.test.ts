@@ -33,6 +33,7 @@ const STEPS: Record<string, string[]> = {
     'packages/factory-tools/README.md',
   ],
   'lint-lane': [`${AGENTS}master.md`, 'herdr/master.md', 'docs/factory.md'],
+  'lint-draft': ['herdr/master.md', `${AGENTS}worker.md`, 'packages/factory-tools/README.md'],
   'verify-draft': [
     `${AGENTS}master.md`,
     `${SKILLS}ship-pr/SKILL.md`,
