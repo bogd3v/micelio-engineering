@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { mkdirSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -158,5 +159,112 @@ describe('createDeps', () => {
     )
     expect(result.stderr).toBe('')
     expect(result.code).toBe(0)
+  })
+})
+
+describe('runLintDraft edited tests', () => {
+  it('fails a draft when the dependencies report an edited test, and passes once answered', async () => {
+    const make = (draft: string): LintDraftDeps => ({
+      readText: () => Promise.resolve(draft),
+      diffNames: () => Promise.resolve(['test/a.test.ts']),
+      syncedFiles: () => Promise.resolve(SYNCED),
+      editedTests: () => Promise.resolve(['test/a.test.ts']),
+    })
+    const base = '## For review\n\n%s\n\n## Instructions that were wrong or missing\n\nNothing\n'
+    const argv = ['lint-draft', '--file', 'd.md', '--base', 'b']
+    const bad = await runLintDraft(argv, make(base.replace('%s', 'Nothing.')))
+    expect(bad.code).toBe(1)
+    expect(bad.stdout).toContain('test/a.test.ts')
+    const answer = 'test-edit: test/a.test.ts - "Rename it."'
+    expect((await runLintDraft(argv, make(base.replace('%s', answer)))).code).toBe(0)
+  })
+})
+
+describe('lint-draft edited tests', () => {
+  const withReview = (review: string): string =>
+    `# feat: x\n\n## For review\n\n${review}\n\n## Instructions that were wrong or missing\n\nNothing\n`
+  const edited = (...editedTests: string[]): DraftContext => ({
+    changed: editedTests,
+    synced: SYNCED,
+    editedTests,
+  })
+
+  it('fails a draft whose diff removes lines of an existing test', () => {
+    const problems = lintDraft(withReview('Nothing to say.'), edited('test/a.test.ts'))
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.problem).toContain('test/a.test.ts')
+    expect(problems[0]?.problem).toContain('G3.3')
+  })
+
+  it('passes an existing test the diff only adds to, and a new test file', () => {
+    expect(lintDraft(withReview('Nothing to say.'), edited())).toEqual([])
+    expect(lintDraft(withReview('Nothing to say.'), context(['test/new.test.ts']))).toEqual([])
+  })
+
+  it('passes an edited test that For review answers with test-edit:', () => {
+    const answer = 'test-edit: test/a.test.ts - "Rename the case to match the new term."'
+    expect(lintDraft(withReview(answer), edited('test/a.test.ts'))).toEqual([])
+    expect(lintDraft(withReview(`- ${answer}`), edited('test/a.test.ts'))).toEqual([])
+    // an answer for another path, or one with no sentence, does not answer
+    expect(lintDraft(withReview(answer), edited('test/b.test.ts'))).toHaveLength(1)
+    expect(
+      lintDraft(withReview('test-edit: test/a.test.ts - '), edited('test/a.test.ts'))
+    ).toHaveLength(1)
+  })
+
+  it('answers a path with spaces, and ignores a test-edit: line outside For review', () => {
+    const path = 'test/my file.test.ts'
+    const answer = `test-edit: ${path} - "Rename the case."`
+    expect(lintDraft(withReview(answer), edited(path))).toEqual([])
+    const outside = `# feat: x\n\n## For review\n\nNothing.\n\n## Tests\n\n${answer}\n\n## Instructions that were wrong or missing\n\nNothing\n`
+    expect(lintDraft(outside, edited(path))).toHaveLength(1)
+  })
+
+  it('a fixture and a file that is not a test are not edited tests', () => {
+    const paths = ['test/fixtures/a.test.ts', 'src/a.ts', 'tests/fixtures/x.json']
+    expect(lintDraft(withReview('Nothing.'), edited(...paths))).toEqual([])
+    const tests = ['tests/helper.ts', 'src/__tests__/x.ts', 'e2e/flow.ts', 'src/a.spec.ts']
+    expect(lintDraft(withReview('Nothing.'), edited(...tests))).toHaveLength(4)
+  })
+})
+
+describe('createDeps editedTests', () => {
+  it('createDeps lists the test files the diff removes lines from', async () => {
+    const repo = tempDir('lint-draft-edited-')
+    const git = (...args: string[]): string =>
+      execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' })
+    git('init', '-q')
+    mkdirSync(join(repo, 'test', 'fixtures'), { recursive: true })
+    await writeFile(join(repo, 'test', 'a.test.ts'), 'one\ntwo\n')
+    await writeFile(join(repo, 'test', 'b.test.ts'), 'one\n')
+    await writeFile(join(repo, 'test', 'fixtures', 'c.test.ts'), 'one\ntwo\n')
+    await writeFile(join(repo, 'src.ts'), 'one\ntwo\n')
+    git('add', '.')
+    git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'x')
+    await writeFile(join(repo, 'test', 'a.test.ts'), 'one\nthree\n')
+    await writeFile(join(repo, 'test', 'b.test.ts'), 'one\ntwo\n')
+    await writeFile(join(repo, 'test', 'fixtures', 'c.test.ts'), 'one\n')
+    await writeFile(join(repo, 'src.ts'), 'one\n')
+    await writeFile(join(repo, 'test', 'new.test.ts'), 'x\n')
+    git('add', '-N', '.')
+    const edited = await createDeps(repo).editedTests?.('HEAD')
+    expect(edited).toEqual(['test/a.test.ts'])
+  })
+
+  it('createDeps reports a renamed test as removed and a non-ASCII path unquoted', async () => {
+    const repo = tempDir('lint-draft-rename-')
+    const git = (...args: string[]): string =>
+      execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' })
+    git('init', '-q')
+    mkdirSync(join(repo, 'test'), { recursive: true })
+    await writeFile(join(repo, 'test', 'old.test.ts'), 'one\ntwo\n')
+    await writeFile(join(repo, 'test', 'ñandú.test.ts'), 'one\ntwo\n')
+    git('add', '.')
+    git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'x')
+    git('mv', 'test/old.test.ts', 'test/new.test.ts')
+    await writeFile(join(repo, 'test', 'ñandú.test.ts'), 'one\n')
+    git('add', '-A')
+    const edited = await createDeps(repo).editedTests?.('HEAD')
+    expect(edited).toEqual(['test/old.test.ts', 'test/ñandú.test.ts'])
   })
 })
