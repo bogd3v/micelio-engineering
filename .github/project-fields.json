@@ -12,5 +12,9 @@
   "Micelio · Fábrica en otros lenguajes": { "releaseLine": "later", "front": "Foundations" },
   "Micelio · Fábrica sobre Podman": { "releaseLine": "later", "front": "Foundations" },
   "Micelio · Fábrica por carriles": { "releaseLine": "later", "front": "Foundations" },
-  "Micelio · Fábrica — Mod de Herdr": { "releaseLine": "later", "front": "Foundations" }
+  "Micelio · Fábrica — Mod de Herdr": { "releaseLine": "later", "front": "Foundations" },
+  "Micelio · Créditos de traducción en el fediverso": {
+    "releaseLine": "later",
+    "front": "Fediverse"
+  }
 }
