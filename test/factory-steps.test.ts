@@ -149,6 +149,7 @@ const STEPS: Record<string, string[]> = {
     `${SKILLS}verify-pr/SKILL.md`,
     'template/.claude/TEAM.md',
   ],
+  'cargo-deny: true': ['.github/workflows/ci.yml', 'docs/workflows.md'],
 }
 
 /** One line per listed file that does not contain its term, naming the file. */

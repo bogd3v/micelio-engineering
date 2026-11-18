@@ -16,6 +16,7 @@ name: Verify draft
 #       uses: bogd3v/micelio-engineering/.github/workflows/verify-draft.yml@<commit SHA> # <tag>
 #       with:
 #         reuse: true # optional: install reuse 6.2.0 for the draft's commands
+#         cargo-deny: true # optional: install cargo-deny 0.21.0 for the draft's commands
 #
 # It takes no secrets. The description is untrusted text: it reaches `verify-draft` through a file
 # that a step writes from an environment variable, never a shell line or an expression of a `run:`
@@ -36,6 +37,10 @@ on:
         default: bogd3v/micelio-engineering
       reuse:
         description: Install reuse 6.2.0 for the draft's commands
+        type: boolean
+        default: false
+      cargo-deny:
+        description: Install cargo-deny 0.21.0 for the draft's commands
         type: boolean
         default: false
 
@@ -139,6 +144,13 @@ jobs:
           if [ "$INSTALL_REUSE" = "true" ]; then
             pipx install reuse==6.2.0
           fi
+
+      # A command such as `npm run verify:template -- --profile rust` calls cargo-deny, which
+      # ubuntu-latest does not have. The version is the one check.yml installs.
+      - name: Install cargo-deny
+        if: ${{ inputs.cargo-deny && steps.lane.outputs.normal == 'true' }}
+        run: |
+          cargo install cargo-deny --locked --version 0.21.0
 
       # The description is data: it is written to a file from the environment and read by the tool.
       - name: Verify the draft
