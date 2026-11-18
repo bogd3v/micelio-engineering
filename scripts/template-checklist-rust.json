@@ -1,0 +1,70 @@
+[
+  {
+    "box": "`LICENSE`, `REUSE.toml`, `THIRD-PARTY.md` and the licence allowlist (`deny.toml`) with its check",
+    "files": ["LICENSE", "REUSE.toml", "THIRD-PARTY.md", "deny.toml"],
+    "check": "cargo deny check licenses"
+  },
+  {
+    "box": "`README.md` and the short `CONTRIBUTING.md` that links Micelio's canonical one (section 1); `SECURITY.md` and `CODE_OF_CONDUCT.md` only when the repository has something to add to the organisation's",
+    "files": ["README.md", "CONTRIBUTING.md"],
+    "setting": "SECURITY.md and CODE_OF_CONDUCT.md are served to every repository from bogd3v/.github (#2)"
+  },
+  {
+    "box": "`AGENTS.md` with the pinned version of this standard and `profile: rust`, `CLAUDE.md`, `.claude/TEAM.md` and the copies of the core and of this profile",
+    "files": [
+      "AGENTS.md",
+      "CLAUDE.md",
+      ".claude/TEAM.md",
+      ".claude/agents/planner.md",
+      ".claude/agents/master.md",
+      ".claude/agents/worker.md",
+      ".claude/agents/reviewer.md",
+      ".claude/agents/verifier.md",
+      ".claude/skills/ship-pr/SKILL.md",
+      ".claude/skills/blind-review/SKILL.md",
+      ".claude/skills/verify-pr/SKILL.md",
+      "docs/engineering-standard.md",
+      "docs/standard/rust.md"
+    ]
+  },
+  {
+    "box": "`.editorconfig`, `rust-toolchain.toml` and `.env.example`",
+    "files": [".editorconfig", "rust-toolchain.toml", ".env.example"]
+  },
+  {
+    "box": "A `version` in `Cargo.toml`, `rust-version`, the committed `Cargo.lock`, and the release workflow of section 7",
+    "files": ["Cargo.toml", "Cargo.lock"],
+    "missing": "the release workflow: the reusable release.yml reads package.json and scripts/release/version.mjs, so there is none to call for Rust yet"
+  },
+  {
+    "box": "In `AGENTS.md`, the `check:` line of the first `## Commands` block, as section 15 says, and the commands to build, run and test",
+    "files": ["AGENTS.md"]
+  },
+  {
+    "box": "CI with the required checks of section 15 called from the reusable workflows of `micelio-engineering` with `profile: rust`, the DCO check, Dependabot and the Scorecard workflow",
+    "files": [".github/workflows/ci.yml", ".github/dependabot.yml"]
+  },
+  {
+    "box": "The pull request template, the issue templates, the title-to-label workflow and the release notes configuration",
+    "files": [
+      ".github/pull_request_template.md",
+      ".github/ISSUE_TEMPLATE/bug.yml",
+      ".github/ISSUE_TEMPLATE/config.yml",
+      ".github/ISSUE_TEMPLATE/epic.md",
+      ".github/ISSUE_TEMPLATE/proposal.yml",
+      ".github/ISSUE_TEMPLATE/task.md",
+      ".github/workflows/pr-labels.yml",
+      ".github/workflows/issue-ready.yml",
+      ".github/labels.json",
+      ".github/release.yml"
+    ]
+  },
+  {
+    "box": "`main` protected by the organisation rulesets: changes arrive by pull request, required checks pass, no force push",
+    "setting": "The organisation rulesets of bogd3v/.github (#2), requiring the checks `check / Check` and `dco / Signed-off-by`"
+  },
+  {
+    "box": "The Micelio bot installed on the repository (section 16)",
+    "setting": "The Micelio bot GitHub App installed on the organisation's repositories (#2), and the repository added to .github/standard-sync.json of micelio-engineering"
+  }
+]

@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { beforeAll, describe, expect, it } from 'vitest'
@@ -266,5 +266,213 @@ describe('the repository template', () => {
       'may not contain'
     )
     expect(existsSync(join(parent, 'ok-name'))).toBe(false)
+  })
+})
+
+const RUST_CHECKLIST = JSON.parse(
+  readFileSync(join(ROOT, 'scripts/template-checklist-rust.json'), 'utf8')
+) as (Entry & { missing?: string })[]
+
+/** The boxes of section 14 of the Rust profile. */
+function rustBoxes(): string[] {
+  const standard = readFileSync(join(ROOT, 'docs/standard/rust.md'), 'utf8')
+  const section = standard.split('## 14. Starting a new repository')[1]?.split('## 15.')[0] ?? ''
+  return [...section.matchAll(/^- \[ \] (.+)$/gm)].map((match) => match[1] as string)
+}
+
+/** Runs `npm run template` with the rust profile and its own licence. */
+function generateRust(target: string, ...extra: string[]) {
+  return spawnSync(
+    'node',
+    [
+      SCRIPT,
+      target,
+      '--profile',
+      'rust',
+      '--ref',
+      REF,
+      '--description',
+      'An example project.',
+      ...extra,
+    ],
+    { encoding: 'utf8' }
+  )
+}
+
+describe('the default profile of the repository template', () => {
+  it('the default profile writes what it wrote before', () => {
+    const plain = join(tempDir('template-test-'), 'micelio-example')
+    const typescript = join(tempDir('template-test-'), 'micelio-example')
+    expect(generate(plain, '--description', 'An example project.').status).toBe(0)
+    expect(
+      generate(typescript, '--description', 'An example project.', '--profile', 'typescript').status
+    ).toBe(0)
+    const written = filesOf(plain).sort()
+    expect(filesOf(typescript).sort()).toEqual(written)
+    for (const file of written) {
+      expect(
+        readFileSync(join(typescript, file)).equals(readFileSync(join(plain, file))),
+        file
+      ).toBe(true)
+    }
+    // The files of template/ with their placeholders replaced, and the three that live once.
+    const single = [
+      'docs/engineering-standard.md',
+      'docs/standard/typescript.md',
+      'scripts/check-licenses.mjs',
+    ]
+    const own = filesOf(join(ROOT, 'template')).sort()
+    expect(written).toEqual([...own, ...single].sort())
+    const values = {
+      repo: 'micelio-example',
+      title: 'Micelio Example',
+      package: 'micelio-example',
+      description: 'An example project.',
+      'engineering-ref': REF,
+    } as Record<string, string>
+    for (const file of own) {
+      const text = readFileSync(join(plain, file), 'utf8')
+      const source = readFileSync(join(ROOT, 'template', file), 'utf8')
+      // Only the placeholders the example fills are compared; the rest are versions read from the repository.
+      if (!/\{\{(?!(repo|title|package|description|engineering-ref)\}\})[a-z-]+\}\}/.test(source)) {
+        expect(text, file).toBe(
+          source.replace(/\{\{([a-z-]+)\}\}/g, (_, key: string) => values[key] as string)
+        )
+      }
+    }
+    for (const file of single) {
+      expect(readFileSync(join(plain, file)).equals(readFileSync(join(ROOT, file))), file).toBe(
+        true
+      )
+    }
+  })
+})
+
+describe('the rust profile of the repository template', () => {
+  let project: string
+  let created: string[]
+  const license = ['--license', 'MIT-0', '--copyright', 'Example Authors']
+
+  beforeAll(() => {
+    project = join(tempDir('template-test-'), 'micelio-example')
+    const result = generateRust(project, ...license)
+    if (result.status !== 0) throw new Error(result.stderr)
+    created = filesOf(project)
+  })
+
+  it('the rust profile creates every file of its checklist', () => {
+    const boxes = rustBoxes()
+    expect(boxes).toHaveLength(10)
+    expect(RUST_CHECKLIST.map((entry) => entry.box)).toEqual(boxes)
+    for (const entry of RUST_CHECKLIST) {
+      expect(entry.files?.length || entry.setting || entry.missing, entry.box).toBeTruthy()
+      for (const file of entry.files ?? []) {
+        expect(created, `${file} (${entry.box})`).toContain(file)
+      }
+      if (entry.setting) expect(entry.setting).toMatch(/#2/)
+    }
+    expect(created).toContain('LICENSES/MIT-0.txt')
+    expect(created).toContain('src/lib.rs')
+    expect(created.some((file) => file === 'package.json' || file === '.nvmrc')).toBe(false)
+  })
+
+  it('pins the standard and the rust profile, states the check line, and leaves no placeholder', () => {
+    const agents = readFileSync(join(project, 'AGENTS.md'), 'utf8')
+    const standard = readFileSync(join(project, 'docs/engineering-standard.md'), 'utf8')
+    const version = /^Version (\d+\.\d+) /m.exec(standard)?.[1]
+    expect(agents).toContain('`profile: rust`')
+    expect(readPin(agents)).toBe(version)
+    expect(lintStandard(project)).toMatchObject({ ok: true })
+    const block = /```bash\n([\s\S]*?)```/.exec(agents.split('## Commands')[1] ?? '')?.[1] ?? ''
+    const lines = block.split('\n')
+    expect(lines.filter((line) => line.startsWith('check:'))).toHaveLength(1)
+    expect(lines.find((line) => line.startsWith('check:'))).toContain('cargo deny check licenses')
+    for (const file of created) {
+      expect(readFileSync(join(project, file), 'utf8'), file).not.toMatch(/\{\{[a-z-]+\}\}/)
+    }
+  })
+
+  it('carries the licence it was asked for and no Micelio licence, name or domain of its own', () => {
+    expect(readFileSync(join(project, 'REUSE.toml'), 'utf8')).toContain(
+      'SPDX-License-Identifier = "MIT-0"'
+    )
+    expect(readFileSync(join(project, 'LICENSE'), 'utf8')).toContain('Copyright ')
+    expect(readFileSync(join(project, 'LICENSE'), 'utf8')).toContain('Example Authors')
+    expect(readFileSync(join(project, 'Cargo.toml'), 'utf8')).toContain('license = "MIT-0"')
+    for (const file of ['REUSE.toml', 'LICENSE', 'THIRD-PARTY.md', 'Cargo.toml', 'README.md']) {
+      expect(readFileSync(join(project, file), 'utf8'), file).not.toMatch(/AGPL|Alejandro/)
+    }
+    const refused = generateRust(join(tempDir('template-test-'), 'micelio-example'))
+    expect(refused.status).toBe(1)
+    expect(refused.stderr).toContain('--license')
+    const unknown = generateRust(
+      join(tempDir('template-test-'), 'micelio-example'),
+      '--license',
+      'Nope-1.0',
+      '--copyright',
+      'X'
+    )
+    expect(unknown.status).toBe(1)
+    expect(unknown.stderr).toContain('No text of the licence')
+    const holder = join(tempDir('template-test-'), 'micelio-example')
+    expect(generateRust(holder, '--license', 'MIT-0', '--copyright', 'say "hi"').stderr).toContain(
+      'copyright holder may not contain'
+    )
+    expect(existsSync(holder)).toBe(false)
+  })
+
+  it('calls check.yml with the rust profile and the lint-standard inputs at one commit', () => {
+    const text = readFileSync(join(project, '.github/workflows/ci.yml'), 'utf8')
+    expect(text).toMatch(/check\.yml@a{40} # main/)
+    expect(text).toContain('profile: rust')
+    expect(text).toContain(`tools-ref: ${REF}`)
+    expect(text).toMatch(/lint-standard-version: \d+\.\d+\.\d+/)
+    expect(text).toMatch(/dco\.yml@a{40} # main/)
+    expect(text).toMatch(/scorecard\.yml@a{40} # main/)
+  })
+
+  it('the rust profile takes the synced files and the standard from their one place', () => {
+    const synced = (
+      JSON.parse(readFileSync(join(ROOT, '.github/standard-sync.json'), 'utf8')) as {
+        files: string[]
+      }
+    ).files
+    const sources = synced.flatMap((path) =>
+      statSync(join(ROOT, 'template', path)).isDirectory()
+        ? filesOf(join(ROOT, 'template'), path)
+        : [path]
+    )
+    expect(sources.length).toBeGreaterThan(5)
+    for (const file of sources) {
+      expect(created, file).toContain(file)
+      expect(
+        readFileSync(join(project, file)).equals(readFileSync(join(ROOT, 'template', file))),
+        file
+      ).toBe(true)
+    }
+    for (const file of ['docs/engineering-standard.md', 'docs/standard/rust.md']) {
+      expect(readFileSync(join(project, file)).equals(readFileSync(join(ROOT, file))), file).toBe(
+        true
+      )
+    }
+    expect(created).not.toContain('docs/standard/typescript.md')
+    // No second copy: template-rust/ holds none of them.
+    const own = filesOf(join(ROOT, 'template-rust'))
+    for (const file of sources) expect(own, file).not.toContain(file)
+    expect(own.some((file) => file.startsWith('docs/'))).toBe(false)
+    expect(own.some((file) => file.startsWith('.claude/'))).toBe(false)
+  })
+
+  it('refuses --package and --no-install with the rust profile', () => {
+    const target = join(tempDir('template-test-'), 'micelio-example')
+    const withPackage = generateRust(target, ...license, '--package', 'x')
+    expect(withPackage.status).toBe(1)
+    expect(withPackage.stderr).toContain('--package')
+    const withoutInstall = generateRust(target, ...license, '--no-install')
+    expect(withoutInstall.status).toBe(1)
+    expect(withoutInstall.stderr).toContain('--no-install')
+    expect(existsSync(target)).toBe(false)
+    expect(generate(target, '--profile', 'go').stderr).toContain('is not a profile')
+    expect(generate(target, '--license', 'MIT-0').stderr).toContain('rust profile')
   })
 })
