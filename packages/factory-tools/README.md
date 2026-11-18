@@ -4,7 +4,8 @@ The commands of the Micelio software factory: `lint-issue` (Gate 1, the Definiti
 script), [`issue-ready`](#issue-ready) (what the workflow does with its result, and the project fields of
 `project-fields-backfill`),
 [`metrics`](#metrics) (the factory's numbers for a milestone), [`lint-draft`](#lint-draft) (the
-shape of a draft's section "Instructions that were wrong or missing"),
+shape of a draft's section "Instructions that were wrong or missing", and its "For review" answers
+for the existing tests the diff edits),
 [`lint-lane`](#lint-lane) (an issue's lane, and a diff checked against it) and
 [`verify-draft`](#verify-draft) (gate 4 of the `normal` lane: a draft's commands rerun and their
 numbers compared).
@@ -119,8 +120,9 @@ responses in `test/fixtures/ready/`, with no network.
 
 ## `lint-draft`
 
-Gate 2 reads the draft's section "Instructions that were wrong or missing" with this command. The
-shape is in `docs/factory.md`, "The learning loop".
+Gate 2 reads the draft's section "Instructions that were wrong or missing" with this command, and
+checks the diff for edited tests against "For review". The shape of the first is in
+`docs/factory.md`, "The learning loop".
 
 ```bash
 # In the worktree of the branch, after `git add -N .` so that new files are in the diff
@@ -146,6 +148,14 @@ or a file cannot be read.
   `standard-sync.json` does not list, fails when it ends `reported to the master`. The standard, the
   issue and a synced file (outside `micelio-engineering`) end `reported to the master` and pass.
 - A line in neither shape, a missing section and an empty one fail.
+- An existing test file the diff removes lines from fails (`G3.3` of `docs/factory.md`), unless a
+  line of the draft's "For review" section answers it, with or without a list bullet:
+  `test-edit: <path> - <the sentence of the issue that asks for the change>`. The command lists them
+  with `git diff --numstat --no-renames <ref>` (a path with one or more deleted lines). A test file
+  has `.test.` or `.spec.` in its name, or is under a `__tests__/`, `tests/` or `e2e/` directory,
+  and is not under a `fixtures/` directory. A new test file and a test the diff only adds to never
+  fail. The line only tells the reviewer where to look: the reviewer still decides whether the issue
+  asks for the edit.
 
 It does not judge whether a "Nothing" is true.
 

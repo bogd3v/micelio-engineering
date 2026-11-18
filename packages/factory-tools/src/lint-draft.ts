@@ -12,6 +12,8 @@ export interface DraftContext {
   changed: string[]
   /** The `files` of `.github/standard-sync.json`: the synced files and folders. */
   synced: string[]
+  /** The test files the diff removes lines from (`git diff --numstat`); left out, none. */
+  editedTests?: string[]
 }
 
 /** A line of the section that breaks the shape, and why. */
@@ -25,10 +27,16 @@ const REPORTED = /^(?<subject>.+?): .+ - reported to the master$/
 
 const unquote = (text: string): string => text.replace(/^`|`$/g, '').replace(/[.,;]$/, '')
 
+/** The heading of the section where the draft answers an edited test. */
+const REVIEW = 'For review'
+
+/** `test-edit: <path> - <sentence>`; the path may hold spaces, so it ends at the first ` - `. */
+const ANSWER = /^test-edit: (?<path>.+?) - \S.*$/
+
 /** The lines of the section, without bullets and blanks; `null` when the draft has no section. */
-function sectionLines(draft: string): string[] | null {
+function sectionLines(draft: string, heading: string = SECTION): string[] | null {
   const lines = draft.split('\n')
-  const start = lines.findIndex((line) => /^#{1,6}\s/.test(line) && line.includes(SECTION))
+  const start = lines.findIndex((line) => /^#{1,6}\s/.test(line) && line.includes(heading))
   if (start === -1) return null
   const rest = lines.slice(start + 1)
   const end = rest.findIndex((line) => /^#{1,6}\s/.test(line))
@@ -48,12 +56,52 @@ function isOwn(path: string, synced: string[]): boolean {
 }
 
 /**
- * Checks the draft's "Instructions that were wrong or missing" section against the shape of
- * `docs/factory.md`, "The learning loop". "Nothing" passes.
+ * Whether `path` is a test file: its name has `.test.` or `.spec.`, or it is under `__tests__/`,
+ * `tests/` or `e2e/`; a file under `fixtures/` is not.
+ */
+function isTestFile(path: string): boolean {
+  const parts = path.split('/')
+  if (parts.slice(0, -1).includes('fixtures')) return false
+  const name = parts.at(-1) ?? ''
+  return (
+    name.includes('.test.') ||
+    name.includes('.spec.') ||
+    parts.slice(0, -1).some((dir) => dir === '__tests__' || dir === 'tests' || dir === 'e2e')
+  )
+}
+
+/** One problem for each edited test file that "For review" does not answer with `test-edit:` (`G3.3`). */
+function editedTestProblems(draft: string, edited: string[]): DraftProblem[] {
+  const answered = new Set(
+    (sectionLines(draft, REVIEW) ?? []).flatMap((line) => {
+      const path = ANSWER.exec(line)?.groups?.['path']
+      return path === undefined ? [] : [unquote(path)]
+    })
+  )
+  return edited
+    .filter((path) => isTestFile(path) && !answered.has(path))
+    .map((path) => ({
+      line: path,
+      problem: `${path} is an existing test the diff removes lines from (G3.3): add "test-edit: ${path} - <the sentence of the issue that asks for the change>" to "${REVIEW}", or add to the test instead of editing it`,
+    }))
+}
+
+/**
+ * Checks the draft: its "Instructions that were wrong or missing" section against the shape of
+ * `docs/factory.md`, "The learning loop" ("Nothing" passes), and its "For review" section against
+ * the diff. It fails each existing test the
+ * diff removes lines from that "For review" does not answer with a `test-edit:` line.
  *
  * @returns The lines that break it; an empty list when the section is right.
  */
 export function lintDraft(draft: string, context: DraftContext): DraftProblem[] {
+  return [
+    ...instructionProblems(draft, context),
+    ...editedTestProblems(draft, context.editedTests ?? []),
+  ]
+}
+
+function instructionProblems(draft: string, context: DraftContext): DraftProblem[] {
   const lines = sectionLines(draft)
   if (lines === null) return [{ line: '', problem: `the draft has no "${SECTION}" section` }]
   if (lines.length === 0) return [{ line: '', problem: 'the section is empty; write "Nothing"' }]
@@ -110,9 +158,11 @@ export interface LintDraftDeps {
   diffNames: (base: string) => Promise<string[]>
   /** The `files` of `.github/standard-sync.json` of the `micelio-engineering` checkout. */
   syncedFiles: () => Promise<string[]>
+  /** The paths `git diff --numstat -z --no-renames <base>` shows with deleted lines, test files only. Optional. */
+  editedTests?: (base: string) => Promise<string[]>
 }
 
-/** The outcome of `runLintDraft`: 0 when the section is right, 1 when a line breaks it, 2 on a usage or read error. */
+/** The outcome of `runLintDraft`: 0 when the draft is right, 1 when a line breaks a rule, 2 on a usage or read error. */
 export interface LintDraftResult {
   code: 0 | 1 | 2
   stdout: string
@@ -138,6 +188,18 @@ export function createDeps(cwd: string, syncList: URL = OWN_SYNC_LIST): LintDraf
     diffNames: async (base) => {
       const { stdout } = await exec('git', ['diff', '--name-only', base], { cwd })
       return stdout.split('\n').filter((line) => line !== '')
+    },
+    editedTests: async (base) => {
+      // -z: paths come raw, never C-quoted; records end in NUL
+      const { stdout } = await exec('git', ['diff', '--numstat', '-z', '--no-renames', base], {
+        cwd,
+      })
+      return stdout
+        .split('\0')
+        .map((record) => record.split('\t'))
+        .filter(([, deleted]) => /^[1-9]\d*$/.test(deleted ?? ''))
+        .map((cols) => cols.slice(2).join('\t'))
+        .filter(isTestFile)
     },
     syncedFiles: async () => {
       const json = JSON.parse(await readFile(syncList, 'utf8')) as { files?: unknown }
@@ -179,9 +241,10 @@ export async function runLintDraft(
     const problems = lintDraft(await deps.readText(file), {
       changed: await deps.diffNames(base),
       synced: await deps.syncedFiles(),
+      editedTests: (await deps.editedTests?.(base)) ?? [],
     })
     if (problems.length === 0) {
-      return { code: 0, stdout: `lint-draft · ${file} · "${SECTION}" is right\n`, stderr: '' }
+      return { code: 0, stdout: `lint-draft · ${file} · the draft is right\n`, stderr: '' }
     }
     const body = problems.map((p) => `- ${p.line === '' ? '' : `\`${p.line}\`: `}${p.problem}\n`)
     return {
