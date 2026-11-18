@@ -405,6 +405,44 @@ describe('RUN.md', () => {
   })
 })
 
+describe('RUN.md, Rust pilot', () => {
+  const run = readFileSync(join(FIXTURES, 'RUN.md'), 'utf8')
+  const pilot = section(run, 'Rust pilot')
+  const commit = '3f0f4a3fa175be83b62433f9a2270b67a990b056'
+
+  it('RUN.md has the Rust pilot section and names only files that exist', () => {
+    expect(run.match(/^## Rust pilot$/gm)).toHaveLength(1)
+    expect(pilot).toContain(commit)
+    expect(pilot).toContain('4ecdddd4ca14aca1e266b13f262ce8640c737e51')
+    expect(pilot).toContain('bffad79a75d8811a9d3f2a1233b29b58443f5570')
+
+    // A file of Bruma is a link at the pilot's commit, never a bare path.
+    const links = [
+      ...pilot.matchAll(/\]\((https:\/\/github\.com\/bogd3v\/bruma\/blob\/([^/]+)\/[^)]+)\)/g),
+    ]
+    expect(links.length).toBeGreaterThan(0)
+    for (const [, , ref] of links) expect(ref).toBe(commit)
+
+    // Outside those links, prose and code spans alike name no file or ref of Bruma.
+    const outside = pilot.replace(/\[[^\]]*\]\([^)]*\)/g, ' ')
+    const bruma =
+      /(^|\/)(crates|web|scripts)\/|^(AGENTS|CLAUDE)\.md$|^(Cargo|rust-toolchain)\.(toml|lock)$|^feat\/|bruma#\d+$/
+    const bare = outside
+      .split(/[\s`()]+/)
+      .map((token) => token.replace(/[,.;:]+$/, ''))
+      .filter((token) => bruma.test(token))
+    expect(bare).toEqual([])
+
+    const transcripts = [...pilot.matchAll(/`transcripts\/(rust-pilot-[a-z0-9-]+\.md)`/g)].map(
+      ([, name]) => name
+    )
+    expect(transcripts).toHaveLength(4)
+    for (const name of transcripts) {
+      expect(statSync(join(FIXTURES, 'transcripts', name ?? '')).isFile()).toBe(true)
+    }
+  })
+})
+
 describe('the draft of never-fixes', () => {
   it('the planted line of never-fixes stays under Instructions that were wrong or missing', () => {
     const heading = 'Instructions that were wrong or missing'
