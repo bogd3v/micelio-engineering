@@ -93,6 +93,10 @@ function holder(name: string): string[] {
 const upOf = (name: string): string => join(root, `${name}.up`)
 const release = (name: string): void => writeFileSync(join(root, `${name}.go`), '')
 
+/** The `TMPDIR` that `run` gives the command of the wrapper with this PID. */
+const runTmpOf = (wrapper: number | undefined): string =>
+  join(root, 'run-tmp', `run-${String(wrapper)}`)
+
 /** The owner file of heavy slot 1, as key/value pairs. */
 function owner(): Record<string, string> {
   const text = readFileSync(join(root, 'slots/heavy/slot-1.owner'), 'utf8')
@@ -179,6 +183,7 @@ beforeEach(() => {
     ...clean,
     FACTORY_SLOT_DIR: join(root, 'slots'),
     FACTORY_TMP: join(root, 'tmp'),
+    FACTORY_RUN_TMP: join(root, 'run-tmp'),
     FACTORY_CORES: '32',
     FACTORY_HEAVY_SLOTS: '1',
     FACTORY_REAP_GRACE: '0',
@@ -268,6 +273,66 @@ describe('factory-slot.sh run', () => {
   it('run returns the exit code of the command', () => {
     expect(slot(['run', '--', 'sh', '-c', 'exit 7']).code).toBe(7)
     expect(slot(['run', '--', 'true']).code).toBe(0)
+  })
+
+  it('run gives the command its own TMPDIR and removes it when the command exits', () => {
+    const show = ['--', 'sh', '-c', 'echo "$TMPDIR"; [ -d "$TMPDIR" ] && echo made']
+    const r = slot(['run', ...show])
+    const [path = '', made] = r.out.trim().split('\n')
+    expect(r.code).toBe(0)
+    expect(made).toBe('made')
+    expect(path.slice(0, path.lastIndexOf('/'))).toBe(join(root, 'run-tmp'))
+    expect(path.slice(path.lastIndexOf('/') + 1)).toMatch(/^run-\d+$/)
+    expect(existsSync(path)).toBe(false)
+
+    // Without FACTORY_RUN_TMP the directory is under the home directory's cache.
+    const home = join(root, 'home')
+    const byDefault = slot(['run', ...show], { HOME: home, FACTORY_RUN_TMP: undefined })
+    const [fallback = ''] = byDefault.out.trim().split('\n')
+    const parent = join(home, '.cache/micelio-factory/tmp')
+    expect(fallback.slice(0, fallback.lastIndexOf('/'))).toBe(parent)
+    expect(existsSync(fallback)).toBe(false)
+    expect(readdirSync(parent)).toEqual([])
+  })
+
+  it("run removes the command's TMPDIR when the command fails", async () => {
+    const seen = join(root, 'seen')
+    const failing = `echo "$TMPDIR" >${seen}; exit 7`
+    expect(slot(['run', '--', 'sh', '-c', failing]).code).toBe(7)
+    const path = readFileSync(seen, 'utf8').trim()
+    expect(path.startsWith(join(root, 'run-tmp', 'run-'))).toBe(true)
+    expect(existsSync(path)).toBe(false)
+
+    // A wrapper stopped by a signal stops its command and cleans up too.
+    const stopped = start(['run', ...holder('a')])
+    await until(() => existsSync(upOf('a')), 'the command')
+    const dir = runTmpOf(stopped.child.pid)
+    expect(existsSync(dir)).toBe(true)
+    stopped.child.kill('SIGTERM')
+    await stopped.exited
+    expect(existsSync(dir)).toBe(false)
+  })
+
+  it('run starts the command on an empty TMPDIR when a dead wrapper left one with its PID', () => {
+    // `exec` keeps the PID, so the directory planted here is the one the wrapper will use.
+    const plant = 'mkdir -p "$RUN_TMP/run-$$" && touch "$RUN_TMP/run-$$/stale"'
+    const list = `sh -c 'ls -A "$TMPDIR"'`
+    const r = spawnSync('sh', ['-c', `${plant} && exec bash "$SCRIPT" run -- ${list}`], {
+      env: { ...env, RUN_TMP: join(root, 'run-tmp'), SCRIPT },
+      encoding: 'utf8',
+    })
+    expect(r.status).toBe(0)
+    expect(r.stdout).toBe('')
+  })
+
+  it('run exits 2 without starting the command when it cannot create the TMPDIR', () => {
+    const file = join(root, 'not-a-directory')
+    writeFileSync(file, '')
+    const marker = join(root, 'started')
+    const r = slot(['run', '--', 'touch', marker], { FACTORY_RUN_TMP: file })
+    expect(r.code).toBe(2)
+    expect(r.err).toContain('cannot create')
+    expect(existsSync(marker)).toBe(false)
   })
 
   it('run records HC_TERMINAL_ID as the agent when FACTORY_AGENT is unset', async () => {
@@ -587,6 +652,36 @@ describe('factory-slot.sh reap', () => {
     const r = slot(['reap'], {}, pathWith('', {}))
     expect(r.out).toContain('removed')
     expect(existsSync(owned())).toBe(false)
+  })
+
+  it('reap removes the TMPDIR of a run whose wrapper is dead', async () => {
+    const { run, pgid } = await startOwned('')
+    const wrapper = run.child.pid as number
+    const dir = runTmpOf(wrapper)
+
+    // While the wrapper lives its directory stays.
+    expect(slot(['reap'], {}, pathWith('', {})).out).toBe('')
+    expect(existsSync(dir)).toBe(true)
+
+    // A killed wrapper never reaches its own cleanup.
+    process.kill(wrapper, 'SIGKILL')
+    await run.exited
+    process.kill(-pgid, 'SIGKILL')
+    await until(() => !groupAlive(pgid), 'the command to die')
+    expect(existsSync(dir)).toBe(true)
+
+    // Only a directory named after a PID is a run's: these two are not, and they stay.
+    const otherName = join(root, 'run-tmp', 'run-notapid')
+    mkdirSync(otherName)
+    const aFile = runTmpOf(pgid)
+    writeFileSync(aFile, '')
+
+    const r = slot(['reap'], {}, pathWith('', {}))
+    expect(r.code).toBe(0)
+    expect(r.out).toContain(`removed ${dir}`)
+    expect(existsSync(dir)).toBe(false)
+    expect(existsSync(otherName)).toBe(true)
+    expect(existsSync(aFile)).toBe(true)
   })
 
   it('reap keeps a lease younger than the grace period', () => {
