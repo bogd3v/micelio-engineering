@@ -34,7 +34,7 @@ export type EntryOutcome =
 export const TESTS_SECTION = 'Tests'
 
 /** One item of the Tests section: a bullet (`- `, `* `) or a numbered item (`1. `, `1) `). */
-interface Entry {
+export interface Entry {
   text: string
   /** The nearest line above it that is not an item. */
   intro: string
@@ -42,13 +42,14 @@ interface Entry {
 
 const WITHOUT_CHANGE = /without the change/i
 const VARIANCE = /\b(\d+)\s+failed\s+of\s+(\d+)\b/i
-const EXIT = /\bexit(?:ed|s)?(?:\s+code)?\s+(\d+)/i
+/** The exit code a summary reports: `exit 0`, `exits 1`, `exited 1`, `exit code 2`. */
+export const EXIT = /\bexit(?:ed|s)?(?:\s+code)?\s+(\d+)/i
 const LOG = /\blogs\/([^\s`),;]+)/
 const NUMBER = String.raw`\d{1,3}(?:[ ,]\d{3})+|\d+`
 const MAX_BUFFER = 256 * 1024 * 1024
 
 /** The items of the Tests section, bullets and numbered, each with its continuation lines; `null` when there is no section. */
-function testsEntries(draft: string): Entry[] | null {
+export function testsEntries(draft: string): Entry[] | null {
   const lines = draft.split(/\r?\n/)
   const start = lines.findIndex((line) => /^#{1,6}\s+Tests\s*$/.test(line))
   if (start === -1) return null
@@ -112,8 +113,14 @@ export function tokenize(command: string): string[] | null {
   return tokens.length > 0 ? tokens : null
 }
 
-/** The lines of the first `## Commands` block of `AGENTS.md`, as the words a command must start with. */
-export function agentsCommands(agents: string): string[][] {
+/** One line of the first `## Commands` block of `AGENTS.md`: its `label:` (empty when it has none) and the words of the command. */
+export interface AgentsCommand {
+  label: string
+  words: string[]
+}
+
+/** The lines of the first `## Commands` block of `AGENTS.md`, each with its label and the words a command must start with. */
+export function agentsCommandLines(agents: string): AgentsCommand[] {
   const lines = agents.split('\n')
   const start = lines.findIndex((line) => /^##\s+Commands\s*$/.test(line))
   if (start === -1) return []
@@ -122,21 +129,25 @@ export function agentsCommands(agents: string): string[][] {
   if (open === -1) return []
   const close = rest.findIndex((line, i) => i > open && /^```/.test(line))
   const block = close === -1 ? rest.slice(open + 1) : rest.slice(open + 1, close)
-  const commands: string[][] = []
+  const commands: AgentsCommand[] = []
   for (const line of block) {
-    const text = line
-      .replace(/\s+#.*$/, '')
-      .replace(/^[a-z-]+:\s+/, '')
-      .trim()
+    const uncommented = line.replace(/\s+#.*$/, '')
+    const label = /^([a-z-]+):\s+/.exec(uncommented)?.[1] ?? ''
+    const text = uncommented.replace(/^[a-z-]+:\s+/, '').trim()
     if (text === '') continue
     const words: string[] = []
     for (const word of text.split(/\s+/)) {
       if (word.startsWith('<') || word.startsWith('[')) break
       words.push(word)
     }
-    if (words.length > 0) commands.push(words)
+    if (words.length > 0) commands.push({ label, words })
   }
   return commands
+}
+
+/** The lines of the first `## Commands` block of `AGENTS.md`, as the words a command must start with. */
+export function agentsCommands(agents: string): string[][] {
+  return agentsCommandLines(agents).map((command) => command.words)
 }
 
 /** The scripts of a `package.json`; empty when it has none or is not JSON. */
