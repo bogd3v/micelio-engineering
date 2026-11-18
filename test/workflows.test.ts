@@ -114,6 +114,38 @@ function stepNames(id: string): string[] {
   return [...job(id).matchAll(/^ {6}- name: (.*)$/gm)].map((m) => m[1] ?? '')
 }
 
+/**
+ * A directory with stubs of the tools the `Install dependencies` and `Test` steps call, each of which
+ * records its command line. `cargo deny` and `reuse` exit 127 until the step has installed them, as
+ * on a runner that has neither. Returns the directory, the `PATH` that finds the stubs first and the
+ * commands recorded so far.
+ */
+function installStubs(): { dir: string; env: { PATH: string }; calls: () => string[] } {
+  const dir = tempDir('micelio-install-')
+  const bin = join(dir, 'bin')
+  mkdirSync(bin)
+  const log = join(dir, 'calls')
+  const stub = `#!/bin/sh
+line="\${0##*/} $*"
+echo "$line" >> "${log}"
+case "$line" in
+  'cargo install cargo-deny --locked --version 0.21.0') : > "${join(dir, 'has-deny')}" ;;
+  'pipx install reuse==6.2.0') : > "${join(dir, 'has-reuse')}" ;;
+  'cargo deny '*) [ -f "${join(dir, 'has-deny')}" ] || exit 127 ;;
+  'reuse '*) [ -f "${join(dir, 'has-reuse')}" ] || exit 127 ;;
+esac
+`
+  for (const tool of ['cargo', 'pipx', 'rustup', 'rustc', 'reuse', 'npm', 'pnpm']) {
+    writeFileSync(join(bin, tool), stub)
+    chmodSync(join(bin, tool), 0o755)
+  }
+  return {
+    dir,
+    env: { PATH: `${bin}:${process.env.PATH ?? ''}` },
+    calls: () => (existsSync(log) ? readFileSync(log, 'utf8').trimEnd().split('\n') : []),
+  }
+}
+
 describe('run()', () => {
   it('a step script does not read the .bashrc of HOME', () => {
     const home = tempDir('bashrc-')
@@ -327,6 +359,53 @@ describe('check.yml', () => {
     expect(agents).toMatch(/^check: cargo fmt --check && .*cargo test$/m)
     const ci = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8')
     expect(ci).toMatch(/profile: rust\n\s+working-directory: fixtures\/rust-basic/)
+  })
+
+  it('the rust profile installs cargo-deny 0.21.0 and reuse 6.2.0 before the check command runs', () => {
+    const { dir, env, calls } = installStubs()
+    writeFileSync(join(dir, 'rust-toolchain.toml'), '[toolchain]\nchannel = "1.99.1"\n')
+    writeFileSync(
+      join(dir, 'AGENTS.md'),
+      readFileSync(join(ROOT, 'fixtures/rust-basic/AGENTS.md'), 'utf8')
+    )
+    const steps = stepNames('checks')
+    expect(steps.indexOf('Install dependencies')).toBeLessThan(steps.indexOf('Test'))
+
+    const rust = { ...env, PROFILE: 'rust', PM: 'npm' }
+    const install = run(stepScript('checks', 'Install dependencies'), rust, dir)
+    expect(install.status, install.output).toBe(0)
+    expect(calls()).toEqual([
+      'rustup toolchain install --profile minimal',
+      'rustc --version',
+      'cargo install cargo-deny --locked --version 0.21.0',
+      'pipx install reuse==6.2.0',
+    ])
+
+    // The fixture's own check line finds both tools, which exist only once they are installed.
+    const check = run(stepScript('checks', 'Test'), { ...rust, CHECK_COMMAND: '' }, dir)
+    expect(check.status, check.output).toBe(0)
+    expect(calls().slice(4)).toEqual([
+      'cargo fmt --check',
+      'cargo deny --version',
+      'reuse --version',
+      'cargo clippy --all-targets -- -D warnings',
+      'cargo test',
+    ])
+  })
+
+  it('the typescript profile installs neither cargo-deny nor reuse', () => {
+    for (const [pm, expected] of [
+      ['npm', 'npm ci'],
+      ['pnpm', 'pnpm install --frozen-lockfile'],
+    ] as const) {
+      const { dir, env, calls } = installStubs()
+      // The file of a rust project changes nothing: the profile alone picks the branch.
+      writeFileSync(join(dir, 'rust-toolchain.toml'), '[toolchain]\nchannel = "1.99.1"\n')
+      const script = stepScript('checks', 'Install dependencies')
+      const result = run(script, { ...env, PROFILE: 'typescript', PM: pm }, dir)
+      expect(result.status, result.output).toBe(0)
+      expect(calls()).toEqual([expected])
+    }
   })
 })
 
