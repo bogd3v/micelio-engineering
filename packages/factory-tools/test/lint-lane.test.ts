@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { tempDir } from '../../../test/support/temp.js'
 import { createDeps, issuePaths, matchGlob, parseLanes, runLintLane } from '../src/lane.js'
-import type { LintLaneDeps } from '../src/lane.js'
+import type { LaneGlobs, LintLaneDeps } from '../src/lane.js'
 
 const PACKAGE = fileURLToPath(new URL('../', import.meta.url))
 const LANE = `${PACKAGE}test/fixtures/lane/`
@@ -14,9 +14,14 @@ const LANE = `${PACKAGE}test/fixtures/lane/`
 function deps(
   agents: string | null = 'agents.md',
   changed: string[] = [],
-  issues: Record<string, string> = {}
+  issues: Record<string, string> = {},
+  readLanes?: (repo: string) => Promise<LaneGlobs | null>
 ): LintLaneDeps {
   return {
+    readLanes:
+      readLanes ??
+      (async () =>
+        agents === null ? null : parseLanes(await readFile(`${LANE}${agents}`, 'utf8'))),
     readIssue: async (ref) => {
       const file = issues[`${ref.repo}#${ref.number}`]
       if (file === undefined) throw new Error(`no issue ${ref.repo}#${ref.number}`)
@@ -190,6 +195,46 @@ describe('lint-lane', () => {
     expect(result.stdout).toContain('lane: express\n')
   })
 
+  it('<owner/repo#n> reads the lanes of that repository, not of the working directory', async () => {
+    const seen: string[] = []
+    const result = await runLintLane(
+      ['lint-lane', 'bogd3v/x#7'],
+      // The working directory's AGENTS.md would give express; the issue's repository has no block.
+      deps('agents.md', [], { 'bogd3v/x#7': 'issue-express.md' }, async (repo) => {
+        seen.push(repo)
+        return null
+      })
+    )
+    expect(seen).toEqual(['bogd3v/x'])
+    expect(result.code).toBe(0)
+    expect(result.stdout.startsWith('lane: full\n')).toBe(true)
+    expect(result.stdout).toContain('no `## Lanes` block')
+    const failing = await runLintLane(
+      ['lint-lane', 'bogd3v/x#7'],
+      deps('agents.md', [], { 'bogd3v/x#7': 'issue-express.md' }, async () => {
+        throw new Error('gh: HTTP 500')
+      })
+    )
+    expect(failing.code).toBe(2)
+    expect(failing.stderr).toContain('HTTP 500')
+  })
+
+  it('--file and --diff still read the AGENTS.md of the working directory', async () => {
+    let calls = 0
+    const readLanes = async (): Promise<LaneGlobs | null> => (calls++, null)
+    const file = await runLintLane(
+      ['lint-lane', '--file', 'issue-express.md'],
+      deps('agents.md', [], {}, readLanes)
+    )
+    expect(file.stdout.startsWith('lane: express\n')).toBe(true)
+    const diff = await runLintLane(
+      ['lint-lane', '--diff', 'main', '--lane', 'express'],
+      deps('agents.md', ['docs/notes.md'], {}, readLanes)
+    )
+    expect(diff.code).toBe(0)
+    expect(calls).toBe(0)
+  })
+
   it('exits 2 on a usage error and has no option to force a lane', async () => {
     for (const argv of [
       [],
@@ -251,6 +296,33 @@ describe('lint-lane', () => {
     )
     expect(result.status).toBe(0)
     expect(result.stdout).toContain('lane: full')
+  })
+
+  it('the real reader asks gh api for the AGENTS.md of the repository: a block, a 404 and another failure', async () => {
+    const dir = tempDir('lint-lane-gh-')
+    const gh = [
+      '#!/bin/sh',
+      'case "$*" in',
+      '  "api -H Accept: application/vnd.github.raw repos/example/with/contents/AGENTS.md")',
+      `    cat "${LANE}agents.md" ;;`,
+      '  *repos/example/none/*) echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;',
+      '  *) echo "gh: Server Error (HTTP 500)" >&2; exit 1 ;;',
+      'esac',
+      '',
+    ].join('\n')
+    await writeFile(join(dir, 'gh'), gh, { mode: 0o755 })
+    const saved = process.env.PATH
+    process.env.PATH = `${dir}:${saved ?? ''}`
+    try {
+      const { readLanes } = createDeps()
+      expect(await readLanes('example/with')).toEqual(
+        parseLanes(await readFile(`${LANE}agents.md`, 'utf8'))
+      )
+      expect(await readLanes('example/none')).toBeNull()
+      await expect(readLanes('example/broken')).rejects.toThrow()
+    } finally {
+      process.env.PATH = saved
+    }
   })
 })
 

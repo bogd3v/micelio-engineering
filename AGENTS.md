@@ -18,7 +18,7 @@ npm run verify:template  # creates one, installs the packed packages and runs it
 npm run verify:template -- --profile rust # creates a Rust one and runs its check: line and reuse lint (needs cargo, cargo-deny and reuse)
 npm run verify:isolated  # installs the three packed packages in an empty project and runs the fixture's checks (needs the registry)
 npm run lint-issue --workspace packages/factory-tools -- <owner/repo#n> # checks an issue against the Definition of Ready (needs gh)
-npm run build && node packages/factory-tools/dist/cli.js lint-lane <owner/repo#n> # sets an issue's lane from the ## Lanes block of AGENTS.md (needs gh); --file <path>, or --diff <base> --lane <lane> to check a diff
+npm run build && node packages/factory-tools/dist/cli.js lint-lane <owner/repo#n> # sets an issue's lane from the ## Lanes block of the AGENTS.md of the issue's repository (needs gh); --file <path>, or --diff <base> --lane <lane> to check a diff
 npm run metrics --workspace packages/factory-tools -- --milestone "<title>" # the factory's numbers for a milestone (needs gh; --fixtures <dir> reads a recording instead)
 ```
 
