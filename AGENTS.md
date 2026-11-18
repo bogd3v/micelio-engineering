@@ -12,7 +12,7 @@ The rules shared by every Micelio repository live in [`docs/engineering-standard
 install: npm ci
 test: npm test
 check: npm run check            # typecheck, lint, format:check, test, lint:licenses and lint:standard
-npm run build            # compiles the packages (typecheck, lint and test run it first)
+npm run build            # compiles the packages (typecheck, lint and test run it first; a vitest run builds first too, so npx vitest run <file> is a valid targeted run on a clean copy)
 npm run template -- <dir> # creates a repository from template/ (docs/template.md); --profile rust --license <id> --copyright <holder> uses template-rust/
 npm run verify:template  # creates one, installs the packed packages and runs its checks (needs the registry)
 npm run verify:template -- --profile rust # creates a Rust one and runs its check: line and reuse lint (needs cargo, cargo-deny and reuse)
@@ -22,7 +22,7 @@ npm run build && node packages/factory-tools/dist/cli.js lint-lane <owner/repo#n
 npm run metrics --workspace packages/factory-tools -- --milestone "<title>" # the factory's numbers for a milestone (needs gh; --fixtures <dir> reads a recording instead)
 ```
 
-The tests and the verify scripts write only under `TMPDIR` and remove what they write: `test/setup/tmpdir.ts` (the `globalSetup` of `vitest.config.ts`) gives each run its own `TMPDIR` and fails the run that leaves an entry in it. Node's `node-compile-cache` is the one entry it ignores.
+The tests and the verify scripts write only under `TMPDIR` and remove what they write: `test/setup/tmpdir.ts` (a `globalSetup` of `vitest.config.ts`, after `test/setup/build.ts`, which builds the packages) gives each run its own `TMPDIR` and fails the run that leaves an entry in it. Node's `node-compile-cache` is the one entry it ignores.
 
 What the commands need besides Node 22: the `node:22` image has `git` but not `jq`, `gh` or `reuse`.
 `npm run check` needs `git` and `jq` (`scripts/standard-sync.sh` calls `jq`);
