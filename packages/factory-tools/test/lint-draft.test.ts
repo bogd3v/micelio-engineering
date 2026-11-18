@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, rmSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -12,7 +12,11 @@ const SYNCED = ['.claude/agents', '.claude/skills/ship-pr', 'CLAUDE.md']
 const section = (...lines: string[]): string =>
   `# feat: x\n\n## Tests\n\nfine\n\n## Instructions that were wrong or missing\n\n${lines.join('\n')}\n\n## What could not be verified\n\nNothing\n`
 
-const context = (changed: string[]): DraftContext => ({ changed, synced: SYNCED })
+const context = (changed: string[]): DraftContext => ({
+  changed,
+  synced: SYNCED,
+  checkCommand: null,
+})
 
 describe('lint-draft', () => {
   it('fails an own file reported to the master', () => {
@@ -312,6 +316,7 @@ describe('lint-draft edited tests', () => {
     changed: editedTests,
     synced: SYNCED,
     editedTests,
+    checkCommand: null,
   })
 
   it('fails a draft whose diff removes lines of an existing test', () => {
@@ -391,5 +396,104 @@ describe('createDeps editedTests', () => {
     git('add', '-A')
     const edited = await createDeps(repo).editedTests?.('HEAD')
     expect(edited).toEqual(['test/old.test.ts', 'test/ñandú.test.ts'])
+  })
+})
+
+describe('lint-draft check command', () => {
+  const CHECK = ['npm', 'run', 'check']
+  const withTests = (...items: string[]): string =>
+    `# chore: x\n\n## Tests\n\n${items.join('\n')}\n\n## Instructions that were wrong or missing\n\nNothing\n`
+  const needs = (changed: string[] = []): DraftContext => ({
+    changed,
+    synced: SYNCED,
+    checkCommand: CHECK,
+  })
+
+  it('fails a draft whose Tests section says the check command was not run', () => {
+    const problems = lintDraft(
+      withTests('- Not run: `npm run check` (no code or tested path changes)'),
+      needs()
+    )
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.problem).toContain('npm run check')
+    expect(problems[0]?.problem).toContain('G2.1')
+  })
+
+  it('fails a draft with no Tests section, or whose check entry does not report exit 0', () => {
+    expect(
+      lintDraft('## Instructions that were wrong or missing\n\nNothing\n', needs())
+    ).toHaveLength(1)
+    expect(lintDraft(withTests('- `npm run check`: exit 1, 3 failed'), needs())).toHaveLength(1)
+    expect(lintDraft(withTests('- `npm run lint`: exit 0'), needs())).toHaveLength(1)
+  })
+
+  it('passes the check command reported with exit 0, through factory-slot.sh run too', () => {
+    expect(
+      lintDraft(withTests('- `npm run check`: exit 0, 12 passed, `logs/check.log`'), needs())
+    ).toEqual([])
+    expect(
+      lintDraft(
+        withTests('- `/x/herdr/factory-slot.sh run -- npm run check`: exit 0, `logs/check.log`'),
+        needs()
+      )
+    ).toEqual([])
+    expect(lintDraft(withTests('- `npm run check`\n  exit 0, `logs/check.log`'), needs())).toEqual(
+      []
+    )
+  })
+
+  it('does not judge a repository with no check command', () => {
+    expect(lintDraft(withTests('- `npm test`: exit 0'), context([]))).toEqual([])
+  })
+
+  it('runLintDraft reads the check command from the dependencies', async () => {
+    const deps: LintDraftDeps = {
+      readText: async () => withTests('- Not run: `npm run check`'),
+      diffNames: async () => [],
+      syncedFiles: async () => SYNCED,
+      checkCommand: async () => CHECK,
+    }
+    const result = await runLintDraft(['lint-draft', '--file', 'd.md', '--base', 'b'], deps)
+    expect(result.code).toBe(1)
+    expect(result.stdout).toContain('G2.1')
+  })
+
+  it("createDeps reads the check command from AGENTS.md, else from the manifest's check script", async () => {
+    const dir = tempDir('lint-draft-check-')
+    const read = (): Promise<string[] | null> | undefined => createDeps(dir).checkCommand?.()
+    expect(await read()).toBeNull()
+    await writeFile(join(dir, 'package.json'), '{"scripts":{"test":"x"}}')
+    expect(await read()).toBeNull()
+    await writeFile(join(dir, 'package.json'), '{"scripts":{"check":"x"}}')
+    expect(await read()).toEqual(CHECK)
+    await writeFile(
+      join(dir, 'AGENTS.md'),
+      '## Commands\n\n```bash\ntest: make test\ncheck: make verify [--fast]   # all of it\n```\n'
+    )
+    expect(await read()).toEqual(['make', 'verify'])
+    await writeFile(join(dir, 'AGENTS.md'), '## Commands\n\n```bash\ntest: make test\n```\n')
+    expect(await read()).toEqual(CHECK)
+  })
+
+  it('createDeps fails on an AGENTS.md it cannot read or a manifest that is not JSON, not as no check command', async () => {
+    const dir = tempDir('lint-draft-check-')
+    await writeFile(join(dir, 'package.json'), '{not json')
+    await expect(createDeps(dir).checkCommand?.()).rejects.toThrow()
+    rmSync(join(dir, 'package.json'))
+    mkdirSync(join(dir, 'AGENTS.md'))
+    await expect(createDeps(dir).checkCommand?.()).rejects.toThrow()
+  })
+
+  it('runLintDraft exits 2 when the check command cannot be read', async () => {
+    const deps: LintDraftDeps = {
+      readText: async () => withTests('- `npm run check`: exit 0'),
+      diffNames: async () => [],
+      syncedFiles: async () => SYNCED,
+      checkCommand: async () => {
+        throw new Error('bad package.json')
+      },
+    }
+    const result = await runLintDraft(['lint-draft', '--file', 'd.md', '--base', 'b'], deps)
+    expect(result.code).toBe(2)
   })
 })

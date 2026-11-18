@@ -5,7 +5,7 @@ script), [`issue-ready`](#issue-ready) (what the workflow does with its result, 
 `project-fields-backfill`),
 [`metrics`](#metrics) (the factory's numbers for a milestone), [`lint-draft`](#lint-draft) (the
 shape of a draft's section "Instructions that were wrong or missing", and its "For review" answers
-for the existing tests the diff edits),
+for the existing tests the diff edits, and the check command in its Tests section),
 [`lint-lane`](#lint-lane) (an issue's lane, and a diff checked against it) and
 [`verify-draft`](#verify-draft) (gate 4 of the `normal` lane: a draft's commands rerun and their
 numbers compared).
@@ -167,7 +167,17 @@ or a file cannot be read.
   section pass. Its limits: it does not look inside `docker run`, `xargs` or `sh -c`, so a `wc -w`
   they run passes.
 
-It does not judge whether a "Nothing" is true.
+- A draft whose "Tests" section has no entry that runs the check command and reports `exit 0`
+  fails, and the problem names the command and `G2.1` of `docs/factory.md`: the check command is
+  green in every lane, whatever the change touches. The command is the `check:` line of the first
+  `## Commands` block of the worktree's `AGENTS.md` (read as `verify-draft` reads it); without such
+  a line, `npm run check` when the worktree's root `package.json` has a `check` script. With neither,
+  the rule does not apply. A `package.json` that is not JSON, or a file that exists and cannot be
+  read, is exit 2, not a draft with no check command. An entry runs it when it starts with the command in backticks, after a
+  `factory-slot.sh run --` prefix is removed, and its text says `exit 0`; `Not run: \`npm run check\``
+  does not.
+
+It does not judge whether a "Nothing" is true, nor whether the check command is green.
 
 ## `verify-draft`
 

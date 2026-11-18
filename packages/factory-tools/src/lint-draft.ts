@@ -1,7 +1,9 @@
 import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { errorLine } from './errors.js'
+import { EXIT, agentsCommandLines, testsEntries, withoutSlotPrefix } from './verify-draft.js'
 
 /** The heading of the section the command reads, without the `#`s. */
 export const SECTION = 'Instructions that were wrong or missing'
@@ -14,6 +16,11 @@ export interface DraftContext {
   synced: string[]
   /** The test files the diff removes lines from (`git diff --numstat`); left out, none. */
   editedTests?: string[]
+  /**
+   * The words of the check command of the repository (`checkCommandOf`); `null` when it has none,
+   * and then the draft is not asked to report one.
+   */
+  checkCommand: string[] | null
 }
 
 /** A line of the section that breaks the shape, and why. */
@@ -146,11 +153,49 @@ function editedTestProblems(draft: string, edited: string[]): DraftProblem[] {
 }
 
 /**
+ * The check command of a repository: the `check:` line of the first `## Commands` block of its
+ * `AGENTS.md`; else `npm run check` when its manifest has a `check` script; else `null`.
+ *
+ * @param agents - The text of `AGENTS.md`; empty when the repository has none.
+ * @param manifest - The text of the root `package.json`; empty when the repository has none.
+ * @throws When `AGENTS.md` has no `check:` line and a non-empty manifest is not JSON.
+ */
+export function checkCommandOf(agents: string, manifest: string): string[] | null {
+  const line = agentsCommandLines(agents).find((command) => command.label === 'check')
+  if (line !== undefined) return line.words
+  if (manifest === '') return null
+  const json = JSON.parse(manifest) as { scripts?: { check?: unknown } } | null
+  return typeof json?.scripts?.check === 'string' ? ['npm', 'run', 'check'] : null
+}
+
+/** One problem when `checkCommand` is set and no entry of "Tests" runs it and reports `exit 0` (`G2.1`). */
+function checkCommandProblems(draft: string, checkCommand: string[] | null): DraftProblem[] {
+  if (checkCommand === null) return []
+  const reported = (testsEntries(draft) ?? []).some((entry) => {
+    const parsed = /^`([^`]+)`(.*)$/.exec(entry.text)
+    if (parsed === null) return false
+    const words = withoutSlotPrefix((parsed[1] ?? '').trim()).split(/\s+/)
+    return (
+      checkCommand.every((word, i) => words[i] === word) && EXIT.exec(parsed[2] ?? '')?.[1] === '0'
+    )
+  })
+  if (reported) return []
+  const command = checkCommand.join(' ')
+  return [
+    {
+      line: '',
+      problem: `the "Tests" section has no entry that runs \`${command}\`, the check command, and reports exit 0 (G2.1): run it once at the end, in every lane, whatever the change`,
+    },
+  ]
+}
+
+/**
  * Checks the draft: its "Instructions that were wrong or missing" section against the shape of
  * `docs/factory.md`, "The learning loop" ("Nothing" passes), and its "For review" section against
  * the diff. It fails each existing test the
  * diff removes lines from that "For review" does not answer with a `test-edit:` line, and each list item
- * or fenced line of the "Tests" section that runs `wc -w`.
+ * or fenced line of the "Tests" section that runs `wc -w`, and a draft whose "Tests" section has no
+ * entry that runs the check command and reports `exit 0` (`G2.1`) when the context has one.
  *
  * @returns The lines that break it; an empty list when the section is right.
  */
@@ -159,6 +204,7 @@ export function lintDraft(draft: string, context: DraftContext): DraftProblem[] 
     ...instructionProblems(draft, context),
     ...editedTestProblems(draft, context.editedTests ?? []),
     ...wordCountProblems(draft),
+    ...checkCommandProblems(draft, context.checkCommand),
   ]
 }
 
@@ -221,6 +267,8 @@ export interface LintDraftDeps {
   syncedFiles: () => Promise<string[]>
   /** The paths `git diff --numstat -z --no-renames <base>` shows with deleted lines, test files only. Optional. */
   editedTests?: (base: string) => Promise<string[]>
+  /** `checkCommandOf` of the `AGENTS.md` and `package.json` in the worktree. Optional; left out, `null`. */
+  checkCommand?: () => Promise<string[] | null>
 }
 
 /** The outcome of `runLintDraft`: 0 when the draft is right, 1 when a line breaks a rule, 2 on a usage or read error. */
@@ -261,6 +309,17 @@ export function createDeps(cwd: string, syncList: URL = OWN_SYNC_LIST): LintDraf
         .filter(([, deleted]) => /^[1-9]\d*$/.test(deleted ?? ''))
         .map((cols) => cols.slice(2).join('\t'))
         .filter(isTestFile)
+    },
+    checkCommand: async () => {
+      const read = async (name: string): Promise<string> => {
+        try {
+          return await readFile(join(cwd, name), 'utf8')
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') return ''
+          throw error
+        }
+      }
+      return checkCommandOf(await read('AGENTS.md'), await read('package.json'))
     },
     syncedFiles: async () => {
       const json = JSON.parse(await readFile(syncList, 'utf8')) as { files?: unknown }
@@ -303,6 +362,7 @@ export async function runLintDraft(
       changed: await deps.diffNames(base),
       synced: await deps.syncedFiles(),
       editedTests: (await deps.editedTests?.(base)) ?? [],
+      checkCommand: (await deps.checkCommand?.()) ?? null,
     })
     if (problems.length === 0) {
       return { code: 0, stdout: `lint-draft · ${file} · the draft is right\n`, stderr: '' }
