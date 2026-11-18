@@ -7,7 +7,7 @@
 #   factory-slot.sh status
 #   factory-slot.sh reap
 #
-# Environment: FACTORY_SLOT_DIR, FACTORY_TMP, FACTORY_CORES, FACTORY_HEAVY_SLOTS,
+# Environment: FACTORY_SLOT_DIR, FACTORY_TMP, FACTORY_RUN_TMP, FACTORY_CORES, FACTORY_HEAVY_SLOTS,
 # FACTORY_WORKER_SLOTS, FACTORY_REAP_GRACE, FACTORY_AGENT, HC_TERMINAL_ID.
 # See docs/factory.md, "Machine budget". Needs only bash, flock, ps, setsid and coreutils;
 # `herdr agent get` and `hc get` (herdr-core) are optional and called by `reap` alone.
@@ -15,6 +15,8 @@ set -u
 
 DIR="${FACTORY_SLOT_DIR:-$HOME/Git/factory/run/slots}"
 TMP_ROOT="${FACTORY_TMP:-$HOME/Git/factory/tmp}"
+# Off /tmp, ~/Git/factory and FACTORY_TMP: `status` reports what runs under FACTORY_TMP as orphan.
+RUN_TMP_ROOT="${FACTORY_RUN_TMP:-$HOME/.cache/micelio-factory/tmp}"
 HEAVY="${FACTORY_HEAVY_SLOTS:-3}"
 WORKERS="${FACTORY_WORKER_SLOTS:-6}"
 GRACE="${FACTORY_REAP_GRACE:-300}"
@@ -77,9 +79,14 @@ cmd_run() {
   ((per >= 1)) || per=1
   local agent="${FACTORY_AGENT:-${HC_TERMINAL_ID:-}}"
   local owner="$pdir/slot-$slot.owner"
+  local run_tmp="$RUN_TMP_ROOT/run-$$"
+  trap 'rm -f "$owner"; rm -rf -- "$run_tmp"' EXIT
+  # A directory with this PID is what a dead wrapper left: the command starts on an empty one.
+  rm -rf -- "$run_tmp"
+  mkdir -p "$run_tmp" || die "cannot create $run_tmp"
 
   # The lock descriptor stays open in the command: the slot is held while any of its processes lives.
-  VITEST_MAX_WORKERS="$per" setsid "$@" &
+  TMPDIR="$run_tmp" VITEST_MAX_WORKERS="$per" setsid "$@" &
   local pid=$!
   {
     echo "pid=$pid"
@@ -90,7 +97,6 @@ cmd_run() {
     echo "command=$*"
   } >"$owner.tmp" && mv "$owner.tmp" "$owner"
   trap 'kill -TERM -- "-$pid" 2>/dev/null' INT TERM
-  trap 'rm -f "$owner"' EXIT
   local rc
   wait "$pid"
   rc=$?
@@ -308,6 +314,12 @@ cmd_reap() {
       ended) rm -f "$f"; echo "released $f" ;;
       unknown) echo "unknown $f" ;;
     esac
+  done
+  # A wrapper that was killed never reached its own cleanup.
+  for f in "$RUN_TMP_ROOT"/run-*; do
+    [[ -d "$f" && "${f##*/run-}" =~ ^[0-9]+$ ]] || continue
+    alive "${f##*/run-}" && continue
+    rm -rf -- "$f" && echo "removed $f"
   done
   return 0
 }
