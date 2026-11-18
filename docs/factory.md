@@ -17,7 +17,7 @@ Eight stages, seven gates, one loop: 1 Planner, gate 0, 2 Issue ready, gate 1, 3
 Five roles and the maintainer, each a prompt in `template/.claude/agents/`: [planner](../template/.claude/agents/planner.md), [master](../template/.claude/agents/master.md), [worker](../template/.claude/agents/worker.md), [reviewer](../template/.claude/agents/reviewer.md) and [verifier](../template/.claude/agents/verifier.md). What each reads, produces and cannot do is in its prompt. The master starts the worker, the reviewer and the verifier, each as a new agent.
 
 - `R.1` The reviewer and the verifier are two agents, not one with two steps: the one that compares numbers must not have read the findings.
-- `R.2` A role loads only its own prompt, so each prompt stays under a word budget counted with `wc -w`; `test/factory-files.test.ts` ("each role prompt stays under its word budget") holds the numbers. Raising one needs the maintainer's approval in the pull request, and is never done to get green (standard, section 13).
+- `R.2` A role loads only its own prompt, so each prompt stays under a word budget; `test/factory-files.test.ts` ("each role prompt stays under its word budget") counts the words and holds the numbers. Raising one needs the maintainer's approval in the pull request, and is never done to get green (standard, section 13).
 
 ## Lanes
 

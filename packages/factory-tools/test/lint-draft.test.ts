@@ -102,6 +102,131 @@ describe('lint-draft', () => {
     expect(lintDraft(section(''), context([]))[0]?.problem).toContain('empty')
     expect(lintDraft('# t\n\n## Tests\n', context([]))[0]?.problem).toContain('no "Instructions')
   })
+
+  const withTests = (...lines: string[]): string =>
+    `# feat: x\n\n## Tests\n\n${lines.join('\n')}\n\n## Instructions that were wrong or missing\n\nNothing\n`
+
+  it('fails a Tests entry that runs wc -w and names the line', () => {
+    const line = '- `wc -w docs/factory.md` exit 0, 5774 words, log `logs/wc.log`'
+    const problems = lintDraft(withTests('- `npm test` exit 0', line), context([]))
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.line).toContain('wc -w docs/factory.md')
+    expect(problems[0]?.problem).toContain('read from the test that holds them')
+    expect(lintDraft(withTests('- `wc -lw a.md` exit 0'), context([]))).toHaveLength(1)
+  })
+
+  it('fails a wc -w command in a fenced block of the Tests section', () => {
+    const draft = withTests('```bash', '# the total', 'cat a.md | wc -w', '```')
+    const problems = lintDraft(draft, context([]))
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.line).toBe('cat a.md | wc -w')
+  })
+
+  it('fails a wc -w that a path, a late flag, a long option or a redirection hides', () => {
+    for (const command of [
+      '/usr/bin/wc -w a.md',
+      './bin/wc -w a.md',
+      'wc a.md -w',
+      'wc --word a.md',
+      'wc -w<a.md',
+    ]) {
+      expect(lintDraft(withTests(`- \`${command}\` exit 0`), context([]))).toHaveLength(1)
+    }
+  })
+
+  it('checks a Tests section under a title that holds the word, and skips plain sentences', () => {
+    const titled = `# feat: Tests that count\n\n## Tests\n\n- \`wc -w a.md\` exit 0\n`
+    expect(
+      lintDraft(`${titled}\n## Instructions that were wrong or missing\n\nNothing\n`, context([]))
+    ).toHaveLength(1)
+    const prose = withTests('Rows that ran `wc -w` were wrong.')
+    expect(lintDraft(prose, context([]))).toEqual([])
+  })
+
+  it('passes a Tests item that only mentions wc -w, and fails one that runs it', () => {
+    for (const mention of [
+      '`git grep -c "wc -w" -- docs/factory.md`: exit 1',
+      '`new check (wc -w in a list item): fails there`',
+      'round 2: `fails a wc -w that a path hides` fails there',
+    ]) {
+      expect(lintDraft(withTests(`- ${mention}`), context([]))).toEqual([])
+    }
+    for (const run of [
+      '`wc -w a.md`: 12',
+      '`cd d && wc -w a.md`',
+      '$(wc -w a.md)',
+      '$ wc -w a.md',
+    ]) {
+      expect(lintDraft(withTests(`- ${run}`), context([]))).toHaveLength(1)
+    }
+  })
+
+  it('stops reading at the next heading: a list item that runs wc -w below it passes', () => {
+    const draft = `${withTests('- `wc -l a.md`: 3')}\n## For review\n\n- \`wc -w a.md\`: 12\n`
+    expect(lintDraft(draft, context([]))).toEqual([])
+  })
+
+  it('ignores quoted text: a wc -w inside quotes is not run', () => {
+    for (const quoted of [
+      "`echo 'a | wc -w'`",
+      '`echo "x; wc -w a.md"`',
+      '`grep "wc -w" a.md | wc -l`',
+    ]) {
+      expect(lintDraft(withTests(`- ${quoted}`), context([]))).toEqual([])
+    }
+  })
+
+  it('splits a line on |, ;, & and $( and checks each command', () => {
+    for (const line of [
+      'a | wc -w',
+      'a; wc -w',
+      'a & wc -w',
+      'a || wc -w',
+      'a && wc -w',
+      'echo $(wc -w a.md)',
+    ]) {
+      expect(lintDraft(withTests('```', line, '```'), context([]))).toHaveLength(1)
+    }
+    expect(lintDraft(withTests('```', 'wc -l a.md | sort; echo wc', '```'), context([]))).toEqual(
+      []
+    )
+  })
+
+  it('skips leading VAR=value words and env before the command', () => {
+    for (const line of [
+      'LC_ALL=C wc -w a.md',
+      'env wc -w a.md',
+      'env LC_ALL=C A=1 /usr/bin/wc -w a.md',
+    ]) {
+      expect(lintDraft(withTests('```', line, '```'), context([]))).toHaveLength(1)
+    }
+    expect(lintDraft(withTests('```', 'LC_ALL=C wc -l a.md', '```'), context([]))).toEqual([])
+  })
+
+  it('does not look inside docker run, xargs or sh -c: the documented limits', () => {
+    for (const line of [
+      'docker run --rm node:22 wc -w a.md',
+      'ls | xargs wc -w',
+      "sh -c 'wc -w a.md'",
+      'sh -c "wc -w a.md"',
+    ]) {
+      expect(lintDraft(withTests('```', line, '```'), context([]))).toEqual([])
+    }
+  })
+
+  it('fails a wc -w whose flag touches the ) of a $( followed by more text', () => {
+    for (const line of ['[ $(cat a.md | wc -w) -le 5 ]', 'n=$(wc -w) && echo $n']) {
+      expect(lintDraft(withTests('```', line, '```'), context([]))).toHaveLength(1)
+    }
+    expect(
+      lintDraft(withTests('```', '[ $(cat a.md | wc -l) -le 5 ]', '```'), context([]))
+    ).toEqual([])
+  })
+
+  it('passes wc -w outside the Tests section and wc -l inside it', () => {
+    const draft = `${withTests('- `wc -l docs/factory.md` exit 0, 200 lines')}\n## For review\n\nOld rows ran wc -w.\n`
+    expect(lintDraft(draft, context([]))).toEqual([])
+  })
 })
 
 describe('runLintDraft', () => {

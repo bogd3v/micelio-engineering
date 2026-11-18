@@ -70,6 +70,65 @@ function isTestFile(path: string): boolean {
   )
 }
 
+/** Where a command ends and the next starts: `|`, `;`, `&` (so `||` and `&&` too) and `$(`. */
+const COMMAND_BREAK = /[|;&]|\$\(/
+
+/** Whether one argument of `wc` is its `-w` flag: alone, in a cluster such as `-lw`, or `--w` to `--words`; a redirection ends it. */
+function isWordsFlag(arg: string): boolean {
+  const flag = arg.replace(/[<>)].*$/, '')
+  if (flag.startsWith('--')) return flag.length > 2 && 'words'.startsWith(flag.slice(2))
+  return /^-[a-zA-Z]*w[a-zA-Z]*$/.test(flag)
+}
+
+/**
+ * Whether `line` runs `wc` with its `-w` flag, wherever the flag is among the arguments. Quoted text
+ * is ignored; the line is split on `|`, `;`, `&` and `$(`; each part skips leading `VAR=value` words
+ * and `env`; the command is `wc`, bare or with a path. It does not look inside `docker run`, `xargs`
+ * or `sh -c` (`packages/factory-tools/README.md`).
+ */
+function runsWordCount(line: string): boolean {
+  const unquoted = line.replace(/"[^"]*"|'[^']*'/g, '""')
+  return unquoted.split(COMMAND_BREAK).some((part) => {
+    const words = (part.split('`')[part.startsWith('`') ? 1 : 0] ?? '')
+      .replace(/^\s*\$\s+/, '')
+      .replace(/\)+\s*$/, '')
+      .split(/\s+/)
+      .filter((word) => word !== '')
+    let i = 0
+    while (i < words.length && (words[i] === 'env' || /^[A-Za-z_]\w*=/.test(words[i] ?? ''))) i++
+    const command = words[i]?.split('/').at(-1)
+    return command === 'wc' && words.slice(i + 1).some(isWordsFlag)
+  })
+}
+
+/**
+ * The list items and the lines of fenced blocks of the "Tests" section, up to the next heading
+ * outside a fenced block; `null` without a section titled exactly "Tests".
+ */
+function testsLines(draft: string): string[] | null {
+  const lines = draft.split('\n')
+  const start = lines.findIndex((line) => /^#{1,6}\s+Tests\s*$/.test(line))
+  if (start === -1) return null
+  const out: string[] = []
+  let fenced = false
+  for (const line of lines.slice(start + 1)) {
+    if (/^\s*(?:```|~~~)/.test(line)) fenced = !fenced
+    else if (fenced) out.push(line.trim())
+    else if (/^#{1,6}\s/.test(line)) break
+    else if (/^\s*(?:[-*+]|\d+[.)])\s/.test(line))
+      out.push(line.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '').trim())
+  }
+  return out.filter((line) => line !== '')
+}
+
+/** One problem for each list item or fenced line of the "Tests" section that runs `wc -w`: its total changes with the locale. */
+function wordCountProblems(draft: string): DraftProblem[] {
+  return (testsLines(draft) ?? []).filter(runsWordCount).map((line) => ({
+    line,
+    problem: `runs wc -w, whose total depends on the machine's locale: the word budgets are read from the test that holds them (test/factory-files.test.ts, test/factory-docs.test.ts)`,
+  }))
+}
+
 /** One problem for each edited test file that "For review" does not answer with `test-edit:` (`G3.3`). */
 function editedTestProblems(draft: string, edited: string[]): DraftProblem[] {
   const answered = new Set(
@@ -90,7 +149,8 @@ function editedTestProblems(draft: string, edited: string[]): DraftProblem[] {
  * Checks the draft: its "Instructions that were wrong or missing" section against the shape of
  * `docs/factory.md`, "The learning loop" ("Nothing" passes), and its "For review" section against
  * the diff. It fails each existing test the
- * diff removes lines from that "For review" does not answer with a `test-edit:` line.
+ * diff removes lines from that "For review" does not answer with a `test-edit:` line, and each list item
+ * or fenced line of the "Tests" section that runs `wc -w`.
  *
  * @returns The lines that break it; an empty list when the section is right.
  */
@@ -98,6 +158,7 @@ export function lintDraft(draft: string, context: DraftContext): DraftProblem[] 
   return [
     ...instructionProblems(draft, context),
     ...editedTestProblems(draft, context.editedTests ?? []),
+    ...wordCountProblems(draft),
   ]
 }
 
