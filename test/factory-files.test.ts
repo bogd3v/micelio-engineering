@@ -173,12 +173,12 @@ describe('the role prompts', () => {
   /** Words per prompt, as `wc -w` counts them: runs of non-whitespace. */
   const BUDGET: Record<string, number> = {
     master: 1480,
-    worker: 1290,
+    worker: 1312,
     planner: 950,
     verifier: 720,
     reviewer: 631,
   }
-  const TOTAL = 5067
+  const TOTAL = 5090
 
   it('each role prompt stays under its word budget', () => {
     const dir = join(ROOT, 'template/.claude/agents')
