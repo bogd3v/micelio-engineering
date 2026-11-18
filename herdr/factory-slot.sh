@@ -10,7 +10,7 @@
 # Environment: FACTORY_SLOT_DIR, FACTORY_TMP, FACTORY_CORES, FACTORY_HEAVY_SLOTS,
 # FACTORY_WORKER_SLOTS, FACTORY_REAP_GRACE, FACTORY_AGENT, HC_TERMINAL_ID.
 # See docs/factory.md, "Machine budget". Needs only bash, flock, ps, setsid and coreutils;
-# `hc` (herdr-core) is called by `reap` alone.
+# `herdr agent get` and `hc get` (herdr-core) are optional and called by `reap` alone.
 set -u
 
 DIR="${FACTORY_SLOT_DIR:-$HOME/Git/factory/run/slots}"
@@ -195,21 +195,73 @@ cmd_status() {
   done
 }
 
-# Prints ended, running or unknown for an agent, asking herdr-core.
-agent_state() {
+# Prints live, gone or unknown for what `herdr agent get` says of an agent.
+herdr_answer() {
   local out rc
+  # herdr writes its agent_not_found answer to stderr, so read both streams. A missing herdr exits 127.
+  out=$(herdr agent get "$1" 2>&1)
+  rc=$?
+  # Any agent_status counts: done and idle have finished a turn and are still live.
+  if ((rc == 0)) && grep -Eq '"agent_status"[[:space:]]*:' <<<"$out"; then
+    echo live
+  elif ((rc == 1)) && grep -Eq '"code"[[:space:]]*:[[:space:]]*"agent_not_found"' <<<"$out"; then
+    echo gone
+  else
+    echo unknown
+  fi
+}
+
+# Prints the value of key $2 in the outermost object of the JSON in $1, and nothing without one.
+# The status of the app nests a "state" of its own, and a string may hold a brace: read token by token.
+top_level_value() {
+  local depth=0 before="" previous="" token
+  while IFS= read -r token; do
+    if ((depth == 1)) && [[ "$before" == "\"$2\"" && "$previous" == : ]]; then
+      printf '%s\n' "$token"
+      return
+    fi
+    case "$token" in
+      '{') ((depth += 1)) ;;
+      '}') ((depth -= 1)) ;;
+    esac
+    before=$previous
+    previous=$token
+  done < <(grep -aoE '"([^"\\]|\\.)*"|[][{}:,]|[^][{}:,"[:space:]]+' <<<"$1")
+}
+
+# Prints live, gone or unknown for what `hc get --json` says of a terminal.
+hc_answer() {
+  local out rc state
   command -v hc >/dev/null 2>&1 || { echo unknown; return; }
   # hc writes its not_found answer to stderr, so read both streams.
   out=$(hc get "$1" --json 2>&1)
   rc=$?
-  # Top-level state only: the nested status of the app has a "state" of its own, but no "finished_ms".
-  if ((rc == 0)) && grep -Eq '"state"[[:space:]]*:[[:space:]]*"finished"' <<<"$out" &&
-    grep -Eq '"finished_ms"[[:space:]]*:[[:space:]]*[0-9]' <<<"$out"; then
-    echo ended
-  elif ((rc == 3)) && grep -Eq '"kind"[[:space:]]*:[[:space:]]*"not_found"' <<<"$out"; then
-    echo ended
-  elif ((rc == 0)) && grep -Eq '"state"[[:space:]]*:[[:space:]]*"[a-z_]+"' <<<"$out"; then
+  if ((rc == 3)) && grep -Eq '"kind"[[:space:]]*:[[:space:]]*"not_found"' <<<"$out"; then
+    echo gone
+    return
+  fi
+  ((rc == 0)) || { echo unknown; return; }
+  state=$(top_level_value "$out" state)
+  if [[ "$state" == '"finished"' ]]; then
+    # Finished with no numeric finished_ms is an answer this script cannot read.
+    if [[ "$(top_level_value "$out" finished_ms)" =~ ^[0-9]+$ ]]; then echo gone; else echo unknown; fi
+  elif [[ "$state" =~ ^\"[a-z_]+\"$ ]]; then
+    echo live
+  else
+    echo unknown
+  fi
+}
+
+# Prints ended, running or unknown for an agent. Either tool listing it makes it running; it has
+# ended only when both herdr and hc say it is gone; any other pair is unknown.
+agent_state() {
+  local from_herdr from_hc
+  from_herdr=$(herdr_answer "$1")
+  from_hc=$(hc_answer "$1")
+  if [[ "$from_herdr" == live || "$from_hc" == live ]]; then
     echo running
+  elif [[ "$from_herdr" == gone && "$from_hc" == gone ]]; then
+    echo ended
   else
     echo unknown
   fi
@@ -230,7 +282,7 @@ cmd_reap() {
   declare -A state
   local f agent pid st now
   now=$(date +%s)
-  # Asks hc once per agent: the answer is cached in the shell, not in a subshell.
+  # Asks herdr and hc once per agent: the answer is cached in the shell, not in a subshell.
   lookup() { [[ -n "${state[$1]:-}" ]] || state[$1]=$(agent_state "$1"); }
 
   for f in "$DIR"/heavy/slot-*.owner; do

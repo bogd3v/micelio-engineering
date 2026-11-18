@@ -18,7 +18,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const SCRIPT = join(ROOT, 'herdr/factory-slot.sh')
 
-/** Tools the script and the test commands need, linked into a PATH that has no `hc`. */
+/** Tools the script and the test commands need, linked into a PATH that has no `hc` or `herdr`. */
 const TOOLS = [
   'bash',
   'sh',
@@ -113,6 +113,51 @@ function stubHc(dir: string, exit: number, body: string): void {
   const file = join(dir, 'hc')
   writeFileSync(file, `#!/bin/sh\necho '${body}'${exit === 0 ? '' : ' >&2'}\nexit ${exit}\n`)
   chmodSync(file, 0o755)
+}
+
+/**
+ * A stub `herdr agent get <agent>` as herdr 0.9.5 answers: a success on stdout with exit 0, an
+ * error as JSON on stderr with exit 1. Any other command line exits 64, so a script that asks
+ * something else, or about another agent, gets no answer it can read.
+ */
+function stubHerdr(dir: string, agent: string, exit: number, body: string): void {
+  mkdirSync(dir, { recursive: true })
+  const file = join(dir, 'herdr')
+  writeFileSync(
+    file,
+    `#!/bin/sh\nif [ "$*" != "agent get ${agent}" ]; then echo "unexpected: $*" >&2; exit 64; fi\n` +
+      `echo '${body}'${exit === 0 ? '' : ' >&2'}\nexit ${exit}\n`
+  )
+  chmodSync(file, 0o755)
+}
+
+/** A directory of links to `TOOLS`: a PATH of it alone reaches neither the host's `hc` nor its `herdr`. */
+function linkedTools(): string {
+  const tools = join(root, 'tools')
+  if (existsSync(tools)) return tools
+  mkdirSync(tools)
+  for (const tool of TOOLS) {
+    const found = spawnSync('sh', ['-c', `command -v ${tool}`], {
+      encoding: 'utf8',
+    }).stdout.trim()
+    if (found !== '') symlinkSync(found, join(tools, tool))
+  }
+  return tools
+}
+
+interface Answer {
+  exit: number
+  body: string
+}
+
+/** A PATH with the given stubs and the linked tools only; a tool left out is missing. */
+function pathWith(agent: string, answers: { herdr?: Answer; hc?: Answer }): string {
+  const bin = mkdtempSync(join(root, 'bin-'))
+  if (answers.herdr !== undefined) {
+    stubHerdr(bin, agent, answers.herdr.exit, answers.herdr.body)
+  }
+  if (answers.hc !== undefined) stubHc(bin, answers.hc.exit, answers.hc.body)
+  return `${bin}:${linkedTools()}`
 }
 
 function groupAlive(pgid: number): boolean {
@@ -277,58 +322,176 @@ describe('factory-slot.sh reap', () => {
     body: '{"finished_ms":1,"state":"finished","status":{"state":"working"}}',
   }
   const notFound = { exit: 3, body: '{"error":{"kind":"not_found"}}' }
+  const hcLive = { exit: 0, body: '{"finished_ms":null,"state":"live","status":{"state":"idle"}}' }
+  const listed = (status: string): Answer => ({
+    exit: 0,
+    body: `{"id":"cli:agent:get","result":{"agent":{"agent_status":"${status}","pane_id":"w4:pE"},"type":"agent_info"}}`,
+  })
+  const agentNotFound = {
+    exit: 1,
+    body: '{"error":{"code":"agent_not_found","message":"agent target not found"},"id":"cli:agent:get"}',
+  }
+  const serverDown = {
+    exit: 1,
+    body: '{"error":{"code":"server_not_running","message":"no herdr server is running"},"id":"cli:agent:get"}',
+  }
+  const owned = (): string => join(root, 'slots/heavy/slot-1.owner')
+  const leaseOf = (agent: string): string => join(root, `slots/workers/lease-${agent}`)
 
-  async function startOwned(agent: string) {
-    const run = start(['run', ...holder('a')], { FACTORY_AGENT: agent })
+  async function startOwned(agent: string, extra: NodeJS.ProcessEnv = {}) {
+    const run = start(['run', ...holder('a')], { FACTORY_AGENT: agent, ...extra })
     await until(() => existsSync(join(root, 'slots/heavy/slot-1.owner')), 'the owner file')
     await until(() => existsSync(upOf('a')), 'the command')
     return { run, pgid: Number(owner()['pgid']) }
   }
 
-  it('reap kills the process group of a slot whose agent hc reports finished or not found', async () => {
+  it('reap leaves a slot and a lease alone while herdr lists the agent, though hc answers not_found', async () => {
+    const { run, pgid } = await startOwned('worker-5')
+    expect(slot(['acquire', '--pool', 'workers', '--agent', 'worker-5']).code).toBe(0)
+    const path = pathWith('worker-5', { herdr: listed('working'), hc: notFound })
+    const r = slot(['reap'], {}, path)
+    expect(r.code).toBe(0)
+    expect(r.out).toBe('')
+    expect(groupAlive(pgid)).toBe(true)
+    expect(existsSync(owned())).toBe(true)
+    expect(existsSync(leaseOf('worker-5'))).toBe(true)
+    release('a')
+    await run.exited
+  })
+
+  it('reap leaves a slot alone while herdr lists an agent whose status is done', async () => {
+    const { run, pgid } = await startOwned('worker-5')
+    for (const status of ['done', 'idle']) {
+      const path = pathWith('worker-5', { herdr: listed(status), hc: finished })
+      expect(slot(['reap'], {}, path).out).toBe('')
+      expect(groupAlive(pgid)).toBe(true)
+      expect(existsSync(owned())).toBe(true)
+    }
+    release('a')
+    await run.exited
+  })
+
+  it('reap leaves a slot alone while hc lists its terminal, though herdr answers agent_not_found', async () => {
+    const { run, pgid } = await startOwned('', { HC_TERMINAL_ID: 't42' })
+    expect(owner()['agent']).toBe('t42')
+    const path = pathWith('t42', { herdr: agentNotFound, hc: hcLive })
+    expect(slot(['reap'], {}, path).out).toBe('')
+    expect(groupAlive(pgid)).toBe(true)
+    expect(existsSync(owned())).toBe(true)
+    release('a')
+    await run.exited
+  })
+
+  it('reap counts an agent as running when one tool lists it, whatever the other answers', async () => {
+    const { run, pgid } = await startOwned('worker-5')
+    const broken = { exit: 1, body: 'boom' }
+    const pairs: { herdr?: Answer; hc?: Answer }[] = [
+      { herdr: listed('working') },
+      { herdr: listed('working'), hc: broken },
+      { hc: hcLive },
+      { herdr: serverDown, hc: hcLive },
+      { herdr: broken, hc: hcLive },
+    ]
+    for (const pair of pairs) {
+      expect(slot(['reap'], {}, pathWith('worker-5', pair)).out).toBe('')
+      expect(groupAlive(pgid)).toBe(true)
+      expect(existsSync(owned())).toBe(true)
+    }
+    release('a')
+    await run.exited
+  })
+
+  it('reap kills the process group of a slot whose agent neither herdr nor hc lists', async () => {
     for (const answer of [finished, notFound]) {
       const { run, pgid } = await startOwned('worker-5')
-      const bin = join(root, 'bin')
-      stubHc(bin, answer.exit, answer.body)
-      const r = slot(['reap'], {}, `${bin}:${env['PATH']}`)
+      const path = pathWith('worker-5', { herdr: agentNotFound, hc: answer })
+      const r = slot(['reap'], {}, path)
       expect(r.code).toBe(0)
+      expect(r.out).toContain(`killed ${owned()}`)
       await run.exited
       expect(groupAlive(pgid)).toBe(false)
-      expect(existsSync(join(root, 'slots/heavy/slot-1.owner'))).toBe(false)
+      expect(existsSync(owned())).toBe(false)
       // the next round needs the holder's marker files gone
       rmSync(upOf('a'), { force: true })
     }
   })
 
+  it('reap releases a lease whose agent neither herdr nor hc lists', () => {
+    for (const answer of [finished, notFound]) {
+      expect(slot(['acquire', '--pool', 'workers', '--agent', 'worker-3']).code).toBe(0)
+      const path = pathWith('worker-3', { herdr: agentNotFound, hc: answer })
+      const r = slot(['reap'], {}, path)
+      expect(r.code).toBe(0)
+      expect(r.out).toContain(`released ${leaseOf('worker-3')}`)
+      expect(existsSync(leaseOf('worker-3'))).toBe(false)
+    }
+  })
+
+  it('reap prints unknown and leaves a slot alone when herdr is missing or answers another error', async () => {
+    const { run, pgid } = await startOwned('worker-5')
+    expect(slot(['acquire', '--pool', 'workers', '--agent', 'worker-5']).code).toBe(0)
+    const answers: (Answer | undefined)[] = [
+      undefined,
+      serverDown,
+      { exit: 1, body: 'boom' },
+      { exit: 2, body: agentNotFound.body },
+      { exit: 0, body: 'not json' },
+      { exit: 0, body: agentNotFound.body },
+      { exit: 1, body: listed('working').body },
+    ]
+    for (const herdr of answers) {
+      for (const hc of [notFound, finished]) {
+        const path = pathWith('worker-5', { ...(herdr === undefined ? {} : { herdr }), hc })
+        const r = slot(['reap'], {}, path)
+        expect(r.out).toContain(`unknown ${owned()}`)
+        expect(r.out).toContain(`unknown ${leaseOf('worker-5')}`)
+        expect(groupAlive(pgid)).toBe(true)
+        expect(existsSync(owned())).toBe(true)
+        expect(existsSync(leaseOf('worker-5'))).toBe(true)
+      }
+    }
+    release('a')
+    await run.exited
+  })
+
+  it('reap prints unknown and leaves a slot alone when hc is missing, though herdr answers agent_not_found', async () => {
+    const { run, pgid } = await startOwned('worker-5')
+    const r = slot(['reap'], {}, pathWith('worker-5', { herdr: agentNotFound }))
+    expect(r.out).toContain(`unknown ${owned()}`)
+    expect(groupAlive(pgid)).toBe(true)
+    expect(existsSync(owned())).toBe(true)
+    release('a')
+    await run.exited
+  })
+
   it('reap leaves a slot alone when hc cannot say whether its agent runs', async () => {
     const { run, pgid } = await startOwned('worker-5')
-    const owned = join(root, 'slots/heavy/slot-1.owner')
 
-    // hc missing from PATH
-    const tools = join(root, 'tools')
-    mkdirSync(tools)
-    for (const tool of TOOLS) {
-      const found = spawnSync('sh', ['-c', `command -v ${tool}`], {
-        encoding: 'utf8',
-      }).stdout.trim()
-      if (found !== '') symlinkSync(found, join(tools, tool))
-    }
-    const missing = slot(['reap'], {}, tools)
+    // neither tool on PATH
+    const missing = slot(['reap'], {}, pathWith('worker-5', {}))
     expect(missing.out).toContain('unknown')
     expect(groupAlive(pgid)).toBe(true)
-    expect(existsSync(owned)).toBe(true)
+    expect(existsSync(owned())).toBe(true)
 
     // hc exits 1
-    const bin = join(root, 'bin')
-    stubHc(bin, 1, 'boom')
-    const broken = slot(['reap'], {}, `${bin}:${env['PATH']}`)
+    const broken = slot(
+      ['reap'],
+      {},
+      pathWith('worker-5', { herdr: agentNotFound, hc: { exit: 1, body: 'boom' } })
+    )
     expect(broken.out).toContain('unknown')
     expect(groupAlive(pgid)).toBe(true)
-    expect(existsSync(owned)).toBe(true)
+    expect(existsSync(owned())).toBe(true)
 
     // hc exits 0 with a state that is not finished: the agent runs
-    stubHc(bin, 0, '{"finished_ms":null,"state":"live","status":{"state":"finished"}}')
-    const running = slot(['reap'], {}, `${bin}:${env['PATH']}`)
+    const running = slot(
+      ['reap'],
+      {},
+      pathWith('worker-5', {
+        herdr: agentNotFound,
+        hc: { exit: 0, body: '{"finished_ms":null,"state":"live","status":{"state":"finished"}}' },
+      })
+    )
     expect(running.out).not.toContain('unknown')
     expect(groupAlive(pgid)).toBe(true)
 
@@ -336,23 +499,99 @@ describe('factory-slot.sh reap', () => {
     await run.exited
   })
 
+  it('reap prints unknown and leaves a slot alone when hc answers finished without a numeric finished_ms', async () => {
+    const { run, pgid } = await startOwned('worker-5')
+    expect(slot(['acquire', '--pool', 'workers', '--agent', 'worker-5']).code).toBe(0)
+    const bodies = [
+      '{"finished_ms":null,"state":"finished","status":{"state":"working"}}',
+      '{"state":"finished","status":{"state":"working"}}',
+      '{"finished_ms":"1","state":"finished"}',
+      // a finished_ms that belongs to the nested status is not the terminal's
+      '{"finished_ms":null,"state":"finished","status":{"finished_ms":1,"state":"finished"}}',
+    ]
+    for (const body of bodies) {
+      const path = pathWith('worker-5', { herdr: agentNotFound, hc: { exit: 0, body } })
+      const r = slot(['reap'], {}, path)
+      expect(r.out).toContain(`unknown ${owned()}`)
+      expect(r.out).toContain(`unknown ${leaseOf('worker-5')}`)
+      expect(groupAlive(pgid)).toBe(true)
+      expect(existsSync(owned())).toBe(true)
+      expect(existsSync(leaseOf('worker-5'))).toBe(true)
+    }
+    release('a')
+    await run.exited
+  })
+
+  it('reap prints unknown when the exit code of hc does not go with its answer', async () => {
+    const { run, pgid } = await startOwned('worker-5')
+    const answers: Answer[] = [
+      { exit: 1, body: finished.body },
+      { exit: 3, body: finished.body },
+      { exit: 2, body: hcLive.body },
+      { exit: 1, body: notFound.body },
+      { exit: 0, body: notFound.body },
+      { exit: 3, body: '{"error":{"kind":"timeout"}}' },
+    ]
+    for (const hc of answers) {
+      const r = slot(['reap'], {}, pathWith('worker-5', { herdr: agentNotFound, hc }))
+      expect(r.out).toContain(`unknown ${owned()}`)
+      expect(groupAlive(pgid)).toBe(true)
+      expect(existsSync(owned())).toBe(true)
+    }
+    release('a')
+    await run.exited
+  })
+
+  it('reap reads the state of the terminal, not the one nested in its status', async () => {
+    const { run, pgid } = await startOwned('worker-5')
+    const live = [
+      '{"finished_ms":null,"state":"live","status":{"finished_ms":1,"state":"finished"}}',
+      '{"status":{"finished_ms":1,"state":"finished"},"state":"live","finished_ms":null}',
+      '{"title":"a } \\" { b","finished_ms":null,"state":"live","status":{"state":"finished"}}',
+      '{\n  "finished_ms": null,\n  "state": "live",\n  "status": { "state": "finished" }\n}',
+    ]
+    for (const body of live) {
+      const path = pathWith('worker-5', { herdr: agentNotFound, hc: { exit: 0, body } })
+      expect(slot(['reap'], {}, path).out).toBe('')
+      expect(groupAlive(pgid)).toBe(true)
+      expect(existsSync(owned())).toBe(true)
+    }
+    // only a nested state says nothing about the terminal
+    const nested = '{"finished_ms":1,"status":{"finished_ms":1,"state":"finished"}}'
+    const path = pathWith('worker-5', { herdr: agentNotFound, hc: { exit: 0, body: nested } })
+    expect(slot(['reap'], {}, path).out).toContain(`unknown ${owned()}`)
+    expect(groupAlive(pgid)).toBe(true)
+    release('a')
+    await run.exited
+  })
+
+  it('reap counts a finished terminal as gone wherever its keys come in the answer', () => {
+    const bodies = [
+      '{"status":{"state":"working"},"state":"finished","finished_ms":1}',
+      '{\n  "finished_ms": 1,\n  "state": "finished",\n  "status": { "state": "working" }\n}',
+    ]
+    for (const body of bodies) {
+      expect(slot(['acquire', '--pool', 'workers', '--agent', 'worker-3']).code).toBe(0)
+      const path = pathWith('worker-3', { herdr: agentNotFound, hc: { exit: 0, body } })
+      expect(slot(['reap'], {}, path).out).toContain(`released ${leaseOf('worker-3')}`)
+      expect(existsSync(leaseOf('worker-3'))).toBe(false)
+    }
+  })
+
   it('reap removes the owner file of a dead PID', async () => {
     const { run, pgid } = await startOwned('')
     process.kill(-pgid, 'SIGKILL')
     await run.exited
     // The wrapper removes its file at the end; plant it again as a crash would leave it.
-    const owned = join(root, 'slots/heavy/slot-1.owner')
-    writeFileSync(owned, `pid=${pgid}\npgid=${pgid}\nagent=\nstart=0\ncommand=x\n`)
-    const r = slot(['reap'])
+    writeFileSync(owned(), `pid=${pgid}\npgid=${pgid}\nagent=\nstart=0\ncommand=x\n`)
+    const r = slot(['reap'], {}, pathWith('', {}))
     expect(r.out).toContain('removed')
-    expect(existsSync(owned)).toBe(false)
+    expect(existsSync(owned())).toBe(false)
   })
 
   it('reap keeps a lease younger than the grace period', () => {
-    const bin = join(root, 'bin')
-    stubHc(bin, 3, '{"error":{"kind":"not_found"}}')
-    const path = `${bin}:${env['PATH']}`
-    const lease = join(root, 'slots/workers/lease-worker-3')
+    const path = pathWith('worker-3', { herdr: agentNotFound, hc: notFound })
+    const lease = leaseOf('worker-3')
     slot(['acquire', '--pool', 'workers', '--agent', 'worker-3'])
     const kept = slot(['reap'], { FACTORY_REAP_GRACE: '300' }, path)
     expect(kept.code).toBe(0)
@@ -392,9 +631,11 @@ describe('factory-slot.sh status', () => {
     expect(listing).toMatch(/^heavy\t1\tworker-1\t\d+\t.*\talive$/m)
 
     // reap never kills an orphan
-    const hcDir = join(root, 'bin')
-    stubHc(hcDir, 3, '{"error":{"kind":"not_found"}}')
-    slot(['reap'], {}, `${hcDir}:${env['PATH']}`)
+    const gone = {
+      herdr: { exit: 1, body: '{"error":{"code":"agent_not_found"}}' },
+      hc: { exit: 3, body: '{"error":{"kind":"not_found"}}' },
+    }
+    slot(['reap'], {}, pathWith('worker-1', gone))
     expect(() => process.kill(pid, 0)).not.toThrow()
     release('a')
     await run.exited

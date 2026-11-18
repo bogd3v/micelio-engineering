@@ -29,7 +29,7 @@ A green canary is posted as the five `Canary |` lines of `RUN.md`, each ending `
 1. Worker: `worker-<N>`, in `../wt-<N>` (branch `<type>/factory-<N>` from `origin/main`); sonnet, opus after two failed rounds or for contracts, security or concurrency (`M.4`).
 2. Reviewer: `reviewer-<N>`, `reviewer-<N>-r<K>` for round K ≥ 2, in the worker's worktree; opus, sonnet for a reread (`G3.5`). Verifier: `verifier-<N>`, `verifier-<N>-r<K>`, in a clean copy it builds; sonnet. Scribe: `scribe`, in `../wt-scribe`; sonnet.
 3. `<N>` is the issue number. Names match `[a-z][a-z0-9_-]{0,31}` and are unique among live agents.
-4. The lease (`B.2`) uses the agent's name in herdr-core (`hc run --name <name>`). Before each worker: `herdr/factory-slot.sh reap`, then `herdr/factory-slot.sh acquire --pool workers --agent worker-<N>`; on exit 75 the issue waits. When the issue leaves the pipeline: `herdr/factory-slot.sh release --agent worker-<N>` and `docker compose -p <project> down -v`. Start workers with `nice -n 10`; reviewers and verifiers keep normal priority so the gates run first. `factory-slot.sh status` shows slots, leases and any `orphan` (`B.3`).
+4. The lease (`B.2`) uses the agent's name in herdr (`herdr agent start <name>`). Before each worker: `herdr/factory-slot.sh reap`, then `herdr/factory-slot.sh acquire --pool workers --agent worker-<N>`; on exit 75 the issue waits. When the issue leaves the pipeline: `herdr/factory-slot.sh release --agent worker-<N>` and `docker compose -p <project> down -v`. Start workers with `nice -n 10`; reviewers and verifiers keep normal priority so the gates run first. `factory-slot.sh status` shows slots, leases and any `orphan` (`B.3`).
 
 ## The host's runtime
 
