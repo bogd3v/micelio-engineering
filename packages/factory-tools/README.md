@@ -156,6 +156,16 @@ or a file cannot be read.
   and is not under a `fixtures/` directory. A new test file and a test the diff only adds to never
   fail. The line only tells the reviewer where to look: the reviewer still decides whether the issue
   asks for the edit.
+- A list item or a line inside a fenced block of the section titled exactly "Tests" (up to the next
+  heading) that runs `wc` with its `-w` flag fails: `wc -w`, `wc -lw`, `wc a.md -w`, `wc --words`
+  (or a shorter `--w`), `wc -w<a.md`, and `wc` given by a path such as `/usr/bin/wc`. The total
+  depends on the machine's locale. The word budgets are read from the test that holds them,
+  `test/factory-files.test.ts` and `test/factory-docs.test.ts`. What counts as running it: the rule
+  ignores quoted text, splits the line on `|`, `;`, `&` and `$(`, skips leading `VAR=value` words and
+  `env`, and fails when the command is `wc` with a word-count flag. A line that only mentions
+  `wc -w` (in quotes, or after other words), `wc -l`, a plain sentence and a `wc -w` outside that
+  section pass. Its limits: it does not look inside `docker run`, `xargs` or `sh -c`, so a `wc -w`
+  they run passes.
 
 It does not judge whether a "Nothing" is true.
 
