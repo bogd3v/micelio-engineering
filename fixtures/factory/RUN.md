@@ -2,7 +2,7 @@
 
 Five runs prove that the master's gates catch what they are meant to catch. Runs 1 to 3 need real agents, started by the master in Herdr (`herdr/master.md`) by hand or with `fixtures/factory/run-canary.sh`, so the pull request that added these fixtures did not run them; runs 4 and 5 run a command of `packages/factory-tools/` and need none. The master runs them, saves each transcript under `fixtures/factory/transcripts/` and posts the correction-log lines, which the `scribe` step then appends to `docs/factory-log.md`.
 
-A planted defect is the only proof that a reviewer or a verifier catches it, so the agents must not be told where it is. The maintainer also picks one real issue of another milestone, and the master runs the same gates on it; its transcript goes next to these.
+A planted defect is the only proof that a reviewer or a verifier catches it, so the agents must not be told where it is. The maintainer also picks one real issue of another milestone, and the master runs the same gates on it; its transcript goes next to these. The first of these, on a Rust repository, is the [Rust pilot](#rust-pilot) at the end of this file.
 
 `test/factory-fixtures.test.ts` (part of `npm run check`) keeps the numbers below true: it builds both scratch repositories and runs their tests.
 
@@ -133,3 +133,22 @@ Canary | <date> | verify-draft mismatch found: yes|no (lane-normal)
 ```
 
 A `no` makes the canary red: the master posts `Canary | <date> | red | <what was missed>` on the epic. The canary posts no `factory-log |` line on #39, which would add corrections to a closed milestone on every run; its record is the epic's comment. Its stripped transcripts go in `fixtures/factory/transcripts/` as for the runs above.
+
+## Rust pilot
+
+The gates have been proven on Node repositories; this run takes one real issue of a Rust repository through gates 1 to 4 on the stack the Rust profile names. It needs real agents, started by the master in Herdr, and it is not repeated by the canary. The repository is [bogd3v/bruma](https://github.com/bogd3v/bruma), a Rust workspace with a second target, `wasm32-unknown-unknown`, and no Docker image; the file that holds its agent instructions (linked below) names what stands in for it.
+
+The pilot ran on issue [bogd3v/bruma#3](https://github.com/bogd3v/bruma/issues/3) (`feat(data)`: inverse distance weighting at one point), lane `full`. Its base commit is `3f0f4a3fa175be83b62433f9a2270b67a990b056`, its head `4ecdddd4ca14aca1e266b13f262ce8640c737e51`, and it was merged in [bogd3v/bruma#7](https://github.com/bogd3v/bruma/pull/7) at `bffad79a75d8811a9d3f2a1233b29b58443f5570`. Files of Bruma are named here only as links at the base commit, such as [scripts/check.sh](https://github.com/bogd3v/bruma/blob/3f0f4a3fa175be83b62433f9a2270b67a990b056/scripts/check.sh) and [the agent instructions](https://github.com/bogd3v/bruma/blob/3f0f4a3fa175be83b62433f9a2270b67a990b056/AGENTS.md), so that the test of this file reads only files of this repository.
+
+The packet (`~/.cache/factory/packets/b3/`): the worktree on the pilot's branch, the issue, `decisions.md` saying `None`, the worker's draft and logs, then `diff.patch`, and for each later gate the agent's `summary.md` and `report.md`. The agents are new ones, started as `herdr/master.md` says, and are told the issue as [bogd3v/bruma#3](https://github.com/bogd3v/bruma/issues/3), never this file.
+
+The commands the pilot's draft reports, each run through `herdr/factory-slot.sh run --` where it is the check command or a build: `cargo test -p bruma-data --locked idw`, the check command of Bruma's [agent instructions](https://github.com/bogd3v/bruma/blob/3f0f4a3fa175be83b62433f9a2270b67a990b056/AGENTS.md) (the script linked above), `trunk build --release` in the web crate, and `grep -c IDW` on the decisions file, run on the branch and on `main` (it prints 1 and 0). The draft says the MSRV run was not made: the worker did not run `cargo +1.87 test --workspace --locked`.
+
+Expected:
+
+- Gate 2: the worker's check passes (`bruma-data` 10 passed, 0 failed) and its draft shows, for each guard and branch of the new function, a test that fails without it.
+- Gate 3, round 1: a Pass verdict with 0 Blocking, 0 Important and 5 Suggestion.
+- Gate 4, round 1: the first verifier gave a Pass verdict with 0 mismatches without running the MSRV job, and the master repeated the gate with a second verifier, which also gave a Pass verdict without it. The master sent the second back with the message that `G4.4` was not met because the run was not tried; it then ran `cargo +1.87 test --workspace --locked` on the clean copy (exit 0; `bruma-data` 10 passed, 0 failed; `bruma-render` 3 passed, 0 failed) and kept the Pass verdict with 0 mismatches. So `G4.4`, which asks that everything the draft says was not verified is tried, was met only after the master's message, and the pilot found no instruction to change for it.
+- The worker's "Instructions that were wrong or missing" says `Nothing`, so the pilot opens no issue about a synced file or the Rust profile.
+
+The transcripts, stripped as step 3 of "Before every run" says, are in `fixtures/factory/transcripts/`: `transcripts/rust-pilot-worker.md`, `transcripts/rust-pilot-reviewer.md`, `transcripts/rust-pilot-verifier-1.md` and `transcripts/rust-pilot-verifier-2.md`. The gate 3 and gate 4 reports are posted on issue #168.
