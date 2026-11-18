@@ -177,6 +177,11 @@ export interface LintLaneDeps {
   readIssue: (ref: IssueRef) => Promise<Issue>
   /** Reads a file, relative to the working directory; rejects with `ENOENT` when it is missing. */
   readText: (path: string) => Promise<string>
+  /**
+   * The `## Lanes` block of the `AGENTS.md` of a repository on its default branch, for the target
+   * form; `null` when there is none.
+   */
+  readLanes: (repo: string) => Promise<LaneGlobs | null>
   /** The paths of `git diff --name-only <base>` and the untracked files that git does not ignore. */
   diffNames: (base: string) => Promise<string[]>
 }
@@ -190,7 +195,30 @@ export interface LintLaneResult {
 
 const exec = promisify(execFile)
 
-/** The real dependencies: `gh issue view`, the disk and git in the working directory. */
+/**
+ * The `## Lanes` block of the `AGENTS.md` of `repo` on its default branch, read with
+ * `gh api repos/<repo>/contents/AGENTS.md`. `lint-lane` and `lint-issue` both read lanes through it.
+ *
+ * @returns `null` when there is no `AGENTS.md`, or none with a `## Lanes` block.
+ * @throws `Error` when `gh` fails for any reason but a 404.
+ */
+export async function readRepoLanes(repo: string): Promise<LaneGlobs | null> {
+  try {
+    const { stdout } = await exec('gh', [
+      'api',
+      '-H',
+      'Accept: application/vnd.github.raw',
+      `repos/${repo}/contents/AGENTS.md`,
+    ])
+    return parseLanes(stdout)
+  } catch (error) {
+    const stderr = error instanceof Error && 'stderr' in error ? String(error.stderr) : ''
+    if (/HTTP 404/.test(stderr)) return null
+    throw error
+  }
+}
+
+/** The real dependencies: `gh issue view`, `gh api` for the lanes, the disk and git in the working directory. */
 export function createDeps(cwd: string = process.cwd()): LintLaneDeps {
   return {
     readIssue: async (ref) => {
@@ -205,6 +233,7 @@ export function createDeps(cwd: string = process.cwd()): LintLaneDeps {
       ])
       return issueFromGh(JSON.parse(stdout), ref.repo)
     },
+    readLanes: readRepoLanes,
     readText: (path) => readFile(path, 'utf8'),
     diffNames: async (base) => {
       const lines = async (args: string[]): Promise<string[]> =>
@@ -249,9 +278,9 @@ async function readGlobs(deps: LintLaneDeps): Promise<LaneGlobs | null> {
 }
 
 /**
- * `factory-tools lint-lane`: sets an issue's lane, or checks a diff against a lane. Run in the
- * checkout of the issue's repository, whose `AGENTS.md` holds the `## Lanes` block. It has no
- * option to force a lane.
+ * `factory-tools lint-lane`: sets an issue's lane, or checks a diff against a lane. The target
+ * form reads the `## Lanes` block of the issue's repository with `gh api`; `--file` and `--diff`
+ * read the `AGENTS.md` of the working directory. It has no option to force a lane.
  *
  * @param argv - The arguments after the program name, starting with `lint-lane`.
  */
@@ -298,14 +327,17 @@ export async function runLintLane(
       return usage('give one issue, <owner/repo#n> or --file <path>')
     }
     let issue: Issue
+    let globs: LaneGlobs | null
     if (file !== undefined) {
       issue = issueFromMarkdown(await deps.readText(file), null)
+      globs = await readGlobs(deps)
     } else {
       const ref = parseTarget(positional[0] ?? '')
       if (ref === null) return usage(`"${positional[0]}" is not <owner/repo#n>`)
       issue = await deps.readIssue(ref)
+      globs = await deps.readLanes(ref.repo)
     }
-    const result = issueLane(issue.title, issue.body, await readGlobs(deps))
+    const result = issueLane(issue.title, issue.body, globs)
     return {
       code: 0,
       stdout: `lane: ${result.lane}\n${result.reasons.map((line) => `- ${line}\n`).join('')}`,

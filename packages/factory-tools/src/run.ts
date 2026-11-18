@@ -5,7 +5,7 @@ import { promisify } from 'node:util'
 import { errorLine } from './errors.js'
 import { OWNER_REPO, issueFromGh, issueFromMarkdown, parseTarget } from './issue.js'
 import type { Issue, IssueRef } from './issue.js'
-import { issueLane, parseLanes } from './lane.js'
+import { issueLane, parseLanes, readRepoLanes } from './lane.js'
 import type { LaneGlobs } from './lane.js'
 import { metrics } from './metrics.js'
 import { renderMetrics } from './render.js'
@@ -188,21 +188,7 @@ export async function repoRoot(cwd: string): Promise<string> {
  * @throws `Error` when `gh` fails for any reason but a 404.
  */
 async function defaultReadLanes(repo: string | null): Promise<LaneGlobs | null> {
-  if (repo !== null) {
-    try {
-      const { stdout } = await exec('gh', [
-        'api',
-        '-H',
-        'Accept: application/vnd.github.raw',
-        `repos/${repo}/contents/AGENTS.md`,
-      ])
-      return parseLanes(stdout)
-    } catch (error) {
-      const stderr = error instanceof Error && 'stderr' in error ? String(error.stderr) : ''
-      if (/HTTP 404/.test(stderr)) return null
-      throw error
-    }
-  }
+  if (repo !== null) return readRepoLanes(repo)
   let root = process.cwd()
   try {
     root = await repoRoot(root)

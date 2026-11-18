@@ -465,9 +465,11 @@ change in a `0.y` release (standard, section 7).
 ## `lint-lane`
 
 Sets an issue's lane at gate 1 and checks the diff against it at gate 2 (ADR-0003, D2 and D3,
-`docs/adr/0003-route-each-issue-through-a-lane-set-by-its-risk.md`). Run it in the checkout of the
-issue's repository: the globs come from the `## Lanes` block of the `AGENTS.md` in the current
-directory.
+`docs/adr/0003-route-each-issue-through-a-lane-set-by-its-risk.md`). The issue form reads the
+`## Lanes` block of the `AGENTS.md` of the issue's repository on its default branch with `gh api`,
+wherever it runs (a 404 is no block, so the lane is `full`; any other `gh` failure is exit 2);
+`--file` and `--diff` read the `AGENTS.md` in the current directory, and `--diff` runs in the
+worktree of the issue's repository.
 
 ```bash
 node <checkout>/packages/factory-tools/dist/cli.js lint-lane bogd3v/micelio#729   # needs gh
