@@ -12,7 +12,7 @@ describe('the TMPDIR of a run (test/setup/tmpdir.ts)', () => {
   })
 
   it('is named by vitest.config.ts as a globalSetup', () => {
-    expect(config.test?.globalSetup).toEqual(['test/setup/tmpdir.ts'])
+    expect(config.test?.globalSetup).toEqual(['test/setup/build.ts', 'test/setup/tmpdir.ts'])
   })
 
   it('a run that leaves an entry in TMPDIR fails and names the entry', () => {
