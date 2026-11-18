@@ -656,10 +656,13 @@ describe('verify-draft.yml', () => {
     expect(steps.slice(at + 1).map(([name]) => name)).toEqual([
       'Set up Node',
       'Install dependencies',
+      'Install cargo-deny',
       'Verify the draft',
     ])
     for (const [name, step] of steps.slice(at + 1)) {
-      expect(step, name).toContain("if: ${{ steps.lane.outputs.normal == 'true' }}")
+      expect(step, name).toMatch(
+        /^ {8}if: \$\{\{ (inputs\.cargo-deny && )?steps\.lane\.outputs\.normal == 'true' \}\}$/m
+      )
     }
     expect(verifyScript('Verify the draft')).toContain('verify-draft --draft')
     expect(verifyScript('Verify the draft')).not.toContain('--logs')
@@ -731,6 +734,82 @@ describe('verify-draft.yml', () => {
     expect(ci).toContain(
       '    uses: ./.github/workflows/verify-draft.yml\n    with:\n      reuse: true\n'
     )
+  })
+
+  it('verify-draft.yml installs cargo-deny only when its input cargo-deny is true and the lane is normal', () => {
+    expect(VERIFY).toMatch(
+      /^ {6}cargo-deny:\n {8}description: Install cargo-deny 0\.21\.0 for the draft's commands\n {8}type: boolean\n {8}default: false$/m
+    )
+    const names = Object.keys(verifySteps())
+    const at = names.indexOf('Install dependencies')
+    expect(names.slice(at, at + 3)).toEqual([
+      'Install dependencies',
+      'Install cargo-deny',
+      'Verify the draft',
+    ])
+    // the input reaches the step's condition and no other line, so never a `run:` script
+    expect(VERIFY.match(/^.*inputs\.cargo-deny.*$/gm)).toEqual([
+      "        if: ${{ inputs.cargo-deny && steps.lane.outputs.normal == 'true' }}",
+    ])
+    const script = verifyScript('Install cargo-deny')
+    expect(script).not.toMatch(/\$\{\{/)
+    const dir = tempDir('micelio-verify-')
+    const bin = join(dir, 'bin')
+    mkdirSync(bin)
+    writeFileSync(join(bin, 'cargo'), `#!/bin/sh\necho "cargo $*" >> "${join(dir, 'calls')}"\n`)
+    chmodSync(join(bin, 'cargo'), 0o755)
+    const result = run(script, { PATH: `${bin}:${process.env.PATH ?? ''}` }, dir)
+    expect(result.status).toBe(0)
+    expect(readFileSync(join(dir, 'calls'), 'utf8')).toBe(
+      'cargo install cargo-deny --locked --version 0.21.0\n'
+    )
+  })
+
+  it('verify-draft.yml installs the cargo-deny version check.yml installs', () => {
+    const versions = (text: string): string[] =>
+      [...text.matchAll(/cargo install cargo-deny --locked --version (\S+)/g)].map(
+        (m) => m[1] ?? ''
+      )
+    const [installed] = versions(CHECK)
+    expect(installed).toMatch(/^\d+\.\d+\.\d+$/)
+    expect(versions(verifyScript('Install cargo-deny'))).toEqual([installed])
+    expect(VERIFY).toContain(`description: Install cargo-deny ${String(installed)} for the draft's`)
+  })
+
+  it('ci.yml calls verify-draft.yml with cargo-deny: true', () => {
+    const ci = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8')
+    expect(ci).toContain(
+      '    uses: ./.github/workflows/verify-draft.yml\n    with:\n      reuse: true\n      cargo-deny: true\n'
+    )
+  })
+
+  it('docs/workflows.md names every tool verify-draft.yml can install', () => {
+    const doc = readFileSync(join(ROOT, 'docs/workflows.md'), 'utf8')
+    const start = doc.indexOf('## `verify-draft.yml`')
+    expect(start).toBeGreaterThan(-1)
+    const section = doc.slice(start, doc.indexOf('\n## ', start))
+    const paragraph = (title: string): string =>
+      section.split('\n').find((line) => line.startsWith(`**${title}.**`)) ?? ''
+    const lacks = paragraph('What a runner lacks')
+    // the inputs that install a tool and the commands that do, read from the workflow
+    const tools = [...VERIFY.matchAll(/^ {6}([a-z-]+):\n {8}description: Install /gm)].map(
+      (m) => m[1] ?? ''
+    )
+    expect(tools).toEqual(['reuse', 'cargo-deny'])
+    const commands = (VERIFY.match(/^ +(?:pipx|cargo) install .*$/gm) ?? []).map((l) => l.trim())
+    expect(commands).toHaveLength(tools.length)
+    for (const tool of tools) {
+      expect(section, `usage of ${tool}`).toContain(
+        `      ${tool}: true # optional, default false\n`
+      )
+      expect(section, `what it does: ${tool}`).toContain(
+        `only when the input \`${tool}\` is \`true\``
+      )
+      expect(lacks, `what a runner lacks: ${tool}`).toContain(`the input \`${tool}\` to \`true\``)
+    }
+    for (const command of commands) expect(section, command).toContain(`\`${command}\``)
+    expect(lacks).toContain('`reuse` and `cargo-deny` are the two tools the workflow can add')
+    expect(lacks).not.toContain('the one tool')
   })
 
   it('every action in verify-draft.yml is pinned by a commit SHA', () => {

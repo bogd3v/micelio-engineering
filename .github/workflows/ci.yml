@@ -154,3 +154,4 @@ jobs:
     uses: ./.github/workflows/verify-draft.yml
     with:
       reuse: true
+      cargo-deny: true
