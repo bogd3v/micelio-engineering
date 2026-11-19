@@ -60,7 +60,7 @@ const REVIEW = 'For review'
 const ANSWER = /^test-edit: (?<path>.+?) - \S.*$/
 
 /** The lines of the section, without bullets and blanks; `null` when the draft has no section. */
-function sectionLines(draft: string, heading: string = SECTION): string[] | null {
+export function sectionLines(draft: string, heading: string = SECTION): string[] | null {
   const lines = draft.split('\n')
   const start = lines.findIndex((line) => /^#{1,6}\s/.test(line) && line.includes(heading))
   if (start === -1) return null
@@ -96,7 +96,7 @@ function homeFix(path: string, synced: string[]): string | null {
  * Whether `path` is a test file: its name has `.test.` or `.spec.`, or it is under `__tests__/`,
  * `tests/` or `e2e/`; a file under `fixtures/` is not.
  */
-function isTestFile(path: string): boolean {
+export function isTestFile(path: string): boolean {
   const parts = path.split('/')
   if (parts.slice(0, -1).includes('fixtures')) return false
   const name = parts.at(-1) ?? ''

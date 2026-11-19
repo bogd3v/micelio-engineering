@@ -66,3 +66,12 @@ export {
   verifyDraft,
 } from './verify-draft.js'
 export type { EntryOutcome, VerifyDraftDeps, VerifyDraftResult } from './verify-draft.js'
+export {
+  answeredPaths,
+  createDocsHitsDeps,
+  findHits,
+  removedTerms,
+  runDocsHits,
+  touchedPaths,
+} from './docs-hits.js'
+export type { DocsHit, DocsHitsDeps, DocsHitsResult } from './docs-hits.js'
