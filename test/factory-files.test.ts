@@ -193,7 +193,7 @@ describe('the role prompts', () => {
     master: 1480,
     worker: 1326,
     planner: 950,
-    verifier: 720,
+    verifier: 728,
     reviewer: 633,
   }
   const TOTAL = 5090

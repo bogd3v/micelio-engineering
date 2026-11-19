@@ -47,7 +47,7 @@
     ".claude/agents/master.md": "ea43ebcfbbeecfb61e9fd9d1b3e8fba19902580066f44bcee5e45bc2aec6b426",
     ".claude/agents/planner.md": "fb8b0fd5758f03f83046eb8be3e763485441496c203e149997d16eca055e7ef1",
     ".claude/agents/reviewer.md": "34cf7fb633a6c6301a68d33e40982462aa9c8aeeb2ccec35ba78f1bf62b0d7ef",
-    ".claude/agents/verifier.md": "3eb82a7fde8bde2bff13065cc0e0edaa5ba4baaf5abfe453b018dc7fd56804b3",
+    ".claude/agents/verifier.md": "e70127caf1e066ed839f9f9a269dd9d85db5f3a994c621df98d75da2b09833bf",
     ".claude/agents/worker.md": "7c15a27bb0d2cdb4c27331c7f8a99fc53ef51df50f3d872206ded58e185b5f20",
     ".claude/skills/ship-pr/SKILL.md": "275cdd710ebdbe6723f692a95a75ea6d22862c49822002c248878e33dbde5324",
     ".claude/skills/blind-review/SKILL.md": "60eb713ec54d42ba914fe7c93597efc0d30105acf5fc24ae9634b1b06af17a4e",
