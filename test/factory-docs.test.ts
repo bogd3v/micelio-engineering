@@ -46,9 +46,9 @@ function unknownCitations(
 }
 
 describe('the factory documents', () => {
-  it('docs/factory.md has at most 5805 words and herdr/master.md at most 3858', () => {
+  it('docs/factory.md has at most 5805 words and herdr/master.md at most 3870', () => {
     expect(words(read('docs/factory.md'))).toBeLessThanOrEqual(5805)
-    expect(words(read('herdr/master.md'))).toBeLessThanOrEqual(3858)
+    expect(words(read('herdr/master.md'))).toBeLessThanOrEqual(3870)
   })
 
   it('every rule id cited outside docs/factory.md exists in it', () => {

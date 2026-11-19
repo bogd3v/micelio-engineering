@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, rmSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { tempDir } from '../../../test/support/temp.js'
@@ -495,5 +496,140 @@ describe('lint-draft check command', () => {
     }
     const result = await runLintDraft(['lint-draft', '--file', 'd.md', '--base', 'b'], deps)
     expect(result.code).toBe(2)
+  })
+})
+
+describe('lint-draft logs of the Tests section', () => {
+  const tests = (...lines: string[]): string =>
+    `# chore: x\n\n## Tests\n\n${lines.join('\n')}\n\n## Instructions that were wrong or missing\n\nNothing\n`
+  const withLogs = (...logFiles: string[]): DraftContext => ({
+    changed: [],
+    synced: SYNCED,
+    checkCommand: null,
+    logFiles,
+  })
+  const grepBlock = ['```text', '$ git grep -n "pin" -- docs', 'exit 0', '3 matches', '```']
+
+  it('a Tests block with no log line is a problem and names the command', () => {
+    const problems = lintDraft(tests(...grepBlock), withLogs('npm-test.log'))
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.line).toBe('git grep -n "pin" -- docs')
+    expect(problems[0]?.problem).toContain('names no log file')
+  })
+
+  it('a log line whose file is not in the logs directory is a problem', () => {
+    const block = [...grepBlock.slice(0, -1), 'log: logs/git-grep.log', '```']
+    const problems = lintDraft(tests(...block), withLogs('npm-test.log'))
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.problem).toContain('logs/git-grep.log')
+    expect(lintDraft(tests(...block), withLogs('git-grep.log'))).toEqual([])
+  })
+
+  it('a block shown failing without the change needs no log', () => {
+    const draft = tests('The test, run without the change:', '', ...grepBlock)
+    expect(lintDraft(draft, withLogs())).toEqual([])
+  })
+
+  it('without --logs the Tests section is not read', async () => {
+    expect(lintDraft(tests(...grepBlock, '- `npm test`: exit 0'), context([]))).toEqual([])
+    const deps: LintDraftDeps = {
+      readText: async () => tests(...grepBlock),
+      diffNames: async () => [],
+      syncedFiles: async () => SYNCED,
+      logFiles: async () => [],
+    }
+    const without = await runLintDraft(['lint-draft', '--file', 'd.md', '--base', 'b'], deps)
+    expect(without.code).toBe(0)
+    const given = await runLintDraft(
+      ['lint-draft', '--file', 'd.md', '--base', 'b', '--logs', 'logs'],
+      deps
+    )
+    expect(given.code).toBe(1)
+    expect(given.stdout).toContain('git grep')
+  })
+
+  it('a draft whose blocks all have their logs passes', async () => {
+    const fixture = await readFile(
+      new URL('../../../fixtures/factory/wrong-test-count.md', import.meta.url),
+      'utf8'
+    )
+    expect(lintDraft(fixture, withLogs())).toHaveLength(1)
+    expect(lintDraft(fixture, withLogs('npm-test.log'))).toEqual([])
+  })
+
+  it('a Tests list item with no log is a problem and names the command', () => {
+    const problems = lintDraft(tests('- `git grep -c pin docs`: exit 0, 3 matches'), withLogs())
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.line).toBe('git grep -c pin docs')
+    expect(problems[0]?.problem).toContain('names no log file')
+    const numbered = lintDraft(tests('1. `ls`: exit 0'), withLogs())
+    expect(numbered).toHaveLength(1)
+  })
+
+  it('a list item whose log file is not in the logs directory is a problem', () => {
+    const item = '- `npm test`: exit 0 (`logs/npm-test.log`)'
+    const problems = lintDraft(tests(item), withLogs('other.log'))
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.problem).toContain('logs/npm-test.log')
+  })
+
+  it('a list item shown failing without the change needs no log', () => {
+    const inline = '- `npm test` without the change: exit 1, 2 failed'
+    expect(lintDraft(tests(inline), withLogs())).toEqual([])
+    const under = tests('Run without the change:', '', '- `npm test`: exit 1, 2 failed')
+    expect(lintDraft(under, withLogs())).toEqual([])
+    // exit 0 under that line is a run that passed: it needs its log
+    expect(
+      lintDraft(tests('Run without the change:', '', '- `npm test`: exit 0'), withLogs())
+    ).toHaveLength(1)
+  })
+
+  it('a draft whose list items all have their logs passes', () => {
+    const draft = tests(
+      '- `npm test`: exit 0, 4 passed (`logs/npm-test.log`)',
+      '* `npm run check`: exit 0, `logs/check.log`',
+      '- no test: not code'
+    )
+    expect(lintDraft(draft, withLogs('npm-test.log', 'check.log'))).toEqual([])
+  })
+
+  it('createDeps lists the files of a logs directory', async () => {
+    const dir = tempDir('lint-draft-logs-')
+    await writeFile(join(dir, 'a.log'), 'x')
+    mkdirSync(join(dir, 'sub'))
+    await writeFile(join(dir, 'sub', 'b.log'), 'x')
+    const files = await createDeps(dir).logFiles?.(dir)
+    expect([...(files ?? [])].sort()).toEqual(['a.log', 'sub/b.log'])
+  })
+
+  it('a block after a block shown without the change does not take its intro', () => {
+    const failing = ['The test, run without the change:', '```text', '$ npm test', 'exit 1', '```']
+    const passing = ['```text', '$ git grep -n "pin" -- docs', 'exit 0', '```']
+    const problems = lintDraft(tests(...failing, ...passing), withLogs())
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.line).toBe('git grep -n "pin" -- docs')
+  })
+
+  it('a block under a subheading of the Tests section is checked', () => {
+    const problems = lintDraft(tests('### More', '', ...grepBlock), withLogs())
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.line).toBe('git grep -n "pin" -- docs')
+  })
+
+  it('a block under a heading of the same level as Tests is not read', () => {
+    const draft = `# chore: x\n\n## Tests\n\nnone\n\n## Notes\n\n${grepBlock.join('\n')}\n`
+    const lines = lintDraft(draft, withLogs()).map((problem) => problem.line)
+    expect(lines).not.toContain('git grep -n "pin" -- docs')
+  })
+
+  it('createDeps lists the files of a logs directory given unnormalised', async () => {
+    const dir = tempDir('lint-draft-logs-')
+    await writeFile(join(dir, 'a.log'), 'x')
+    mkdirSync(join(dir, 'sub'))
+    await writeFile(join(dir, 'sub', 'b.log'), 'x')
+    for (const given of [`${dir}//`, `${dir}/./`, join(dir, 'sub', '..')]) {
+      const files = await createDeps(dir).logFiles?.(given)
+      expect([...(files ?? [])].sort()).toEqual(['a.log', 'sub/b.log'])
+    }
   })
 })

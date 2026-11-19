@@ -127,7 +127,7 @@ checks the diff for edited tests against "For review". The shape of the first is
 
 ```bash
 # In the worktree of the branch, after `git add -N .` so that new files are in the diff
-node <checkout>/packages/factory-tools/dist/cli.js lint-draft --file <draft> --base "$(git merge-base HEAD origin/main)"
+node <checkout>/packages/factory-tools/dist/cli.js lint-draft --file <draft> --base "$(git merge-base HEAD origin/main)" --logs <packet>/logs
 ```
 
 It reads the section (the lines under that heading, up to the next heading; a leading `-` is
@@ -167,6 +167,16 @@ or a file cannot be read.
   `wc -w` (in quotes, or after other words), `wc -l`, a plain sentence and a `wc -w` outside that
   section pass. Its limits: it does not look inside `docker run`, `xargs` or `sh -c`, so a `wc -w`
   they run passes.
+
+- With `--logs <dir>` (without it the check below is skipped), each command of the "Tests" section
+  needs a log in the packet, as `verify-draft` does. Two forms are read. A fenced block whose first
+  line starts `$ ` fails when it has no line `log: logs/<name>.log`, or when `<dir>/<name>.log` is not
+  a file (the path without its leading `logs/`; a folder under it counts). A list item (`- `, `* `,
+  `1. `, `1) `) that starts with the command in backticks, read with `testsEntries` of `verify-draft`,
+  fails when it names no `logs/<file>`, or when `<dir>/<file>` is not a file. A block whose
+  preceding non-blank line holds `without the change`, and an item that holds those words or sits
+  under a line that does and does not report `exit 0`, are runs shown failing: they stay inline and
+  need no log. The problem names the command.
 
 - A draft whose "Tests" section has no entry that runs the check command and reports `exit 0`
   fails, and the problem names the command and `G2.1` of `docs/factory.md`: the check command is
