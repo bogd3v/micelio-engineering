@@ -39,6 +39,14 @@ const STEPS: Record<string, string[]> = {
     `${AGENTS}worker.md`,
     'packages/factory-tools/README.md',
   ],
+  'revert-proof': [
+    `${AGENTS}worker.md`,
+    `${AGENTS}verifier.md`,
+    `${SKILLS}verify-pr/SKILL.md`,
+    'docs/factory.md',
+    'herdr/master.md',
+    'packages/factory-tools/README.md',
+  ],
   'lint-log': ['herdr/master.md', 'packages/factory-tools/README.md'],
   'docs-hits': ['herdr/master.md', 'docs/factory.md', 'packages/factory-tools/README.md'],
   'verify-draft': [

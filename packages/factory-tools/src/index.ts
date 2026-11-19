@@ -75,3 +75,11 @@ export {
   touchedPaths,
 } from './docs-hits.js'
 export type { DocsHit, DocsHitsDeps, DocsHitsResult } from './docs-hits.js'
+export {
+  DEFAULT_LINK,
+  TEST_GLOBS,
+  globToRegExp,
+  isTestPath,
+  runRevertProof,
+} from './revert-proof.js'
+export type { RevertProofResult } from './revert-proof.js'

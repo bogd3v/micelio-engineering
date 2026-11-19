@@ -8,7 +8,8 @@ script), [`lint-log`](#lint-log) (a `factory-log |` line checked before it is po
 shape of a draft's section "Instructions that were wrong or missing", and its "For review" answers
 for the existing tests the diff edits, and the check command in its Tests section),
 [`docs-hits`](#docs-hits) (the Markdown files that still name a term a diff removed),
-[`lint-lane`](#lint-lane) (an issue's lane, and a diff checked against it) and
+[`lint-lane`](#lint-lane) (an issue's lane, and a diff checked against it),
+[`revert-proof`](#revert-proof) (a test run on the merge base's production code, to show it fails there) and
 [`verify-draft`](#verify-draft) (gate 4 of the `normal` lane: a draft's commands rerun and their
 numbers compared).
 
@@ -222,6 +223,25 @@ are ignored. The fields are separated by `|`, a space on each side: `factory-log
 Exit 0 when every such line is right, or there is none. Exit 1 when one breaks the format; it
 prints each line with its number in the file and the reason. Exit 2 when the arguments are wrong
 (`--file <path>` and nothing else) or the file cannot be read.
+
+## `revert-proof`
+
+A test the draft says "fails without the change" is proof only if it fails on the merge base's production code with the branch's tests. The worker (`template/.claude/agents/worker.md`) and the verifier (`template/.claude/agents/verifier.md`, `template/.claude/skills/verify-pr/SKILL.md`) both run this command, and the draft's line is its output.
+
+```bash
+node <checkout>/packages/factory-tools/dist/cli.js revert-proof --base <rev> --cwd <worktree> --log <file> [--test <glob>]… [--link <path>]… -- <command…>
+```
+
+It copies the repository (the tracked files and the untracked ones that git does not ignore) into a scratch directory under `$FACTORY_TMP` (default `~/Git/factory/tmp`, as `herdr/factory-slot.sh`), restores each file the worktree changed against `<rev>` to its content at `<rev>`, deletes each file the change adds, leaves the test files as the worktree has them, runs `<command>` there and writes its whole output (standard output and standard error) to `--log`. The scratch directory is removed afterwards and the worktree is never written to. A test is a path that matches `test/**`, `tests/**`, `**/__tests__/**`, `e2e/**`, `**/fixtures/**`, `**/*.test.*`, `**/*.spec.*` or a `--test` glob. `--link` (default `node_modules`, repeatable; a path inside the repository, else exit 2) symlinks a folder the copy does not hold, so the command can run, and what the command writes through it reaches the worktree's folder. The workspace packages in it (symlinks that resolve inside the repository, one level deep and under an `@scope`) point at the copy's own folders, so they load the base's code. The copy has no `.git`; the unit is the file, never part of one. It needs `git` only: dependencies and builds are the repository's.
+
+It prints the files it restored and deleted, the command's exit code and a verdict:
+
+| Verdict                                                              | Exit |
+| -------------------------------------------------------------------- | ---- |
+| `proven` (the command fails on the base's code)                      | 0    |
+| `not proven: the command passes on the merge base's code`            | 1    |
+| `not proven: no production file changed` (the command is not run)    | 1    |
+| a usage error, a command that cannot start or was killed by a signal | 2    |
 
 ## `verify-draft`
 
