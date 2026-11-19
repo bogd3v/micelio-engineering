@@ -64,7 +64,7 @@ Todo → Ready → In Progress → **Review** → Done (`M.7`), changed with `gh
 
 1. Todo: created, or sent back at gate 1 (`issue-ready`). Ready: gate 1 passes (`issue-ready`).
 2. In Progress: a worker starts, and again whenever a red gate sends work back. Review: the draft is handed back; gates 3 to 5 read it.
-3. Done: only after `gh pr view <n> --json state -q .state` printed `MERGED`; never on a guess, an approval or a closed-but-unmerged pull request.
+3. Done closes the issue (the project does it at once), so set it only when the pull request that has `Closes` is `MERGED` (`gh pr view <n> --json state -q .state` printed it first) and every criterion left for after the merge is met or the maintainer said to close; never on a guess, an approval or an unmerged pull request. A merged `Refs` pull request leaves the issue in Review, with a line in `### Progress` of what is left.
 
 ## The rounds
 
@@ -169,7 +169,7 @@ When an issue's pull request is merged, or when the maintainer asks, and once mo
 2. The commit is `git commit -s -F <message file>`, the message the worker left outside the worktree. Before it, quote the maintainer's message that holds the phrase, check that its `N` is this issue (the epic for the scribe's) and that `git var GIT_COMMITTER_IDENT` starts with `{{maintainer-ident}}`; if not, stop and ask. Several `express` issues may share a message (`approved, sign off #N #M`, `G5.3`); say which number signed nothing.
 3. After the pull request opens, replace only the text under `### Progress` and tick the epic's box with a script that edits that section and nothing else; save the body before and after and post both as a comment (`gh issue comment --body-file`). Never touch the title, the criteria or the scope.
 4. The `time: <minutes>m diff|report` line is the maintainer's, in a review comment on the pull request (`G5.5`).
-5. When `gh pr view <n> --json state -q .state` prints `MERGED`, set Done, run `factory-tools metrics` and tell the maintainer.
+5. When `gh pr view <n> --json state -q .state` prints `MERGED` and step 3 of "The Project Status flow" allows Done, set it; run `factory-tools metrics` and tell the maintainer.
 
 ## Tokens
 

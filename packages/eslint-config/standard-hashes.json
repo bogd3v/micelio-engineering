@@ -41,7 +41,7 @@
     ".claude/agents/reviewer.md": "34cf7fb633a6c6301a68d33e40982462aa9c8aeeb2ccec35ba78f1bf62b0d7ef",
     ".claude/agents/verifier.md": "2d015b55acd7b5eee305d7c89fc392513be56f1d08b8b0c5e9c13869aea7a1b5",
     ".claude/agents/worker.md": "3e3c5989597bc89bfae634a72054732a5e1ec29011c4d30fd28b2b3b3d31d44d",
-    ".claude/skills/ship-pr/SKILL.md": "55e5196e4b8a605f6c33e2efdb140d83f14d332e6fddcc5f5b3211b02242fdd9",
+    ".claude/skills/ship-pr/SKILL.md": "275cdd710ebdbe6723f692a95a75ea6d22862c49822002c248878e33dbde5324",
     ".claude/skills/blind-review/SKILL.md": "60eb713ec54d42ba914fe7c93597efc0d30105acf5fc24ae9634b1b06af17a4e",
     ".claude/skills/verify-pr/SKILL.md": "bf6daf9349f97f7d1fae93d611aa275b2002e6e690d52fedecbc4e7b93958938",
     ".github/pull_request_template.md": "a61095d88c22206255c089905df9d455e37c9ac3428eafd841a98fa9db272256",
