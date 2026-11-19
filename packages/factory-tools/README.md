@@ -7,6 +7,7 @@ script), [`lint-log`](#lint-log) (a `factory-log |` line checked before it is po
 [`metrics`](#metrics) (the factory's numbers for a milestone), [`lint-draft`](#lint-draft) (the
 shape of a draft's section "Instructions that were wrong or missing", and its "For review" answers
 for the existing tests the diff edits, and the check command in its Tests section),
+[`docs-hits`](#docs-hits) (the Markdown files that still name a term a diff removed),
 [`lint-lane`](#lint-lane) (an issue's lane, and a diff checked against it) and
 [`verify-draft`](#verify-draft) (gate 4 of the `normal` lane: a draft's commands rerun and their
 numbers compared).
@@ -504,6 +505,35 @@ The library exports `lintIssue`, `RULE_IDS`, `report` and `run`, `runReady`, `ap
 and `fixtureSource`, the parsers `parseTime`, `parseEvent`, `parseLogLines`, `blockingByCategory` and
 `countLog`, and their types. Before 1.0.0 any of them may
 change in a `0.y` release (standard, section 7).
+
+## `docs-hits`
+
+Gate 2 runs it after `lint-draft`: "A document the change made false was left" is the commonest
+correction of `docs/factory-log.md`, and a document cannot be listed once for all.
+
+```bash
+# In the worktree of the branch, after `git add -N .` so that new files are in the diff
+node <checkout>/packages/factory-tools/dist/cli.js docs-hits --base "$(git merge-base HEAD origin/main)" --draft <draft>
+```
+
+It reads `git diff -U0 --no-renames <base>` and takes the terms of the lines the diff removes from
+files that are neither Markdown (`.md`) nor tests (the test-file rule of `lint-draft`): a token of 6 or
+more characters with a letter and a joiner (`.`, `:`, `/`, `-`) between word characters, or written
+in capitals with `_` (`shared.playground`, `config.preview-token`, `DRAFT_PAGE_POPULATE`). Then it
+lists each line of a tracked Markdown file that names one, with no word character next to it, as
+`<path>:<line>: <term>`, and a verdict line. Exit 0 when nothing is listed, 1 when a hit is, 2 when
+the arguments are wrong or git or a file fails. `--cwd <worktree>` (default the current directory)
+is where git runs and where a relative `--draft` is read.
+
+- A Markdown file the diff touches (a new one included) is not listed: the worker read it.
+- `--draft <file>`: a line of its "For review" section, `docs-hits: <path> - <why it is still
+true>` (a bullet and a `:<line>` after the path are ignored), answers every hit of that file, and
+  it is not listed.
+- It does not subtract the lines the diff adds: a term the new code names too is still a hit.
+
+It only reads. It does not catch a changed number, a behaviour described in other words, a table row
+that should gain an entry, a term in a source comment or a file that is not Markdown, nor a
+hit in a file it lists that is true; the reviewer's check 5 stays the net for those.
 
 ## `lint-lane`
 

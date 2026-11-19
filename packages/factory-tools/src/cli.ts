@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFile } from 'node:fs/promises'
+import { runDocsHits } from './docs-hits.js'
 import { runBackfill } from './fields.js'
 import { runLintDraft } from './lint-draft.js'
 import { runLintLane } from './lane.js'
@@ -20,9 +21,11 @@ const { code, stdout, stderr } = await (argv[0] === 'issue-ready'
         ? runLintLog(argv)
         : argv[0] === 'verify-draft'
           ? runVerifyDraft(argv)
-          : argv[0] === 'project-fields-backfill'
-            ? runBackfill(argv, { gh: defaultGh, readText: (path) => readFile(path, 'utf8') })
-            : run(argv))
+          : argv[0] === 'docs-hits'
+            ? runDocsHits(argv)
+            : argv[0] === 'project-fields-backfill'
+              ? runBackfill(argv, { gh: defaultGh, readText: (path) => readFile(path, 'utf8') })
+              : run(argv))
 process.stdout.write(stdout)
 process.stderr.write(stderr)
 process.exitCode = code
