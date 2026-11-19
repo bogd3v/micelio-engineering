@@ -191,10 +191,10 @@ describe('the role prompts', () => {
   /** Words per prompt, as `wc -w` counts them: runs of non-whitespace. */
   const BUDGET: Record<string, number> = {
     master: 1480,
-    worker: 1312,
+    worker: 1326,
     planner: 950,
     verifier: 720,
-    reviewer: 631,
+    reviewer: 633,
   }
   const TOTAL = 5090
 

@@ -633,3 +633,72 @@ describe('lint-draft logs of the Tests section', () => {
     }
   })
 })
+
+describe('lint-draft in micelio-engineering', () => {
+  const home = (changed: string[] = []): DraftContext => ({ ...context(changed), home: true })
+
+  it('in micelio-engineering, fails a synced file reported to the master', () => {
+    const problems = lintDraft(
+      section('.claude/agents/worker.md: a rule is wrong - reported to the master'),
+      home()
+    )
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.problem).toContain('fixed in template/.claude/agents/worker.md')
+    const prefixed = lintDraft(
+      section('template/.claude/agents/worker.md: a rule is wrong - reported to the master'),
+      home()
+    )
+    expect(prefixed).toHaveLength(1)
+    expect(prefixed[0]?.problem).toContain('fixed in template/.claude/agents/worker.md')
+  })
+
+  it('in micelio-engineering, fails a file under herdr/ or template/ reported to the master', () => {
+    for (const path of ['herdr/master.md', 'template/.claude/skills/blind-review/SKILL.md']) {
+      const problems = lintDraft(
+        section(`${path}: a step is wrong - reported to the master`),
+        home()
+      )
+      expect(problems, path).toHaveLength(1)
+      expect(problems[0]?.problem).toContain('fix it on the branch')
+    }
+  })
+
+  it('in micelio-engineering, still passes the standard and the issue reported', () => {
+    expect(
+      lintDraft(
+        section(
+          'standard: section 8 is wrong - reported to the master',
+          'issue: wrong - reported to the master'
+        ),
+        home()
+      )
+    ).toEqual([])
+  })
+
+  it("createDeps reads home from the worktree's .github/standard-sync.json", async () => {
+    const make = (withFile: boolean): string => {
+      const dir = tempDir('lint-draft-home-')
+      execFileSync('git', ['-C', dir, 'init', '-q'])
+      if (withFile) {
+        mkdirSync(join(dir, '.github'))
+        execFileSync('sh', ['-c', `echo '{"files":[]}' > "${dir}/.github/standard-sync.json"`])
+      }
+      return dir
+    }
+    expect(await createDeps(make(true)).home?.()).toBe(true)
+    expect(await createDeps(make(false)).home?.()).toBe(false)
+  })
+
+  it('runLintDraft passes home from its dependencies to the rule', async () => {
+    const run = (isHome: boolean): ReturnType<typeof runLintDraft> =>
+      runLintDraft(['lint-draft', '--file', 'd.md', '--base', 'HEAD'], {
+        readText: () =>
+          Promise.resolve(section('herdr/master.md: a step is wrong - reported to the master')),
+        diffNames: () => Promise.resolve([]),
+        syncedFiles: () => Promise.resolve(SYNCED),
+        home: () => Promise.resolve(isHome),
+      })
+    expect((await run(true)).code).toBe(1)
+    expect((await run(false)).code).toBe(0)
+  })
+})

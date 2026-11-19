@@ -148,6 +148,9 @@ or a file cannot be read.
 - A line whose subject is an own file, `AGENTS.md` or a skill under `.claude/skills/` that
   `standard-sync.json` does not list, fails when it ends `reported to the master`. The standard, the
   issue and a synced file (outside `micelio-engineering`) end `reported to the master` and pass.
+  In `micelio-engineering` (`home`: the worktree has `.github/standard-sync.json`) a synced file
+  (with or without `template/`), a path under `template/` and a path under `herdr/` fail too: the
+  problem says to fix it on the branch, and for a synced file to end `fixed in template/<path>`.
 - A line in neither shape, a missing section and an empty one fail.
 - An existing test file the diff removes lines from fails (`G3.3` of `docs/factory.md`), unless a
   line of the draft's "For review" section answers it, with or without a list bullet:
