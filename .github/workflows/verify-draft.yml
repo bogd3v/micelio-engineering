@@ -1,6 +1,7 @@
 name: Verify draft
 
-# Gate 4 of the `normal` lane (docs/factory.md, ADR-0003) repeated by CI on a pull request: when the
+# Gate 4 of the `normal` lane (docs/factory.md, ADR-0003) repeated by CI on a pull request, on the
+# pull request's head, not on its merge with the base branch (check.yml builds and tests the merge): when the
 # diff fits the `normal` lane, runs `verify-draft` on the pull request's description, so a number the
 # code does not produce turns the check red. The tools are built from the commit this workflow is
 # pinned at (job.workflow_sha); tools-ref and tools-repository are accepted, ignored and warned about
@@ -59,6 +60,7 @@ jobs:
       - name: Checkout the pull request
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -103,6 +105,8 @@ jobs:
         run: |
           mv .micelio-tools "$RUNNER_TEMP/tools"
 
+      # The diff is the head's against its merge base with the base branch: against a base that moved
+      # on, it would list main's new files as the pull request's. A failing merge-base fails the job.
       # Exit 0: the diff fits the normal lane. Exit 1: it does not (or the repository has no
       # `## Lanes` block, so it is `full`): gate 4 is the verifier and the job passes. Exit 2 fails.
       - name: Check the lane
@@ -110,8 +114,12 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
+          if ! MERGE_BASE=$(git merge-base HEAD "$BASE_SHA") || [ -z "$MERGE_BASE" ]; then
+            echo "::error::git merge-base failed for HEAD and $BASE_SHA"
+            exit 1
+          fi
           code=0
-          node "$RUNNER_TEMP/tools/packages/factory-tools/dist/cli.js" lint-lane --diff "$BASE_SHA" --lane normal || code=$?
+          node "$RUNNER_TEMP/tools/packages/factory-tools/dist/cli.js" lint-lane --diff "$MERGE_BASE" --lane normal || code=$?
           if [ "$code" -eq 1 ]; then
             echo "full lane: gate 4 is the verifier"
           elif [ "$code" -ne 0 ]; then
