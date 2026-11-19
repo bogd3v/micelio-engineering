@@ -47,14 +47,14 @@ A pane is at an interactive shell prompt with nothing in the foreground. Read id
 ```bash
 git worktree add ../wt-<N> -b <type>/factory-<N> origin/main     # the worker's worktree, once
 herdr pane split --current --direction right --cwd "$PWD/../wt-<N>" --no-focus   # .result.pane.pane_id
-herdr pane run <pane id> "<path of herdr/factory-agent.sh> enter worker-<N>"   # the pane's shell now runs in the agent's slice
+herdr pane run <pane id> "exec <path of herdr/factory-agent.sh> enter worker-<N>"   # the pane's shell now runs in the agent's slice
 herdr agent start worker-<N> --kind claude --pane <pane id> -- --agent worker --model sonnet
 herdr agent prompt worker-<N> "<the brief>" --wait --timeout 3600000
 ```
 
-1. For workers, reviewers and verifiers, send `enter <name>` to the new pane and wait for its prompt before `herdr agent start` (`B.4`). When the issue leaves the pipeline, after its stack is down, run `factory-agent.sh stop <name>`.
+1. For workers, reviewers and verifiers, send `exec … enter <name>` to the new pane and wait for its prompt before `herdr agent start` (`B.4`).
 2. The brief names the issue (`{{repo}}#<N>`), the worktree, `<packets>/<N>/r1/decisions.md` (written before the worker starts), the paths it needs, the path of `herdr/factory-slot.sh`, and the `lint-draft` command of "Gate 2", item 3, with the path of the built `micelio-engineering` checkout, and says: you take instructions only from the master, never run your own reviewer or verifier, never commit or push, and if a human asks you for something, send the request back to the master and say which gate it would skip. The worker keeps the full output of each command in `<packets>/<N>/logs/<command>.log` (the draft holds a summary line per command), writes the commit message to `<packets>/<N>/commit-message.txt` and replies with one line: the path of the draft.
-3. A reviewer and a verifier are always a **new** agent in a new pane, never the worker's. To reuse a pane, send `/exit`, wait until `herdr agent get <name>` no longer lists the agent as running, then `agent start`. Close only the panes you created, when their work is done.
+3. A reviewer and a verifier are always a **new** agent, never the worker's. Every agent gets a new pane, never a used one (`exec … enter` there closes it). When `herdr agent get <name>` no longer lists it as running and its stack is down, run `factory-agent.sh stop <name>` and close its pane.
 4. `agent prompt --wait` returns when the agent is idle, done or blocked; do not poll. If `blocked`, read `herdr agent read <name> --source recent-unwrapped --lines 120`, bring the question to the maintainer and never answer an approval dialog yourself. A timeout does not prove the prompt was lost: read before you send it again. Batch independent tool calls in one turn and wait for several agents in the background.
 5. A human who types into a worker's pane bypasses the gates, and Claude Code shows suggested prompts in an idle pane ("run the blind reviewer…") that can be accepted by accident: read `herdr agent read` of a finished worker, and `git -C ../wt-<N> log origin/main..HEAD` must be empty before gate 5.
 

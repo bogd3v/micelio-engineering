@@ -146,6 +146,24 @@ describe('the factory roles', () => {
     }
   })
 
+  it('the runbook enters a slice with exec and never reuses a pane', () => {
+    const sends = runbook
+      .split('\n')
+      .filter((line) => /factory-agent\.sh\S* enter [<\w]/.test(line))
+    expect(sends.length).toBeGreaterThan(0)
+    for (const line of sends) {
+      expect(line).toMatch(/exec [^"`]*factory-agent\.sh\S* enter [<\w]/)
+    }
+    expect(runbook).toMatch(/exec … enter <name>/)
+    const start = runbook.indexOf('## Starting an agent')
+    const section = runbook.slice(start, runbook.indexOf('\n## ', start + 1))
+    expect(section).toMatch(/Every agent gets a new pane/)
+    expect(section).not.toMatch(/same pane/i)
+    expect(section).not.toMatch(/reuse/i)
+    expect(section).not.toMatch(/\/exit[^\n]*agent start/)
+    expect(section).toMatch(/factory-agent\.sh stop <name>/)
+  })
+
   it("every git diff of the master's runbook follows git add -N", () => {
     const master = readFileSync(join(agents, 'master.md'), 'utf8')
     for (const [name, text] of [
