@@ -1,9 +1,16 @@
 import { execFile } from 'node:child_process'
-import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { readFile, readdir } from 'node:fs/promises'
+import { join, relative } from 'node:path'
 import { promisify } from 'node:util'
 import { errorLine } from './errors.js'
-import { EXIT, agentsCommandLines, testsEntries, withoutSlotPrefix } from './verify-draft.js'
+import {
+  EXIT,
+  LOG,
+  WITHOUT_CHANGE,
+  agentsCommandLines,
+  testsEntries,
+  withoutSlotPrefix,
+} from './verify-draft.js'
 
 /** The heading of the section the command reads, without the `#`s. */
 export const SECTION = 'Instructions that were wrong or missing'
@@ -21,6 +28,11 @@ export interface DraftContext {
    * and then the draft is not asked to report one.
    */
   checkCommand: string[] | null
+  /**
+   * The files of the packet's logs directory, as paths relative to it (`npm-test.log`); left out,
+   * the "Tests" section is not checked for logs.
+   */
+  logFiles?: string[]
 }
 
 /** A line of the section that breaks the shape, and why. */
@@ -152,6 +164,76 @@ function editedTestProblems(draft: string, edited: string[]): DraftProblem[] {
     }))
 }
 
+/** The fenced blocks of the "Tests" section whose first line starts `$ `, with the line above the fence. */
+function testsBlocks(draft: string): { lines: string[]; intro: string }[] {
+  const lines = draft.split('\n')
+  const start = lines.findIndex((line) => /^#{1,6}\s+Tests\s*$/.test(line))
+  if (start === -1) return []
+  const depth = (line: string): number => /^(#{1,6})\s/.exec(line)?.[1]?.length ?? 7
+  const level = depth(lines[start] ?? '')
+  const blocks: { lines: string[]; intro: string }[] = []
+  let current: string[] | null = null
+  let intro = ''
+  let last = ''
+  for (const line of lines.slice(start + 1)) {
+    if (/^\s*(?:```|~~~)/.test(line)) {
+      if (current === null) {
+        current = []
+        intro = last
+      } else {
+        const body = current.map((l) => l.trim()).filter((l) => l !== '')
+        if (body[0]?.startsWith('$ ')) blocks.push({ lines: body, intro })
+        current = null
+        last = ''
+      }
+    } else if (current !== null) current.push(line)
+    else if (depth(line) <= level) break
+    else if (line.trim() !== '') last = line.trim()
+  }
+  return blocks
+}
+
+/** A problem for a log the packet lacks: `name` is what the draft writes after `logs/`. */
+function missingLog(files: string[], name: string | undefined): string | null {
+  if (name === undefined)
+    return 'names no log file: add `log: logs/<name>.log` or `logs/<name>.log`'
+  const clean = name.replace(/^\.?\/+/, '')
+  return files.includes(clean)
+    ? null
+    : `its log \`logs/${clean}\` is not a file in the packet's logs directory`
+}
+
+/**
+ * One problem for each command of the "Tests" section with no log in the packet (`G2`): a fenced
+ * block whose first line starts `$ ` and an item that starts with a command in backticks. A run shown
+ * failing (`without the change`, not exit 0) needs none.
+ */
+function logProblems(draft: string, files: string[] | undefined): DraftProblem[] {
+  if (files === undefined) return []
+  const problems: DraftProblem[] = []
+  for (const block of testsBlocks(draft)) {
+    if (WITHOUT_CHANGE.test(block.intro)) continue
+    const command = (block.lines[0] ?? '').replace(/^\$\s+/, '')
+    const named = block.lines.map((l) => /^log:\s*(\S+)/.exec(l)?.[1]).find((n) => n !== undefined)
+    const problem = missingLog(files, named?.replace(/^logs\//, ''))
+    if (problem !== null) problems.push({ line: command, problem: `the block ${problem}` })
+  }
+  for (const entry of testsEntries(draft) ?? []) {
+    const parsed = /^`([^`]+)`(.*)$/.exec(entry.text)
+    if (parsed === null) continue
+    const summary = parsed[2] ?? ''
+    if (
+      (WITHOUT_CHANGE.test(entry.text) || WITHOUT_CHANGE.test(entry.intro)) &&
+      EXIT.exec(summary)?.[1] !== '0'
+    )
+      continue
+    const problem = missingLog(files, LOG.exec(summary)?.[1])
+    if (problem !== null)
+      problems.push({ line: (parsed[1] ?? '').trim(), problem: `the item ${problem}` })
+  }
+  return problems
+}
+
 /**
  * The check command of a repository: the `check:` line of the first `## Commands` block of its
  * `AGENTS.md`; else `npm run check` when its manifest has a `check` script; else `null`.
@@ -205,6 +287,7 @@ export function lintDraft(draft: string, context: DraftContext): DraftProblem[] 
     ...editedTestProblems(draft, context.editedTests ?? []),
     ...wordCountProblems(draft),
     ...checkCommandProblems(draft, context.checkCommand),
+    ...logProblems(draft, context.logFiles),
   ]
 }
 
@@ -269,6 +352,8 @@ export interface LintDraftDeps {
   editedTests?: (base: string) => Promise<string[]>
   /** `checkCommandOf` of the `AGENTS.md` and `package.json` in the worktree. Optional; left out, `null`. */
   checkCommand?: () => Promise<string[] | null>
+  /** The files under a logs directory, relative to it, in any depth. Optional; used with `--logs`. */
+  logFiles?: (dir: string) => Promise<string[]>
 }
 
 /** The outcome of `runLintDraft`: 0 when the draft is right, 1 when a line breaks a rule, 2 on a usage or read error. */
@@ -321,6 +406,10 @@ export function createDeps(cwd: string, syncList: URL = OWN_SYNC_LIST): LintDraf
       }
       return checkCommandOf(await read('AGENTS.md'), await read('package.json'))
     },
+    logFiles: async (dir) =>
+      (await readdir(dir, { recursive: true, withFileTypes: true }))
+        .filter((entry) => entry.isFile())
+        .map((entry) => relative(dir, join(entry.parentPath, entry.name))),
     syncedFiles: async () => {
       const json = JSON.parse(await readFile(syncList, 'utf8')) as { files?: unknown }
       if (!Array.isArray(json.files)) throw new Error('.github/standard-sync.json has no "files"')
@@ -329,10 +418,10 @@ export function createDeps(cwd: string, syncList: URL = OWN_SYNC_LIST): LintDraf
   }
 }
 
-const USAGE = 'Usage:\n  factory-tools lint-draft --file <draft> --base <ref>\n'
+const USAGE = 'Usage:\n  factory-tools lint-draft --file <draft> --base <ref> [--logs <dir>]\n'
 
 /**
- * `factory-tools lint-draft --file <draft> --base <ref>`: run in the worktree of the draft, with
+ * `factory-tools lint-draft --file <draft> --base <ref> [--logs <dir>]`: run in the worktree of the draft, with
  * the branch checked out, by the command built in the `micelio-engineering` checkout.
  *
  * @param argv - The arguments after the program name, starting with `lint-draft`.
@@ -346,7 +435,7 @@ export async function runLintDraft(
   for (let i = 0; i < args.length; i++) {
     const name = args[i] ?? ''
     const value = args[i + 1]
-    if ((name !== '--file' && name !== '--base') || value === undefined) {
+    if (!['--file', '--base', '--logs'].includes(name) || value === undefined) {
       return { code: 2, stdout: '', stderr: `error: bad argument "${name}"\n${USAGE}` }
     }
     values.set(name, value)
@@ -357,12 +446,16 @@ export async function runLintDraft(
   if (file === undefined || base === undefined) {
     return { code: 2, stdout: '', stderr: `error: lint-draft needs --file and --base\n${USAGE}` }
   }
+  const logs = values.get('--logs')
   try {
     const problems = lintDraft(await deps.readText(file), {
       changed: await deps.diffNames(base),
       synced: await deps.syncedFiles(),
       editedTests: (await deps.editedTests?.(base)) ?? [],
       checkCommand: (await deps.checkCommand?.()) ?? null,
+      ...(logs === undefined || deps.logFiles === undefined
+        ? {}
+        : { logFiles: await deps.logFiles(logs) }),
     })
     if (problems.length === 0) {
       return { code: 0, stdout: `lint-draft · ${file} · the draft is right\n`, stderr: '' }

@@ -40,11 +40,13 @@ export interface Entry {
   intro: string
 }
 
-const WITHOUT_CHANGE = /without the change/i
+/** The words that mark a run shown failing, which needs no log. */
+export const WITHOUT_CHANGE = /without the change/i
 const VARIANCE = /\b(\d+)\s+failed\s+of\s+(\d+)\b/i
 /** The exit code a summary reports: `exit 0`, `exits 1`, `exited 1`, `exit code 2`. */
 export const EXIT = /\bexit(?:ed|s)?(?:\s+code)?\s+(\d+)/i
-const LOG = /\blogs\/([^\s`),;]+)/
+/** The `logs/<file>` a summary names; group 1 is the file. */
+export const LOG = /\blogs\/([^\s`),;]+)/
 const NUMBER = String.raw`\d{1,3}(?:[ ,]\d{3})+|\d+`
 const MAX_BUFFER = 256 * 1024 * 1024
 
