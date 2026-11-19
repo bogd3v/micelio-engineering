@@ -317,13 +317,15 @@ describe('the canonical copy of this repository', () => {
       expect(found, rule).toBe(1)
     }
     // every other line of 1.8 (headings, table separators and short code lines aside) is kept word
-    // for word in one file, except the three lines 2.0 rewrites and the rule of section 13 that 2.2
-    // rewords (the verifier re-creates the repository's stack, on any engine)
+    // for word in one file, except the three lines 2.0 rewrites, the rule of section 13 that 2.2
+    // rewords (the verifier re-creates the repository's stack, on any engine) and the Block contract
+    // row that 2.4 rewrites (it also covers the icon catalogue)
     const rewritten = [
       /^Version 1\.8 /,
       /^These are the rules shared/,
       /^\| `AGENTS\.md` \|/,
       /^- \*\*Review and verify by others\.\*\*/,
+      /^\| Block contract: /,
     ]
     const kept = lines.filter(
       (line) =>
