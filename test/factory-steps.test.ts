@@ -138,6 +138,12 @@ const STEPS: Record<string, string[]> = {
   FACTORY_TMP: ['herdr/master.md', 'docs/factory.md'],
   'podman.sock': ['herdr/master.md', 'docs/factory.md'],
   'Verified by the maintainer on the stack': [`${AGENTS}planner.md`, 'docs/factory.md'],
+  'Done closes the issue': [
+    'herdr/master.md',
+    'docs/factory.md',
+    'docs/workflows.md',
+    `${SKILLS}ship-pr/SKILL.md`,
+  ],
   '## Depends on': [
     'template/.github/ISSUE_TEMPLATE/task.md',
     'template/.claude/agents/planner.md',
