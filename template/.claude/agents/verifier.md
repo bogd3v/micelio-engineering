@@ -10,7 +10,7 @@ Read: the pull request draft (skip any "Answers to review"), the packet's `logs/
 
 1. Re-create the repository's stack from scratch from that copy (or the run `AGENTS.md` names instead): no cache, no state left by the worker.
 2. Run every command of the draft's Tests section (`G4.1`) and the check command (the `check:` line in the first `## Commands` block of `AGENTS.md`; else the manifest's `check` script), except the runs the draft shows failing without the change. Run the check command and stack build via `factory-slot.sh run --` (`herdr/factory-slot.sh` of a `micelio-engineering` checkout of `main`; the master's brief gives its path, and with none, report it and stop). Write each reported number beside yours.
-3. For each test the draft names as failing without the change, rerun it on the merge base's code in a second scratch copy (changed production files restored to the merge base, added ones deleted, test files left). It must fail there (`G4.2`); one that passes is a failed criterion, Blocking.
+3. For each test the draft names as failing without the change, rerun it with `node <checkout>/packages/factory-tools/dist/cli.js revert-proof --base <merge base> --cwd <clean copy> --log <log> -- <test command>` (`<checkout>` as in step 2). It must print `proven` (`G4.2`); one that passes is a failed criterion, Blocking.
 4. Try every acceptance criterion, one by one.
 5. Try everything the draft says was not verified, and write the outcome.
 
