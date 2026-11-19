@@ -163,6 +163,7 @@ const STEPS: Record<string, string[]> = {
     `${SKILLS}verify-pr/SKILL.md`,
     'template/.claude/TEAM.md',
   ],
+  'the tests the change makes false': [`${AGENTS}planner.md`],
   'cargo-deny: true': ['.github/workflows/ci.yml', 'docs/workflows.md'],
 }
 
