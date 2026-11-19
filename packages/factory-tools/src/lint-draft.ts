@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { readFile, readdir } from 'node:fs/promises'
+import { access, readFile, readdir } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { promisify } from 'node:util'
 import { errorLine } from './errors.js'
@@ -28,6 +28,13 @@ export interface DraftContext {
    * and then the draft is not asked to report one.
    */
   checkCommand: string[] | null
+  /**
+   * Whether the worktree is `micelio-engineering` (`createDeps` sets it when it has
+   * `.github/standard-sync.json`). There a synced file, a path under `template/` and a path under
+   * `herdr/` belong to the repository and are fixed on the branch, never reported to the master;
+   * left out, false.
+   */
+  home?: boolean
   /**
    * The files of the packet's logs directory, as paths relative to it (`npm-test.log`); left out,
    * the "Tests" section is not checked for logs.
@@ -72,6 +79,17 @@ function isSynced(path: string, synced: string[]): boolean {
 /** An own file: `AGENTS.md`, or a skill that `.github/standard-sync.json` does not list. */
 function isOwn(path: string, synced: string[]): boolean {
   return path === 'AGENTS.md' || (path.startsWith('.claude/skills/') && !isSynced(path, synced))
+}
+
+/**
+ * How to fix a file `micelio-engineering` owns: a synced file (with or without its `template/`
+ * prefix), any path under `template/`, any path under `herdr/`. `null` for any other path.
+ */
+function homeFix(path: string, synced: string[]): string | null {
+  const bare = path.startsWith('template/') ? path.slice('template/'.length) : path
+  if (isSynced(bare, synced)) return `fix it on the branch and end "fixed in template/${bare}"`
+  if (path.startsWith('template/') || path.startsWith('herdr/')) return 'fix it on the branch'
+  return null
 }
 
 /**
@@ -324,7 +342,13 @@ function instructionProblems(draft: string, context: DraftContext): DraftProblem
     const reported = REPORTED.exec(line)
     if (reported?.groups) {
       const subject = unquote(reported.groups['subject'] ?? '')
-      if (isOwn(subject, context.synced)) {
+      const fix = context.home === true ? homeFix(subject, context.synced) : null
+      if (fix !== null) {
+        problems.push({
+          line,
+          problem: `${subject} is a file micelio-engineering owns: ${fix}, do not report it`,
+        })
+      } else if (isOwn(subject, context.synced)) {
         problems.push({
           line,
           problem: `${subject} is a file of this repository: fix it on the branch, do not report it`,
@@ -352,6 +376,8 @@ export interface LintDraftDeps {
   editedTests?: (base: string) => Promise<string[]>
   /** `checkCommandOf` of the `AGENTS.md` and `package.json` in the worktree. Optional; left out, `null`. */
   checkCommand?: () => Promise<string[] | null>
+  /** Whether the worktree is `micelio-engineering`: it has `.github/standard-sync.json`. Optional; left out, false. */
+  home?: () => Promise<boolean>
   /** The files under a logs directory, relative to it, in any depth. Optional; used with `--logs`. */
   logFiles?: (dir: string) => Promise<string[]>
 }
@@ -406,6 +432,15 @@ export function createDeps(cwd: string, syncList: URL = OWN_SYNC_LIST): LintDraf
       }
       return checkCommandOf(await read('AGENTS.md'), await read('package.json'))
     },
+    home: async () => {
+      try {
+        await access(join(cwd, '.github/standard-sync.json'))
+        return true
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+        throw error
+      }
+    },
     logFiles: async (dir) =>
       (await readdir(dir, { recursive: true, withFileTypes: true }))
         .filter((entry) => entry.isFile())
@@ -453,6 +488,7 @@ export async function runLintDraft(
       synced: await deps.syncedFiles(),
       editedTests: (await deps.editedTests?.(base)) ?? [],
       checkCommand: (await deps.checkCommand?.()) ?? null,
+      home: (await deps.home?.()) ?? false,
       ...(logs === undefined || deps.logFiles === undefined
         ? {}
         : { logFiles: await deps.logFiles(logs) }),
