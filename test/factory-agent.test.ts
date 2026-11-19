@@ -138,6 +138,40 @@ describe('enter', () => {
     expect(readdirSync(agents)).toEqual(['a'.repeat(32)])
   })
 
+  it('enter exports TMPDIR as a directory of the agent under FACTORY_TMP', () => {
+    const scratch = join(root, 'scratch')
+    stub(
+      'systemd-run',
+      `while [[ "$1" == --* ]]; do shift; done\nprintf 'TMPDIR=%s\\n' "$TMPDIR" >>"${log}"\nexec "$@"`
+    )
+    const result = run(['enter', 'worker-7', '--', 'true'], { FACTORY_TMP: scratch })
+    expect(result.status).toBe(0)
+    expect(calls()).toContain(`TMPDIR=${join(scratch, 'worker-7')}`)
+    expect(existsSync(join(scratch, 'worker-7'))).toBe(true)
+  })
+
+  it('enter without FACTORY_TMP uses $HOME/Git/factory/tmp, never /tmp', () => {
+    stub(
+      'systemd-run',
+      `while [[ "$1" == --* ]]; do shift; done\nprintf 'TMPDIR=%s\\n' "$TMPDIR" >>"${log}"\nexec "$@"`
+    )
+    const result = run(['enter', 'worker-8', '--', 'true'], { TMPDIR: '/tmp' }, ['FACTORY_TMP'])
+    expect(result.status).toBe(0)
+    const want = join(root, 'Git/factory/tmp/worker-8')
+    expect(calls()).toContain(`TMPDIR=${want}`)
+    expect(existsSync(want)).toBe(true)
+  })
+
+  it("stop removes the agent's temp directory", () => {
+    const scratch = join(root, 'scratch')
+    run(['enter', 'gone', '--', 'true'], { FACTORY_TMP: scratch })
+    run(['enter', 'kept', '--', 'true'], { FACTORY_TMP: scratch })
+    writeFileSync(join(scratch, 'gone', 'leftover'), 'x')
+    expect(run(['stop', 'gone'], { FACTORY_TMP: scratch }).status).toBe(0)
+    expect(existsSync(join(scratch, 'gone'))).toBe(false)
+    expect(existsSync(join(scratch, 'kept'))).toBe(true)
+  })
+
   it('stop removes the agent directory and refuses a bad name', () => {
     run(['enter', 'gone', '--', 'true'])
     expect(existsSync(join(agents, 'gone'))).toBe(true)

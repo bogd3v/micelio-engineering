@@ -6,12 +6,13 @@
 #   factory-agent.sh stop <agent>
 #
 # Environment: FACTORY_AGENT_MEMORY (10G), FACTORY_AGENT_CPU (800%), FACTORY_AGENT_DIR,
-# FACTORY_DOCKER (/usr/bin/docker), FACTORY_SLICE, FACTORY_AGENT.
+# FACTORY_DOCKER (/usr/bin/docker), FACTORY_TMP (~/Git/factory/tmp), FACTORY_SLICE, FACTORY_AGENT.
 # See docs/factory.md, "Machine budget". Needs only bash, coreutils, systemd-run, systemctl
 # and the docker CLI. It reads a repository's compose files for `config --services` alone.
 set -u
 
 AGENT_DIR="${FACTORY_AGENT_DIR:-$HOME/Git/factory/run/agents}"
+TMP_ROOT="${FACTORY_TMP:-$HOME/Git/factory/tmp}"
 REAL_DOCKER="${FACTORY_DOCKER:-/usr/bin/docker}"
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 
@@ -35,6 +36,8 @@ cmd_enter() {
   mkdir -p "$bin" || die "cannot create $bin"
   printf '#!/usr/bin/env bash\nexec %q docker -- "$@"\n' "$SELF" >"$bin/docker"
   chmod +x "$bin/docker"
+  local scratch="$TMP_ROOT/$agent"
+  mkdir -p "$scratch" || die "cannot create $scratch"
 
   systemctl --user set-property "$slice" \
     "MemoryMax=${FACTORY_AGENT_MEMORY:-10G}" \
@@ -43,6 +46,7 @@ cmd_enter() {
 
   export DOCKER_HOST="unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
   export FACTORY_AGENT="$agent" FACTORY_SLICE="$slice"
+  export TMPDIR="$scratch"
   export PATH="$bin:$PATH"
   if [[ $# -eq 0 ]]; then set -- "${SHELL:-/bin/bash}" -i; fi
   exec systemd-run --user --scope --quiet --slice="$slice" "$@"
@@ -171,7 +175,7 @@ cmd_docker() {
 cmd_stop() {
   local agent="${1:-}"
   valid_agent "$agent" || die "agent name must match [a-z][a-z0-9_-]{0,31}, got '$agent'"
-  rm -rf "${AGENT_DIR:?}/$agent"
+  rm -rf "${AGENT_DIR:?}/$agent" "${TMP_ROOT:?}/$agent"
 }
 
 case "${1:-}" in

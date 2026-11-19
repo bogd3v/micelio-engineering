@@ -135,6 +135,7 @@ const STEPS: Record<string, string[]> = {
     'template/.claude/TEAM.md',
     'docs/factory.md',
   ],
+  FACTORY_TMP: ['herdr/master.md', 'docs/factory.md'],
   'podman.sock': ['herdr/master.md', 'docs/factory.md'],
   'Verified by the maintainer on the stack': [`${AGENTS}planner.md`, 'docs/factory.md'],
   '## Depends on': [
