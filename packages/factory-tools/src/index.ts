@@ -34,6 +34,8 @@ export type {
 } from './fields.js'
 export { metrics } from './metrics.js'
 export type { IssueRow, Metrics, MetricsOptions, PullRow, RoleTokens } from './metrics.js'
+export { lintLog, runLintLog } from './lint-log.js'
+export type { LogProblem, LintLogResult } from './lint-log.js'
 export {
   blockingByCategory,
   countLearnings,
