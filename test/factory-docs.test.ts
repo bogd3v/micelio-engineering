@@ -46,8 +46,8 @@ function unknownCitations(
 }
 
 describe('the factory documents', () => {
-  it('docs/factory.md has at most 5942 words and herdr/master.md at most 4048', () => {
-    expect(words(read('docs/factory.md'))).toBeLessThanOrEqual(5942)
+  it('docs/factory.md has at most 5948 words and herdr/master.md at most 4048', () => {
+    expect(words(read('docs/factory.md'))).toBeLessThanOrEqual(5948)
     expect(words(read('herdr/master.md'))).toBeLessThanOrEqual(4048)
   })
 

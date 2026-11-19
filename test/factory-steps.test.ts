@@ -165,6 +165,7 @@ const STEPS: Record<string, string[]> = {
     'docs/workflows.md',
     `${SKILLS}ship-pr/SKILL.md`,
   ],
+  'maintainer said to close': ['herdr/master.md', 'docs/factory.md'],
   '## Depends on': [
     'template/.github/ISSUE_TEMPLATE/task.md',
     'template/.claude/agents/planner.md',
