@@ -91,6 +91,10 @@ The title and body are read through the API by `lint-issue` and never reach a sh
 
 `issues` events run from the default branch, so a change to this workflow is tried on a test issue only after it is merged.
 
+## The project's auto-close
+
+This is the organisation project's workflow, not one of this repository's.
+
 **Done closes the issue.** The organisation project's own workflow closes an issue whose Status becomes Done, within a second: `bogd3v/micelio-cms#417` (Done 2026-11-11T22:33:59Z, closed 22:34:00Z), `bogd3v/micelio#888` (2026-11-12T03:29:45Z, 03:29:46Z) and `bogd3v/micelio-plugin-fediverse#28` (2026-11-12T14:23:21Z, 14:23:22Z) show it, each closed by `ProjectV2`. The factory therefore sets Done only when the issue is to close (`herdr/master.md`, "The Project Status flow"). The workflow's setting is the maintainer's.
 
 ## `verify-draft.yml`
