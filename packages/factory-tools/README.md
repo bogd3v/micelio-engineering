@@ -550,6 +550,12 @@ is where git runs and where a relative `--draft` is read.
 true>` (a bullet and a `:<line>` after the path are ignored), answers every hit of that file, and
   it is not listed.
 - It does not subtract the lines the diff adds: a term the new code names too is still a hit.
+  Three rules give no term where the diff only moved text: a removed line whose text, without
+  leading and trailing whitespace, equals a line the diff adds to the same file (it was reindented
+  or moved, not removed); a file for which `git check-attr linguist-generated` prints `set` or
+  `true` (the attribute GitHub folds in a diff; the root `.gitattributes` marks
+  `packages/eslint-config/standard-hashes.json`, and another repository marks its own files); and a
+  capitals token that starts inside a word (`fooBAR_BAZ` gives no term, `BAR_BAZ`).
 
 It only reads. It does not catch a changed number, a behaviour described in other words, a table row
 that should gain an entry, a term in a source comment or a file that is not Markdown, nor a

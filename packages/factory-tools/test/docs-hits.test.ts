@@ -92,6 +92,49 @@ describe('docs-hits', () => {
     expect(removedTerms(diff)).toEqual(['config.preview-token', 'DRAFT_PAGE_POPULATE'])
   })
 
+  it('a reindented line gives no term', async () => {
+    const repo = await repository({
+      'src/cli.ts': "const x = a\n  ? 1\n  : argv[0] === 'project-fields-backfill'\n",
+      'docs/a.md':
+        "It runs `argv[0] === 'project-fields-backfill'`.\nAnd project-fields-backfill too.\n",
+    })
+    await writeFile(
+      join(repo, 'src/cli.ts'),
+      "const x = a\n  ? 1\n    : argv[0] === 'project-fields-backfill'\n"
+    )
+    const result = await hits(repo)
+    expect(result.code).toBe(0)
+    expect(result.stdout).toBe('docs-hits · base HEAD · no hit\n')
+  })
+
+  it('a file marked linguist-generated gives no term', async () => {
+    const files = {
+      'out/hashes.json': '{ "shared.playground": "1" }\n',
+      'docs/a.md': 'It keeps `shared.playground`.\n',
+    }
+    const marked = await repository(files)
+    await writeFile(join(marked, '.gitattributes'), 'out/hashes.json linguist-generated=true\n')
+    await writeFile(join(marked, 'out/hashes.json'), '{}\n')
+    expect(await hits(marked)).toMatchObject({ code: 0 })
+    const plain = await repository(files)
+    await writeFile(join(plain, 'out/hashes.json'), '{}\n')
+    const result = await hits(plain)
+    expect(result.code).toBe(1)
+    expect(result.stdout).toContain('docs/a.md:1: shared.playground\n')
+  })
+
+  it('a capitals term starts at a word boundary', () => {
+    const diff = [
+      'diff --git a/src/a.ts b/src/a.ts',
+      '--- a/src/a.ts',
+      '+++ b/src/a.ts',
+      '@@ -1 +0,0 @@',
+      '-fooBAR_BAZ and QUX_QUUX',
+      '',
+    ].join('\n')
+    expect(removedTerms(diff)).toEqual(['QUX_QUUX'])
+  })
+
   it('a hit answered in For review is not listed', async () => {
     const repo = await repository({
       'src/populate.ts': "export const PAGE = ['shared.playground', 'meta.actor']\n",

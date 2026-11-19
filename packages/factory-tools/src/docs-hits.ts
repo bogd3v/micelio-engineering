@@ -20,19 +20,23 @@ const MIN_TERM = 6
 const JOINED = /[A-Za-z0-9_]+(?:[.:/-][A-Za-z0-9_]+)+/g
 
 /** Capitals with `_`: `DRAFT_PAGE_POPULATE`. */
-const CAPITALS = /[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+/g
+const CAPITALS = /(?<![A-Za-z0-9_])[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+/g
 
 const isMarkdown = (path: string): boolean => /\.md$/i.test(path)
 
 /**
- * The terms of the lines `git diff -U0` removes from files that are neither Markdown nor tests: the
- * tokens of 6 or more characters that hold a letter and a joiner between word characters, or are
- * written in capitals with `_`. Lines the diff adds are not subtracted. In order of appearance, once each.
+ * The terms of the lines `git diff -U0` removes from files that are neither Markdown, tests nor
+ * generated: the tokens of 6 or more characters that hold a letter and a joiner between word
+ * characters, or are written in capitals with `_` that start at a word boundary. A removed line
+ * that the diff adds back to the same file, whitespace at its ends aside, was reindented or moved
+ * and gives no term; any other added line is not subtracted. In order of appearance, once each.
  *
  * @param diff - The output of `git diff -U0 --no-renames <base>`.
+ * @param generated - The paths git marks generated: they give no term.
  */
-export function removedTerms(diff: string): string[] {
-  const terms = new Set<string>()
+export function removedTerms(diff: string, generated: ReadonlySet<string> = new Set()): string[] {
+  const removed: { path: string; text: string }[] = []
+  const added = new Set<string>()
   let path = ''
   let inHunk = false
   for (const line of diff.split('\n')) {
@@ -40,17 +44,22 @@ export function removedTerms(diff: string): string[] {
       path = /^diff --git a\/(.+) b\/\1$/.exec(line)?.[1] ?? ''
       inHunk = false
     } else if (line.startsWith('@@')) inHunk = true
-    else if (
-      inHunk &&
-      line.startsWith('-') &&
-      path !== '' &&
-      !isMarkdown(path) &&
-      !isTestFile(path)
-    ) {
-      const found = [...line.slice(1).matchAll(JOINED), ...line.slice(1).matchAll(CAPITALS)]
-      for (const [token] of found)
-        if (token.length >= MIN_TERM && /[A-Za-z]/.test(token)) terms.add(token)
+    else if (inHunk && path !== '') {
+      if (line.startsWith('+')) added.add(`${path}\0${line.slice(1).trim()}`)
+      else if (
+        line.startsWith('-') &&
+        !isMarkdown(path) &&
+        !isTestFile(path) &&
+        !generated.has(path)
+      )
+        removed.push({ path, text: line.slice(1) })
     }
+  }
+  const terms = new Set<string>()
+  for (const { path: file, text } of removed) {
+    if (added.has(`${file}\0${text.trim()}`)) continue
+    for (const [token] of [...text.matchAll(JOINED), ...text.matchAll(CAPITALS)])
+      if (token.length >= MIN_TERM && /[A-Za-z]/.test(token)) terms.add(token)
   }
   return [...terms]
 }
@@ -116,6 +125,8 @@ export interface DocsHitsDeps {
   /** The tracked Markdown files, sorted. */
   markdownFiles: () => Promise<string[]>
   readText: (path: string) => Promise<string>
+  /** Of `paths`, those `git check-attr linguist-generated` prints `set` or `true` for. */
+  generatedFiles: (paths: string[]) => Promise<Set<string>>
 }
 
 /** The outcome of `runDocsHits`: 0 when nothing is listed, 1 when a hit is, 2 on a usage or read error. */
@@ -159,6 +170,21 @@ export function createDocsHitsDeps(cwd: string): DocsHitsDeps {
       return stdout.split('\0').filter((path) => isMarkdown(path))
     },
     readText: (path) => readFile(resolve(cwd, path), 'utf8'),
+    generatedFiles: async (paths) => {
+      if (paths.length === 0) return new Set()
+      const { stdout } = await exec(
+        'git',
+        ['check-attr', '-z', 'linguist-generated', '--', ...paths],
+        { cwd, maxBuffer: 1 << 28 }
+      )
+      const fields = stdout.split('\0')
+      const generated = new Set<string>()
+      // Each record is <path> NUL <attribute> NUL <value> NUL.
+      for (let i = 0; i + 2 < fields.length; i += 3) {
+        if (['set', 'true'].includes(fields[i + 2] ?? '')) generated.add(fields[i] ?? '')
+      }
+      return generated
+    },
   }
 }
 
@@ -195,8 +221,8 @@ export async function runDocsHits(argv: string[], deps?: DocsHitsDeps): Promise<
     const answered =
       draft === undefined ? new Set<string>() : answeredPaths(await real.readText(draft))
     const diff = await real.diff(base)
-    const terms = removedTerms(diff)
     const touched = touchedPaths(diff)
+    const terms = removedTerms(diff, await real.generatedFiles([...touched]))
     const documents: { path: string; text: string }[] = []
     if (terms.length > 0) {
       for (const path of await real.markdownFiles()) {
