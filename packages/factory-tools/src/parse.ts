@@ -317,8 +317,8 @@ export interface LogLine {
   destination: string
 }
 
-/** The categories of `docs/factory-log.md`. */
-const LOG_CATEGORIES = new Set(['lint', 'test', 'skill', 'standard', 'issue', 'docs'])
+/** The categories of `docs/factory-log.md`; `lint-log` checks a line against the same set. */
+export const LOG_CATEGORIES = new Set(['lint', 'test', 'skill', 'standard', 'issue', 'docs'])
 
 /**
  * Reads the lines of the form `factory-log | <date> | <issue> | <what> | <category> | <destination>`

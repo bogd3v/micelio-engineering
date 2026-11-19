@@ -1,7 +1,8 @@
 # @micelio/factory-tools
 
 The commands of the Micelio software factory: `lint-issue` (Gate 1, the Definition of Ready, as a
-script), [`issue-ready`](#issue-ready) (what the workflow does with its result, and the project fields of
+script), [`lint-log`](#lint-log) (a `factory-log |` line checked before it is posted),
+[`issue-ready`](#issue-ready) (what the workflow does with its result, and the project fields of
 `project-fields-backfill`),
 [`metrics`](#metrics) (the factory's numbers for a milestone), [`lint-draft`](#lint-draft) (the
 shape of a draft's section "Instructions that were wrong or missing", and its "For review" answers
@@ -178,6 +179,35 @@ or a file cannot be read.
   does not.
 
 It does not judge whether a "Nothing" is true, nor whether the check command is green.
+
+## `lint-log`
+
+Checks a `factory-log |` line before the master posts it (`herdr/master.md`, "Correction log"),
+because `parseLogLines` reads the destination only when the field before it is a category: with
+another category it folds that word into What, and the error shows up in the scribe's pull request.
+The scribe runs it on the text of the comments before it collects the lines.
+
+```bash
+node <checkout>/packages/factory-tools/dist/cli.js lint-log --file <comment text>
+```
+
+It reads the file as a comment body and checks each line that starts `factory-log |`; other lines
+are ignored. The fields are separated by `|`, a space on each side: `factory-log | <date> |
+<issue> | <what> | <category> | <destination>`. A line breaks the format when:
+
+- its date is not `YYYY-MM-DD`;
+- its issue is empty;
+- its what is empty (a `|` inside the what is kept);
+- its category, the field before the last, is not one of `lint`, `test`, `skill`, `standard`,
+  `issue` or `docs` (`LOG_CATEGORIES` in `src/parse.ts`, the six of `docs/factory-log.md`);
+- its last field is empty (`-` is the destination until the retro gives one), or the line has
+  fewer than five fields after `factory-log |`;
+- `parseLogLines` would read another date, issue, category or destination from it, as when a `|`
+  has no space on a side.
+
+Exit 0 when every such line is right, or there is none. Exit 1 when one breaks the format; it
+prints each line with its number in the file and the reason. Exit 2 when the arguments are wrong
+(`--file <path>` and nothing else) or the file cannot be read.
 
 ## `verify-draft`
 
