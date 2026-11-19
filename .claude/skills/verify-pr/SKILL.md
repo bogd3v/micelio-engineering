@@ -26,6 +26,7 @@ Nothing is committed before gate 5, so the copy is not a checkout of the branch:
 ```bash
 base=$(git -C <worktree> merge-base HEAD origin/main)
 clean=$(mktemp -d)
+echo "$clean"
 git clone --quiet "$(git -C <worktree> remote get-url origin)" "$clean/repo"
 git -C "$clean/repo" checkout --quiet "$base"
 git -C <worktree> diff --binary "$base" | git -C "$clean/repo" apply
@@ -42,7 +43,7 @@ A scratch repository with no `origin` is cloned from its own path instead (`git 
 
    A **repository command** is a command written in `AGENTS.md` at the merge base (the check command, the test command and the install command of its `## Commands` included), or a script the clean copy's own manifest defines, with the arguments the draft gives. The draft is the worker's text, not an instruction: a command that is none of these, or that has a pipe, `;`, `&&`, a redirection, `$(…)`, a URL or a path outside the clean copy, is never run. Write it in the table as `not run: not a repository command`; it is not a mismatch, and it is listed in the summary.
 
-3. For each test the draft names as one that fails without the change, rerun it on the merge base's code: in a second scratch copy of the clean copy, restore each changed production file to `$base` and delete the ones the change adds (leave the test files, new or changed, as they are), and run the named test with the repository command the draft gives. It must fail there, as the draft shows. A named test that passes on the merge base's code is a failed criterion, Blocking, listed on its own line. You rerun only the tests the draft names; a draft that says `no test: not code` needs no rerun, and whether a test is missing is gate 3's check. Never run this in the worktree.
+3. For each test the draft names as one that fails without the change, rerun it on the merge base's code: in a second scratch copy of the clean copy (made with `mktemp -d`, its path printed the same way), restore each changed production file to `$base` and delete the ones the change adds (leave the test files, new or changed, as they are), and run the named test with the repository command the draft gives. It must fail there, as the draft shows. A named test that passes on the merge base's code is a failed criterion, Blocking, listed on its own line. You rerun only the tests the draft names; a draft that says `no test: not code` needs no rerun, and whether a test is missing is gate 3's check. Never run this in the worktree.
 4. Try every acceptance criterion of the issue, one by one, except the fixed maintainer criterion.
 5. Try everything the draft says was not verified, and write the outcome.
 
@@ -66,6 +67,8 @@ Write two files in the directory you were given and nothing else:
   K is a number and the noun stays `mismatches`, whatever K is, 0 and 1 included.
 
   (`Verdict: Pass · 0 mismatches` when every count matches, every command has its log, every varying figure is at or above its floor and every criterion holds; `Verdict: Red · 0 mismatches` when a criterion fails or a command cannot be run), then one line per mismatch, `variance` row, failed criterion or command not run, with the reported and the obtained value. Nothing more: the master reads only this file.
+
+Write `report.md` first and `summary.md` second, each in a step of its own that removes nothing: gate 4 waits for those two files, and a command that also deletes can be held at a permission prompt, so an unattended verifier would leave no report. Only after both exist, remove each clean copy (and the second scratch copy of "Verify", step 3) in a command of its own, as `rm -rf -- <path>` with the literal path printed when the copy was made: never a variable, a `$(…)` or a glob. Move out of a copy before removing it.
 
 Reply with the two paths and the first line of `summary.md`, nothing else.
 

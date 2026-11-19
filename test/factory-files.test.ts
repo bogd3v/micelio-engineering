@@ -220,3 +220,22 @@ describe('the role prompts', () => {
     expect(total, 'total words').toBeLessThanOrEqual(TOTAL)
   })
 })
+
+describe('the verify-pr skill', () => {
+  const skill = readFileSync(join(ROOT, 'template/.claude/skills/verify-pr/SKILL.md'), 'utf8')
+
+  it('verify-pr removes a clean copy after the reports, in its own command, by its literal path', () => {
+    const reports = skill.slice(skill.indexOf('\n## Reports'), skill.indexOf('\n## Never'))
+    expect(reports).toContain('`report.md` first and `summary.md` second')
+    expect(reports).toContain('each in a step of its own that removes nothing')
+    expect(reports).toContain('Only after both exist')
+    expect(reports).toContain('in a command of its own, as `rm -rf -- <path>`')
+    expect(reports).toContain('the literal path printed when the copy was made')
+    expect(reports).toMatch(/never a variable, a `\$\(…\)` or a glob/)
+    expect(reports.indexOf('`report.md` first')).toBeLessThan(reports.indexOf('rm -rf --'))
+    const fenced = [...skill.matchAll(/```[^\n]*\n([\s\S]*?)```/g)].map((m) => m[1])
+    for (const block of fenced) {
+      expect(block).not.toMatch(/\brm\b[^\n]*\$/)
+    }
+  })
+})
