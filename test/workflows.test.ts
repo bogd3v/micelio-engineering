@@ -617,10 +617,53 @@ describe('verify-draft.yml', () => {
     expect(existsSync(join(dir, 'pwned2'))).toBe(false)
   })
 
+  it('verify-draft.yml checks out the head of the pull request, not its merge with the base', () => {
+    const step = verifySteps()['Checkout the pull request'] ?? ''
+    expect(step).toMatch(/^ {10}ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}$/m)
+    expect(step).toMatch(/^ {10}fetch-depth: 0$/m)
+  })
+
+  it('verify-draft.yml diffs the head against its merge base with the base branch', () => {
+    const dir = tempDir('micelio-verify-mb-')
+    const bin = join(dir, 'bin')
+    mkdirSync(bin)
+    writeFileSync(join(bin, 'node'), '#!/bin/sh\necho "node $*"\nexit 0\n')
+    chmodSync(join(bin, 'node'), 0o755)
+    const lane = (git: string): { status: number | null; output: string; outputs: string } => {
+      writeFileSync(join(bin, 'git'), git)
+      chmodSync(join(bin, 'git'), 0o755)
+      writeFileSync(join(dir, 'out'), '')
+      const result = run(
+        verifyScript('Check the lane'),
+        {
+          PATH: `${bin}:${process.env.PATH ?? ''}`,
+          GITHUB_OUTPUT: join(dir, 'out'),
+          BASE_SHA: 'movedbase789',
+          RUNNER_TEMP: dir,
+        },
+        dir
+      )
+      return { ...result, outputs: readFileSync(join(dir, 'out'), 'utf8') }
+    }
+    const ok = lane('#!/bin/sh\necho "git $*" >&2\necho mergebase456\n')
+    expect(ok.status).toBe(0)
+    expect(ok.output).toContain('git merge-base HEAD movedbase789')
+    expect(ok.output).toContain('lint-lane --diff mergebase456 --lane normal')
+    expect(ok.output).not.toContain('--diff movedbase789')
+    expect(ok.outputs).toBe('normal=true\n')
+    const broken = lane('#!/bin/sh\nexit 1\n')
+    expect(broken.status).not.toBe(0)
+    expect(broken.output).not.toContain('lint-lane')
+    expect(broken.outputs).toBe('')
+  })
+
   it('verify-draft.yml skips and passes when the diff does not fit the normal lane', () => {
     const dir = tempDir('micelio-verify-')
     const bin = join(dir, 'bin')
     mkdirSync(bin)
+    // `git merge-base HEAD <base>` prints the merge base the lane is diffed against
+    writeFileSync(join(bin, 'git'), '#!/bin/sh\necho "mergebase456"\n')
+    chmodSync(join(bin, 'git'), 0o755)
     const lane = (exit: number): { status: number | null; output: string; outputs: string } => {
       writeFileSync(join(bin, 'node'), `#!/bin/sh\necho "node $*"\nexit ${String(exit)}\n`)
       chmodSync(join(bin, 'node'), 0o755)
@@ -639,7 +682,7 @@ describe('verify-draft.yml', () => {
     }
     const full = lane(1)
     expect(full.status).toBe(0)
-    expect(full.output).toContain('lint-lane --diff abc123 --lane normal')
+    expect(full.output).toContain('lint-lane --diff mergebase456 --lane normal')
     expect(full.output).toContain('full lane: gate 4 is the verifier')
     expect(full.outputs).toBe('normal=false\n')
     const normal = lane(0)
