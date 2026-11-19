@@ -63,7 +63,7 @@ herdr agent prompt worker-<N> "<the brief>" --wait --timeout 3600000
 Todo → Ready → In Progress → **Review** → Done (`M.7`), changed with `gh project item-edit` (field and option ids from `gh project field-list <number> --owner <owner> --format json`, looked up each run).
 
 1. Todo: created, or sent back at gate 1 (`issue-ready`). Ready: gate 1 passes (`issue-ready`).
-2. In Progress: a worker starts, and again whenever a red gate sends work back. Review: the draft is handed back; gates 3 to 5 read it.
+2. In Progress: a worker starts, and again whenever a red gate sends work back. Review: the draft is handed back; gates 3 to 5 read it, and the host criteria run in it.
 3. Done closes the issue (the project does it at once), so set it only when the pull request that has `Closes` is `MERGED` (`gh pr view <n> --json state -q .state` printed it first) and every criterion left for after the merge is met or the maintainer said to close; never on a guess, an approval or an unmerged pull request. A merged `Refs` pull request leaves the issue in Review, with a line in `### Progress` of what is left.
 
 ## The rounds
@@ -131,7 +131,8 @@ herdr agent prompt verifier-<N> "Use the verify-pr skill (.claude/skills/verify-
 ```
 
 1. The verifier gets the draft without "Answers to review", never the review. Post its report the same way, first line `**Gate 4, round K (verifier-<N>)** · M mismatches` (`0 mismatches` on a pass). Any mismatch is Blocking; `verify-pr` counts one per command whose numbers differ or that has no log.
-2. When the master passes a report's discrepancies as noise, the first line ends `, passed by the master`; `metrics` counts those reports as false reds.
+2. After gate 4 passes, run each criterion marked `run by the master on the host` through `<path of herdr/factory-slot.sh> run -- <command>`, first building the other repository's branch image the command names; the log goes in `<packets>/<N>/logs/`, and a failure is a red gate 4.
+3. When the master passes a report's discrepancies as noise, the first line ends `, passed by the master`; `metrics` counts those reports as false reds.
 
 ### The tokens record
 

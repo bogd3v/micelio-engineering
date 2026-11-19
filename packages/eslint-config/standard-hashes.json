@@ -36,14 +36,14 @@
     }
   },
   "files": {
-    ".claude/agents/master.md": "67b9ca757e689b759e8679bdae7dcf0611abad6c1d6b52918d1cd3e5777e6c72",
-    ".claude/agents/planner.md": "f06d9d90f4f4cac9c2bb8f6221687b26fbc5711bd48a76db4c6b83bfcefe9096",
+    ".claude/agents/master.md": "ea43ebcfbbeecfb61e9fd9d1b3e8fba19902580066f44bcee5e45bc2aec6b426",
+    ".claude/agents/planner.md": "fb8b0fd5758f03f83046eb8be3e763485441496c203e149997d16eca055e7ef1",
     ".claude/agents/reviewer.md": "34cf7fb633a6c6301a68d33e40982462aa9c8aeeb2ccec35ba78f1bf62b0d7ef",
     ".claude/agents/verifier.md": "3eb82a7fde8bde2bff13065cc0e0edaa5ba4baaf5abfe453b018dc7fd56804b3",
     ".claude/agents/worker.md": "7c15a27bb0d2cdb4c27331c7f8a99fc53ef51df50f3d872206ded58e185b5f20",
     ".claude/skills/ship-pr/SKILL.md": "275cdd710ebdbe6723f692a95a75ea6d22862c49822002c248878e33dbde5324",
     ".claude/skills/blind-review/SKILL.md": "60eb713ec54d42ba914fe7c93597efc0d30105acf5fc24ae9634b1b06af17a4e",
-    ".claude/skills/verify-pr/SKILL.md": "917e978942e781eec2481c7ec92355e896c2c2696723cb941c13e3208599db15",
+    ".claude/skills/verify-pr/SKILL.md": "a2c64e177ca7c89a227f902892bda74052c38b746612e2b5c406f85971de465f",
     ".github/pull_request_template.md": "a61095d88c22206255c089905df9d455e37c9ac3428eafd841a98fa9db272256",
     "CLAUDE.md": "2fe9efbc0c4a6e0cbd446afb506911ba28b0068a42f8686676635986d968cefd"
   }

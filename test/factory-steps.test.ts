@@ -69,6 +69,13 @@ const STEPS: Record<string, string[]> = {
     'herdr/master.md',
     'docs/factory.md',
   ],
+  'run by the master on the host': [
+    `${AGENTS}planner.md`,
+    `${AGENTS}master.md`,
+    `${SKILLS}verify-pr/SKILL.md`,
+    'herdr/master.md',
+    'docs/factory.md',
+  ],
   'logs/': [
     `${AGENTS}master.md`,
     `${AGENTS}verifier.md`,
