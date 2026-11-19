@@ -173,6 +173,12 @@ function groupAlive(pgid: number): boolean {
   }
 }
 
+/** True when a slot directory is under the real one, `$HOME/Git/factory/run`; `~/Git/factory/tmp` is not. */
+function underRealSlotDir(dir: string): boolean {
+  const real = join(homedir(), 'Git/factory/run')
+  return dir === real || dir.startsWith(real + '/')
+}
+
 beforeEach(() => {
   root = mkdtempSync(join(process.env['FACTORY_TEST_TMP'] ?? tmpdir(), 'factory-slot-'))
   const clean = { ...process.env }
@@ -189,7 +195,7 @@ beforeEach(() => {
     FACTORY_REAP_GRACE: '0',
   }
   mkdirSync(join(root, 'tmp'), { recursive: true })
-  expect(env['FACTORY_SLOT_DIR']?.startsWith(homedir() + '/Git/factory')).toBe(false)
+  expect(underRealSlotDir(env['FACTORY_SLOT_DIR'] ?? '')).toBe(false)
 })
 
 afterEach(() => {
@@ -735,5 +741,16 @@ describe('factory-slot.sh status', () => {
     release('a')
     await run.exited
     await waiting.exited
+  })
+})
+
+describe('the guard of beforeEach', () => {
+  it('the guard fails a FACTORY_SLOT_DIR under ~/Git/factory/run and passes one under ~/Git/factory/tmp', () => {
+    const factory = join(homedir(), 'Git/factory')
+    expect(underRealSlotDir(join(factory, 'run/slots'))).toBe(true)
+    expect(underRealSlotDir(join(factory, 'run'))).toBe(true)
+    expect(underRealSlotDir(join(factory, 'tmp/worker-1/factory-slot-x/slots'))).toBe(false)
+    expect(underRealSlotDir(join(factory, 'runner/slots'))).toBe(false)
+    expect(underRealSlotDir(join(tmpdir(), 'factory-slot-x/slots'))).toBe(false)
   })
 })
