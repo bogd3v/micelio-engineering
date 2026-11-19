@@ -11,9 +11,9 @@ const FIXTURES = new URL('./fixtures/ready/', import.meta.url)
 
 /**
  * `project-today.json` is the answer of the organisation project read on 2026-10-24, before the
- * Ready option existed; `project-with-ready.json` is the same answer with two options added by
- * hand: the Ready option of Status, and the Release line option `0.8` (its id read from project
- * `bogd3v/1` on 2026-11-12).
+ * Ready option existed; `project-with-ready.json` is the same answer with three options added by
+ * hand: the Ready option of Status, and the Release line options `0.8` (its id read from project
+ * `bogd3v/1` on 2026-11-12) and `0.9`.
  */
 async function recorded(name: string): Promise<{ data: unknown }> {
   return JSON.parse(await readFile(new URL(name, FIXTURES), 'utf8')) as { data: unknown }
