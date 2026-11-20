@@ -109,8 +109,10 @@ interface Repository {
   lock?: boolean
   /** The version the lockfile installs; the range without its operator when unset. */
   locked?: string
-  /** Whether the root `package.json` has npm workspaces. */
+  /** Whether the root `package.json` has npm workspaces: one, `packages/ws`, in the seed and the lockfile. */
   workspaces?: boolean
+  /** Whether that workspace declares the package too (in `section`, as the root does). */
+  workspaceDeclares?: boolean
   /** Whether the root `package.json` declares the package (it does not when a workspace does). */
   declared?: boolean
   /** The `profile:` pin of `AGENTS.md`, on the line of the version pin; no profile pin when unset. */
@@ -163,11 +165,32 @@ function world(pin: string, existingPr = '', spec: Repository = CURRENT_REPOSITO
         join(seed, 'package.json'),
         JSON.stringify({ name: name, ...workspaces, ...declared }) + '\n'
       )
+      const workspace = {
+        name: '@ws/ws',
+        version: '1.0.0',
+        devDependencies: {
+          ...(spec.workspaceDeclares ? { [PACKAGE]: spec.range } : {}),
+          other: '1.0.0',
+        },
+      }
+      if (spec.workspaces) {
+        mkdirSync(join(seed, 'packages/ws'), { recursive: true })
+        writeFileSync(
+          join(seed, 'packages/ws/package.json'),
+          JSON.stringify(workspace, null, 2) + '\n'
+        )
+      }
       if (spec.lock !== false) {
         const lock = {
           lockfileVersion: 3,
           packages: {
             '': { name, ...declared },
+            ...(spec.workspaces
+              ? {
+                  'packages/ws': workspace,
+                  'node_modules/@ws/ws': { resolved: 'packages/ws', link: true },
+                }
+              : {}),
             [`node_modules/${PACKAGE}`]: {
               version: spec.locked ?? spec.range.replace(/^[^\d]*/, ''),
             },
@@ -491,15 +514,96 @@ describe('standard-sync.sh raising the package', () => {
     expect(pushed(w, TARGETS.repositories[0] ?? '')).toBeUndefined()
   })
 
-  it('fails a repository with npm workspaces instead of raising only the root', () => {
-    for (const declared of [true, false]) {
-      const w = world('1.3', '', raiser({ workspaces: true, declared }))
+  describe('in a repository with npm workspaces', () => {
+    const WS_LOCK = 'packages/ws'
+    const remoteOf = (w: World, repository: string): string =>
+      join(w.remotes, `${repository.split('/')[1]}.git`)
+
+    it('raises the package at the root of a repository with npm workspaces, in the one commit', () => {
+      const w = world('1.3', '', raiser({ workspaces: true }))
+      const result = sync(w, false)
+      expect(result.status, result.output).toBe(0)
+      const log = readFileSync(w.log, 'utf8')
+      const branch = `docs/standard-sync-${CURRENT}`
+      for (const repository of TARGETS.repositories) {
+        const remote = remoteOf(w, repository)
+        expect(pushed(w, repository)?.commits, repository).toBe(1)
+        const manifest = JSON.parse(git(remote, 'show', `${branch}:package.json`)) as {
+          devDependencies: Record<string, string>
+        }
+        const lock = JSON.parse(git(remote, 'show', `${branch}:package-lock.json`)) as {
+          packages: Record<string, { version?: string }>
+        }
+        expect(manifest.devDependencies[PACKAGE]).toBe(`^${PUBLISHED}`)
+        expect(lock.packages[`node_modules/${PACKAGE}`]?.version).toBe(PUBLISHED)
+        expect(git(remote, 'show', `${branch}:packages/ws/package.json`)).toBe(
+          git(remote, 'show', 'main:packages/ws/package.json')
+        )
+        expect(lock.packages[WS_LOCK]).toEqual(
+          (
+            JSON.parse(git(remote, 'show', 'main:package-lock.json')) as {
+              packages: Record<string, unknown>
+            }
+          ).packages[WS_LOCK]
+        )
+      }
+      const installs = log.split('\n').filter((line) => line.startsWith('toolchain npm install'))
+      expect(installs).toHaveLength(TARGETS.repositories.length)
+      for (const line of installs) {
+        expect(line).not.toMatch(/ -w\b| --workspace/)
+        expect(line).toMatch(/in \S+\/micelio[\w-]*$/)
+      }
+    })
+
+    it('lists the raise of a repository with npm workspaces in a dry run and writes nothing', () => {
+      const w = world('1.3', '', raiser({ workspaces: true }))
       const result = sync(w, true)
-      expect(result.status, `declared ${declared}`).toBe(1)
-      expect(result.output).toContain('npm workspaces')
+      expect(result.status, result.output).toBe(0)
+      expect(
+        result.output.split(`would raise ${PACKAGE} from 0.1.2 to ${PUBLISHED}`).length - 1
+      ).toBe(TARGETS.repositories.length)
+      const log = readFileSync(w.log, 'utf8')
+      expect(log).not.toContain('npm install')
+      expect(log).not.toContain('gh pr ')
+    })
+
+    it('leaves a repository with npm workspaces alone when its lockfile already has the published version', () => {
+      const w = world(
+        '1.3',
+        '',
+        raiser({ workspaces: true, range: `^${PUBLISHED}`, locked: PUBLISHED })
+      )
+      const result = sync(w, false)
+      expect(result.status, result.output).toBe(0)
+      expect(readFileSync(w.log, 'utf8')).not.toContain('npm install')
+      const files = pushed(w, TARGETS.repositories[0] ?? '')?.files
+      expect(files).not.toContain('package.json')
+      expect(files).not.toContain('package-lock.json')
+    })
+
+    it('fails a repository whose workspace declares the package too, and names the workspace', () => {
+      for (const dryRun of [true, false]) {
+        const w = world('1.3', '', raiser({ workspaces: true, workspaceDeclares: true }))
+        const result = sync(w, dryRun)
+        expect(result.status, `dry run ${dryRun}`).toBe(1)
+        expect(result.output).toContain(`workspace ${WS_LOCK} declares ${PACKAGE} too`)
+        expect(result.output).not.toContain('would raise')
+        const log = readFileSync(w.log, 'utf8')
+        expect(log).not.toContain('npm install')
+        expect(log).not.toContain('gh pr ')
+        for (const repository of TARGETS.repositories) {
+          expect(pushed(w, repository), repository).toBeUndefined()
+        }
+      }
+    })
+
+    it('fails a repository with npm workspaces whose root package.json does not declare the package', () => {
+      const w = world('1.3', '', raiser({ workspaces: true, declared: false }))
+      const result = sync(w, true)
+      expect(result.status).toBe(1)
+      expect(result.output).toContain(`does not declare ${PACKAGE}`)
       expect(result.output).not.toContain('would raise')
-      expect(readFileSync(w.log, 'utf8')).not.toContain('gh pr ')
-    }
+    })
   })
 
   it('fails a repository without a lockfile in a dry run too', () => {
