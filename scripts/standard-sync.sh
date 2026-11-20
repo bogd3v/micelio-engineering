@@ -21,8 +21,8 @@
 # packages/eslint-config (a patch too: it carries the new hashes), the same commit raises it
 # (package.json and package-lock.json), so nobody pushes to the bot's pull request (a person's push
 # makes dco.yml check the bot's unsigned commit). A repository that cannot be raised correctly (no
-# package.json or lockfile, the package not in the root package.json, npm workspaces, a broken
-# toolchain) fails with an error and gets no pull request.
+# package.json or lockfile, the package not in the root package.json, a workspace that declares the
+# package too, a broken toolchain) fails with an error and gets no pull request.
 # The lockfile is made by the Node and npm of the repository's own .nvmrc, downloaded from
 # NODE_DIST (default https://nodejs.org/dist) and checked against its SHASUMS256.txt, never by the
 # npm of this runner.
@@ -84,9 +84,6 @@ raise_package() {
   local dir=$1 range locked toolchain decision
   [ -f "$dir/package.json" ] || { echo "no package.json to raise $package in" >&2; return 1; }
   jq -e type "$dir/package.json" > /dev/null 2>&1 || { echo "package.json is not valid JSON" >&2; return 1; }
-  if jq -e 'has("workspaces")' "$dir/package.json" > /dev/null; then
-    echo "package.json has npm workspaces, which the raise does not support" >&2; return 1
-  fi
   range=$(jq -r --arg p "$package" '.devDependencies[$p] // .dependencies[$p] // empty' "$dir/package.json") || return 1
   [ -n "$range" ] || { echo "the root package.json does not declare $package" >&2; return 1; }
   [ -f "$dir/package-lock.json" ] || { echo "no package-lock.json to raise" >&2; return 1; }
@@ -94,6 +91,20 @@ raise_package() {
     echo "package-lock.json is not valid JSON" >&2; return 1
   }
   [ -n "$locked" ] || { echo "package-lock.json has no entry for $package" >&2; return 1; }
+  # The workspaces are the entries of the lockfile's `packages` that are not the root and have no
+  # node_modules/ segment (lockfileVersion 2 and 3). The raise changes the root alone, so a workspace
+  # that declares the package too, in its lockfile entry or its package.json, cannot be covered.
+  while IFS= read -r workspace; do
+    [ -n "$workspace" ] || continue
+    if jq -e --arg p "$package" --arg w "$workspace" '
+      .packages[$w] | [.dependencies, .devDependencies, .optionalDependencies, .peerDependencies]
+      | any(.[]?; type == "object" and has($p))' "$dir/package-lock.json" > /dev/null ||
+      { [ -f "$dir/$workspace/package.json" ] && jq -e --arg p "$package" '
+        [.dependencies, .devDependencies, .optionalDependencies, .peerDependencies]
+        | any(.[]?; type == "object" and has($p))' "$dir/$workspace/package.json" > /dev/null 2>&1; }; then
+      echo "workspace $workspace declares $package too, which the raise does not support" >&2; return 1
+    fi
+  done < <(jq -r '.packages | keys[] | select(. != "" and (contains("node_modules/") | not))' "$dir/package-lock.json")
   toolchain=$(node_toolchain "$dir") || return 1
   decision=$("$toolchain/bin/node" -e '
     const semver = require(process.argv[1] + "/lib/node_modules/npm/node_modules/semver")
