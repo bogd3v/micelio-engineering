@@ -586,10 +586,25 @@ with a letter; fenced blocks and HTML comments are not read. `gh` is needed only
 does not ignore (add them with `git add -N .` or leave them untracked: both count). It exits 0 when
 every path fits `--lane`; otherwise it exits 1, prints `lane: <the lane the diff fits>` and the
 paths that raise it above `--lane`, each with its lane. Add the lane the diff fits to the issue
-and run the gates it skipped.
+and run the gates it skipped. Unlike the issue form, it also reads the content of `package.json`
+and `package-lock.json` (at `<base>` and in the worktree) to find a version file.
 
 Rules, in this order:
 
+- `express` (the diff form only): a **version file**, ahead of `contract:` and of "matches no
+  glob". A changed `package.json` or `package-lock.json` is one when it exists at `<base>` and in
+  the worktree, is not normative and matches no `stack:` glob, and its parsed JSON differs between
+  the two only in string values that each are the `version` of a released package (its own
+  top-level `version`, or in a lock the `version` of its `packages["<dir>"]` entry, or the lock's
+  top-level `version` for the package at the lock's folder) or a pin of a
+  released package (its value under `dependencies`, `devDependencies`, `peerDependencies` or
+  `optionalDependencies`, with only the old version replaced by the new: `^0.2.10` to `^0.2.11`).
+  A released package is a version file's `package.json` whose top-level `version` changes; a pin
+  moved with no such `package.json` in the diff (a Dependabot upgrade) is not a version file. The
+  two JSON texts must also have the same keys in the same order (the order of `exports` conditions
+  carries meaning). The
+  reason reads `<path> only moves the version of <name> <old> → <new>`. A path that fails the rule
+  keeps the lane and the reason of the rules below.
 - `full`: a `!` in the title's conventional prefix (`feat(x)!:`), or a path that matches `stack:` or
   `contract:`.
 - `express`: the issue names at least one path, every path matches `express:`, and none is normative.

@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
+import { dirname, posix, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { errorLine } from './errors.js'
 import { issueFromGh, issueFromMarkdown, parseTarget, proseOnly } from './issue.js'
@@ -157,18 +158,207 @@ export function issueLane(title: string, body: string, globs: LaneGlobs | null):
   return { lane, reasons }
 }
 
-/** The lane a list of changed paths fits, and the paths that raise it above `express`. */
+/**
+ * The lane a list of changed paths fits, and the paths that raise it above `express`.
+ *
+ * @param versionFiles - The paths that `versionFiles` found, each with its reason: they are
+ * `express` whatever the globs say.
+ */
 export function diffLane(
   paths: string[],
-  globs: LaneGlobs | null
+  globs: LaneGlobs | null,
+  versionFiles: ReadonlyMap<string, string> = new Map()
 ): LaneResult & { raised: { path: string; lane: Lane }[] } {
-  const each = paths.map((path) => ({ path, ...pathLane(path, globs) }))
+  const each = paths.map((path) => {
+    const reason = versionFiles.get(path)
+    return reason === undefined
+      ? { path, ...pathLane(path, globs) }
+      : { path, lane: 'express' as const, reasons: [reason] }
+  })
   const lane = each.reduce<Lane>((top, p) => (rank(p.lane) > rank(top) ? p.lane : top), 'express')
   return {
     lane,
     reasons: each.flatMap((p) => p.reasons),
     raised: each.filter((p) => p.lane !== 'express').map((p) => ({ path: p.path, lane: p.lane })),
   }
+}
+
+/** A string value that differs between two JSON texts, and where it sits. */
+interface Change {
+  keys: string[]
+  old: string
+  new: string
+}
+
+/**
+ * The string values that differ between two parsed JSON values.
+ *
+ * @returns `null` when they differ in anything else: a key, an array's length, a type or a value
+ * that is not a string.
+ */
+function stringChanges(a: unknown, b: unknown, keys: string[] = []): Change[] | null {
+  if (typeof a === 'string' && typeof b === 'string') {
+    return a === b ? [] : [{ keys, old: a, new: b }]
+  }
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return null
+    const found: Change[] = []
+    for (let i = 0; i < a.length; i++) {
+      const inner = stringChanges(a[i], b[i], [...keys, String(i)])
+      if (inner === null) return null
+      found.push(...inner)
+    }
+    return found
+  }
+  if (typeof a === 'object' && typeof b === 'object' && a !== null && b !== null) {
+    const left = a as Record<string, unknown>
+    const right = b as Record<string, unknown>
+    const names = Object.keys(left)
+    // The order of the keys carries meaning (the conditions of `exports`), so it must be the same.
+    if (names.join('\0') !== Object.keys(right).join('\0')) return null
+    const found: Change[] = []
+    for (const name of names) {
+      const inner = stringChanges(left[name], right[name], [...keys, name])
+      if (inner === null) return null
+      found.push(...inner)
+    }
+    return found
+  }
+  return a === b ? [] : null
+}
+
+const PIN_KINDS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']
+
+/**
+ * Whether `next` is `previous` with the version `from` replaced by `to`, and nothing else changed.
+ * The version must stand alone: after only a range operator, and not followed by a character of a
+ * longer version (`0.2.1` is not in `^0.2.10`, nor in `npm:other@0.2.1`).
+ */
+function pinMoves(previous: string, next: string, from: string, to: string): boolean {
+  for (let i = previous.indexOf(from); i !== -1; i = previous.indexOf(from, i + 1)) {
+    const before = previous.slice(0, i)
+    const after = previous.slice(i + from.length)
+    if (!/^[\^~=<>v ]*$/.test(before) || /^[0-9A-Za-z.+-]/.test(after)) continue
+    if (before + to + after === next) return true
+  }
+  return false
+}
+
+/** One changed `package.json` or `package-lock.json`, read at `<base>` and in the worktree. */
+interface VersionCandidate {
+  path: string
+  dir: string
+  lock: boolean
+  changes: Change[]
+}
+
+/** A package whose own `version` moves in the diff. */
+interface Released {
+  name: string
+  dir: string
+  old: string
+  new: string
+}
+
+/** The packages a candidate's changes move, or `null` when one change is anything else. */
+function moves(c: VersionCandidate, released: ReadonlyMap<string, Released>): Released[] | null {
+  const byName = new Map([...released.values()].map((r) => [r.name, r]))
+  const byDir = new Map([...released.values()].map((r) => [r.dir, r]))
+  const touched = new Set<Released>()
+  for (const change of c.changes) {
+    const { keys } = change
+    const pin = keys.length >= 2 ? byName.get(keys[keys.length - 1] ?? '') : undefined
+    if (pin !== undefined && PIN_KINDS.includes(keys[keys.length - 2] ?? '')) {
+      if (!pinMoves(change.old, change.new, pin.old, pin.new)) return null
+      touched.add(pin)
+      continue
+    }
+    const own = keys.length === 1 && keys[0] === 'version' ? byDir.get(c.dir) : undefined
+    const entry =
+      c.lock && keys.length === 3 && keys[0] === 'packages' && keys[2] === 'version'
+        ? byDir.get(posix.join(c.dir, keys[1] ?? '').replace(/^\.$/, ''))
+        : undefined
+    const target = c.lock ? (own ?? entry) : keys.length === 1 ? own : undefined
+    if (target === undefined) return null
+    touched.add(target)
+  }
+  return touched.size === 0 ? null : [...touched]
+}
+
+/**
+ * The changed paths that only move the version of a released package, each with its reason. A
+ * version file is a `package.json` or `package-lock.json` that exists at `<base>` and in the
+ * worktree, is not normative and matches no `stack:` glob, and whose JSON differs between the two
+ * only in the `version` of a released package (its own, or its entry in a lock) and in pins of
+ * released packages that move from its old version to its new one. A released package is a
+ * version file's `package.json` whose top-level `version` changes.
+ *
+ * @param paths - The changed paths, from the root of the repository.
+ * @param globs - The globs of the `## Lanes` block; with none, nothing is a version file.
+ * @param readBase - The text of a path at `<base>`, `null` when it does not exist there.
+ * @param readWorktree - The text of a path in the worktree; rejects with `ENOENT` when missing.
+ * @returns The reason of each version file, by path.
+ */
+export async function versionFiles(
+  paths: string[],
+  globs: LaneGlobs | null,
+  readBase: (path: string) => Promise<string | null>,
+  readWorktree: (path: string) => Promise<string>
+): Promise<Map<string, string>> {
+  const found = new Map<string, string>()
+  if (globs === null) return found
+  const candidates: VersionCandidate[] = []
+  const released = new Map<string, Released>()
+  for (const path of paths) {
+    const file = posix.basename(path)
+    if (file !== 'package.json' && file !== 'package-lock.json') continue
+    if (isNormative(path) || firstMatch(globs.stack, path) !== undefined) continue
+    const before = await readBase(path)
+    if (before === null) continue
+    let after: string
+    try {
+      after = await readWorktree(path)
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') continue
+      throw error
+    }
+    let changes: Change[] | null
+    let next: unknown
+    try {
+      next = JSON.parse(after)
+      changes = stringChanges(JSON.parse(before), next)
+    } catch {
+      continue
+    }
+    if (changes === null || changes.length === 0) continue
+    const dir = dirname(path) === '.' ? '' : dirname(path)
+    const candidate: VersionCandidate = { path, dir, lock: file === 'package-lock.json', changes }
+    candidates.push(candidate)
+    const own = changes.find((c) => c.keys.length === 1 && c.keys[0] === 'version')
+    const name = (next as { name?: unknown } | null)?.name
+    if (!candidate.lock && own !== undefined && typeof name === 'string') {
+      released.set(path, { name, dir, old: own.old, new: own.new })
+    }
+  }
+  // A package.json that changes anything else is no release, and the pins of its package then stop
+  // being version moves: repeat until nothing more drops out.
+  for (let dropped = true; dropped;) {
+    dropped = false
+    for (const [path] of released) {
+      const candidate = candidates.find((c) => c.path === path)
+      if (candidate !== undefined && moves(candidate, released) === null) {
+        released.delete(path)
+        dropped = true
+      }
+    }
+  }
+  for (const candidate of candidates) {
+    const touched = moves(candidate, released)
+    if (touched === null) continue
+    const what = touched.map((r) => `${r.name} ${r.old} → ${r.new}`).join(', ')
+    found.set(candidate.path, `${candidate.path} only moves the version of ${what}`)
+  }
+  return found
 }
 
 /** What `runLintLane` needs from the outside world, so that tests can replace `gh`, git and the disk. */
@@ -184,6 +374,11 @@ export interface LintLaneDeps {
   readLanes: (repo: string) => Promise<LaneGlobs | null>
   /** The paths of `git diff --name-only <base>` and the untracked files that git does not ignore. */
   diffNames: (base: string) => Promise<string[]>
+  /**
+   * The text of a path at `<base>` (`git show <base>:<path>`, in the same directory as
+   * `diffNames`); `null` when the path does not exist there.
+   */
+  readBaseText: (base: string, path: string) => Promise<string | null>
 }
 
 /** The outcome of `runLintLane`: 0 on success or a diff that fits, 1 on a diff that does not, 2 on a usage or read error. */
@@ -234,7 +429,18 @@ export function createDeps(cwd: string = process.cwd()): LintLaneDeps {
       return issueFromGh(JSON.parse(stdout), ref.repo)
     },
     readLanes: readRepoLanes,
-    readText: (path) => readFile(path, 'utf8'),
+    readText: (path) => readFile(resolve(cwd, path), 'utf8'),
+    readBaseText: async (base, path) => {
+      try {
+        const { stdout } = await exec('git', ['show', `${base}:${path}`], {
+          cwd,
+          maxBuffer: 64 * 1024 * 1024,
+        })
+        return stdout
+      } catch {
+        return null
+      }
+    },
     diffNames: async (base) => {
       const lines = async (args: string[]): Promise<string[]> =>
         (await exec('git', args, { cwd, maxBuffer: 64 * 1024 * 1024 })).stdout
@@ -310,7 +516,15 @@ export async function runLintLane(
         return usage('--diff and --lane go together and take no issue')
       }
       if (!LANES.includes(lane as Lane)) return usage(`unknown lane "${lane}"`)
-      const result = diffLane(await deps.diffNames(diff), await readGlobs(deps))
+      const names = await deps.diffNames(diff)
+      const globs = await readGlobs(deps)
+      const moved = await versionFiles(
+        names,
+        globs,
+        (path) => deps.readBaseText(diff, path),
+        deps.readText
+      )
+      const result = diffLane(names, globs, moved)
       if (rank(result.lane) <= rank(lane as Lane)) {
         return { code: 0, stdout: `lane: ${lane}\nthe diff fits the lane\n`, stderr: '' }
       }

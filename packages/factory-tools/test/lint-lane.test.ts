@@ -1,10 +1,17 @@
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { tempDir } from '../../../test/support/temp.js'
-import { createDeps, issuePaths, matchGlob, parseLanes, runLintLane } from '../src/lane.js'
+import {
+  createDeps,
+  issuePaths,
+  matchGlob,
+  parseLanes,
+  runLintLane,
+  versionFiles,
+} from '../src/lane.js'
 import type { LaneGlobs, LintLaneDeps } from '../src/lane.js'
 
 const PACKAGE = fileURLToPath(new URL('../', import.meta.url))
@@ -37,6 +44,7 @@ function deps(
       return readFile(`${LANE}${path}`, 'utf8')
     },
     diffNames: async () => changed,
+    readBaseText: async () => null,
   }
 }
 
@@ -323,6 +331,213 @@ describe('lint-lane', () => {
     } finally {
       process.env.PATH = saved
     }
+  })
+})
+
+const AGENTS_RELEASE = `# AGENTS.md
+
+## Lanes
+
+\`\`\`
+stack: images/**
+contract: packages/*/package.json
+express: docs/**/*.md
+\`\`\`
+`
+
+const json = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`
+
+/** The files of a small workspace at `0.2.10`: a released package, a root that pins it, a fixture and a lock. */
+function workspace(version: string, extra: Record<string, unknown> = {}): Record<string, string> {
+  const pin = (range: string) => ({ '@acme/lint': range, lodash: '^4.0.0' })
+  const lock = {
+    name: 'root',
+    lockfileVersion: 3,
+    packages: {
+      '': { name: 'root', devDependencies: pin(version) },
+      'packages/lint': { name: '@acme/lint', version },
+      'node_modules/@acme/lint': { resolved: 'packages/lint', link: true },
+      'fixtures/basic': { name: 'basic', devDependencies: pin(`^${version}`) },
+    },
+  }
+  return {
+    'AGENTS.md': AGENTS_RELEASE,
+    'package.json': json({ name: 'root', version: '0.0.0', devDependencies: pin(version) }),
+    'packages/lint/package.json': json({ name: '@acme/lint', version, ...extra }),
+    'fixtures/basic/package.json': json({ name: 'basic', devDependencies: pin(`^${version}`) }),
+    'package-lock.json': json(lock),
+  }
+}
+
+/** A git repository at `main` with `before` committed, then `after` written over it (null deletes a file). */
+async function repoWith(
+  before: Record<string, string>,
+  after: Record<string, string | null>
+): Promise<LintLaneDeps> {
+  const dir = tempDir('lint-lane-version-')
+  const git = (...args: string[]): string => execFileSync('git', args, { cwd: dir }).toString()
+  git('init', '-q', '-b', 'main')
+  git('config', 'user.email', 'a@example.com')
+  git('config', 'user.name', 'a')
+  git('config', 'commit.gpgsign', 'false')
+  const put = async (files: Record<string, string | null>) => {
+    for (const [path, text] of Object.entries(files)) {
+      if (text === null) await rm(join(dir, path))
+      else {
+        await mkdir(dirname(join(dir, path)), { recursive: true })
+        await writeFile(join(dir, path), text)
+      }
+    }
+  }
+  await put(before)
+  git('add', '.')
+  git('commit', '-q', '-m', 'init')
+  await put(after)
+  return createDeps(dir)
+}
+
+const fits = (deps: LintLaneDeps, lane = 'express') =>
+  runLintLane(['lint-lane', '--diff', 'main', '--lane', lane], deps)
+
+describe('lint-lane, version files', () => {
+  it("--diff fits express when the diff only moves a workspace package's version and the pins of that package", async () => {
+    const result = await fits(await repoWith(workspace('0.2.10'), workspace('0.2.11')))
+    expect(result.code).toBe(0)
+    expect(result.stdout).toBe('lane: express\nthe diff fits the lane\n')
+    // The reason line is the one `diffLane` carries for each version file.
+    const paths = ['package.json', 'package-lock.json', 'packages/lint/package.json']
+    const moved = await versionFiles(
+      paths.concat('fixtures/basic/package.json'),
+      parseLanes(AGENTS_RELEASE),
+      async (path) => workspace('0.2.10')[path] ?? null,
+      async (path) => workspace('0.2.11')[path] ?? ''
+    )
+    for (const path of [...paths, 'fixtures/basic/package.json']) {
+      expect(moved.get(path)).toBe(`${path} only moves the version of @acme/lint 0.2.10 → 0.2.11`)
+    }
+  })
+
+  it('--diff keeps the lane of a version file that changes anything else, or pins another version', async () => {
+    const lane = async (after: Record<string, string>) => {
+      const result = await fits(await repoWith(workspace('0.2.10'), after), 'express')
+      expect(result.code).toBe(1)
+      return result.stdout
+    }
+    // A released package.json that also adds a dependency: full, by contract:.
+    const added = await lane({
+      ...workspace('0.2.11', { dependencies: { zod: '^3.0.0' } }),
+    })
+    expect(added).toContain('lane: full\n')
+    expect(added).toContain('- packages/lint/package.json (full)')
+    // Its pins are no longer moves of a release.
+    expect(added).toContain('- package-lock.json (normal)')
+    expect(added).toContain('- package.json (normal)')
+    // A root that also upgrades a third-party pin: normal.
+    const third = workspace('0.2.11')
+    third['package.json'] = (third['package.json'] ?? '').replace('^4.0.0', '^4.1.0')
+    const thirdOut = await lane(third)
+    expect(thirdOut).toContain('lane: normal\n')
+    expect(thirdOut).toContain('- package.json (normal)')
+    expect(thirdOut).not.toContain('packages/lint/package.json')
+    // A pin moved to a version other than the released one: normal.
+    const other = workspace('0.2.11')
+    other['fixtures/basic/package.json'] = (other['fixtures/basic/package.json'] ?? '').replace(
+      '^0.2.11',
+      '^0.3.0'
+    )
+    const otherOut = await lane(other)
+    expect(otherOut).toContain('lane: normal\n')
+    expect(otherOut).toContain('- fixtures/basic/package.json (normal)')
+    // A pin that holds the old version only as the start of a longer one: normal.
+    const longer = (version: string, pin: string) => {
+      const files = workspace(version)
+      files['fixtures/basic/package.json'] = json({
+        name: 'basic',
+        devDependencies: { '@acme/lint': pin },
+      })
+      return files
+    }
+    const prefix = await fits(
+      await repoWith(longer('0.2.1', '^0.2.10'), longer('0.2.2', '^0.2.20'))
+    )
+    expect(prefix.code).toBe(1)
+    expect(prefix.stdout).toContain('- fixtures/basic/package.json (normal)')
+    // A released package.json that reorders its exports conditions: full.
+    const exportsOf = (order: string[]) =>
+      Object.fromEntries(order.map((key) => [key, `./${key}.js`]))
+    const reordered = (version: string, order: string[]) => ({
+      ...workspace(version),
+      'packages/lint/package.json': json({
+        name: '@acme/lint',
+        version,
+        exports: { '.': exportsOf(order) },
+      }),
+    })
+    const order = await fits(
+      await repoWith(
+        reordered('0.2.10', ['import', 'require', 'default']),
+        reordered('0.2.11', ['require', 'import', 'default'])
+      )
+    )
+    expect(order.code).toBe(1)
+    expect(order.stdout).toContain('lane: full\n')
+    expect(order.stdout).toContain('- packages/lint/package.json (full)')
+    // A lock entry whose version moves without its package.json: normal.
+    const lockOnly = workspace('0.2.10')
+    lockOnly['package-lock.json'] = workspace('0.2.11')['package-lock.json'] ?? ''
+    const lockOut = await lane(lockOnly)
+    expect(lockOut).toContain('lane: normal\n')
+    expect(lockOut).toContain('- package-lock.json (normal)')
+  })
+
+  it('--diff never reads a new, deleted, normative or stack: file as a version file', async () => {
+    const lane = async (before: Record<string, string>, after: Record<string, string | null>) =>
+      fits(await repoWith(before, after))
+    // New: a package.json that is not at <base>.
+    const created = await lane(workspace('0.2.10'), {
+      ...workspace('0.2.11'),
+      'tools/package.json': json({ name: 'tools', version: '1.0.0' }),
+    })
+    expect(created.code).toBe(1)
+    expect(created.stdout).toContain('- tools/package.json (normal)')
+    // Deleted: the root is gone from the worktree.
+    const deleted = await lane(workspace('0.2.10'), {
+      ...workspace('0.2.11'),
+      'package.json': null,
+    })
+    expect(deleted.code).toBe(1)
+    expect(deleted.stdout).toContain('lane: normal\n')
+    expect(deleted.stdout).toContain('- package.json (normal)')
+    // Normative: template/ is never express.
+    const tpl = (version: string) => ({
+      ...workspace(version),
+      'template/package.json': json({ name: '@acme/tpl', version }),
+    })
+    const normative = await lane(tpl('0.2.10'), tpl('0.2.11'))
+    expect(normative.code).toBe(1)
+    expect(normative.stdout).toContain('- template/package.json (normal)')
+    // stack: a bumped package.json under a stack: glob stays full.
+    const web = (version: string) => ({
+      ...workspace(version),
+      'images/web/package.json': json({ name: '@acme/web', version }),
+    })
+    const stack = await lane(web('0.2.10'), web('0.2.11'))
+    expect(stack.code).toBe(1)
+    expect(stack.stdout).toContain('lane: full\n')
+    expect(stack.stdout).toContain('- images/web/package.json (full)')
+  })
+
+  it("--diff keeps the lane of a pin upgrade whose package's version does not move in the diff", async () => {
+    const before = workspace('0.2.10')
+    const after = workspace('0.2.10')
+    for (const path of ['package.json', 'fixtures/basic/package.json']) {
+      after[path] = (before[path] ?? '').replace('0.2.10', '0.2.11')
+    }
+    const result = await fits(await repoWith(before, after))
+    expect(result.code).toBe(1)
+    expect(result.stdout).toContain('lane: normal\n')
+    expect(result.stdout).toContain('- package.json (normal)')
+    expect(result.stdout).toContain('- fixtures/basic/package.json (normal)')
   })
 })
 
