@@ -253,7 +253,9 @@ compares their numbers. The `full` lane keeps the verifier (`docs/factory.md`, g
 node <checkout>/packages/factory-tools/dist/cli.js verify-draft --draft <draft> --logs <packet>/logs --cwd <clean copy>
 ```
 
-`--logs` may be left out (below).
+`--logs` may be left out (below). `--timeout <minutes>` limits each run of a command (below); it is
+a positive whole number, at most 35791 (the longest delay of a Node timer), and defaults to `10`.
+Any other value is a usage error (exit 2).
 
 Nothing is committed before gate 5, so `--cwd` is a clean copy: a fresh clone at the merge base with
 the worktree's diff applied (`.claude/skills/verify-pr/SKILL.md`, "Build a clean copy"), and the
@@ -307,12 +309,24 @@ arguments the draft gives), or `npm test` / `npm run <script>` for a script of i
 Any other command, and any with a pipe, `;`, `&&`, a redirection, `$(…)`, a backtick, a URL or a
 path outside the copy, is not run.
 
+**How long a run may take.** Each run of a command (each of the `n` runs of a `k failed of n` figure
+too) runs in its own process group and may take `--timeout` minutes (default `10`). A run still
+going then is ended with every process it started: the group gets `SIGTERM`, then `SIGKILL` 10 s
+later. The entry is a mismatch, `timed out after <n> min`, its output so far is printed (below),
+and the next entry runs. In a `k failed of n` figure the same holds: the first run that times out
+makes the entry that mismatch, and its other runs do not run.
+Because a run's group is not `verify-draft`'s own, a signal sent to `verify-draft`'s group (as
+`herdr/factory-slot.sh run` does on `INT` and `TERM`) would not reach it: so `verify-draft` passes a
+`SIGINT`, `SIGTERM` or `SIGHUP` it gets on to the group of the run in progress (`SIGKILL` 10 s later
+if the group is still there), starts no other run, and then ends on that signal. A process a
+command leaves running in its group after the command ends gets `SIGKILL` when `verify-draft` exits.
+
 **What it prints**, one line per item, then a verdict line in the words of the `verify-pr` skill:
 
 | Line                                                | Meaning                                                                                          |
 | --------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `match: <command>`                                  | the exit code and every compared figure agree with the draft                                     |
-| `mismatch: <command>: <what>; …`                    | a different exit code or figure, a figure with no counterpart, no log                            |
+| `mismatch: <command>: <what>; …`                    | a different exit code or figure, a figure with no counterpart, no log, a run past `--timeout`    |
 | `variance: <command>: draft …, got …`               | a `k failed of n` figure; never a mismatch                                                       |
 | `earlier: <command> (a later entry runs it)`        | an entry whose command a later entry runs; not run, not a mismatch, not a command that ran       |
 | `skipped: <command> (shown failing …)`              | a run shown failing without the change                                                           |
@@ -320,6 +334,20 @@ path outside the copy, is not run.
 | `not checked: <criterion>`                          | a bullet that is not a command; for the master                                                   |
 | `no command ran: gate 4 of the normal lane needs …` | no entry is a `match`, `mismatch` or `variance`; printed before the verdict, which is then `Red` |
 | `Verdict: Pass · 0 mismatches`                      | a command ran and none mismatches (`Verdict: Red · K mismatches` otherwise)                      |
+
+Under a `mismatch:` line of a command that ran, a line `    output (last 40 lines):`, then the last
+40 lines of that run's output (standard output, then standard error), each indented by four spaces,
+so a pull request's CI log shows why a command exited as it did. A `variance:` line whose count
+differs from the draft's gets the same block with the output of its last failing run (none when no
+run failed). No other line gets one, and a mismatch with nothing run (`no log` on a variance figure,
+a command that is not run) has none.
+
+```text
+mismatch: npm run verify:isolated: exit code: draft 0, got 1
+    output (last 40 lines):
+    npm error code E404
+    …
+```
 
 A mismatch counts commands, not figures. Exit 0 when a command ran and nothing mismatches, 1 when a
 command mismatches or no command ran (the line `no command ran: gate 4 of the normal lane needs at least one repository command in the

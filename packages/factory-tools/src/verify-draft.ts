@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { access, readFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { errorLine } from './errors.js'
@@ -9,8 +9,29 @@ export interface VerifyDraftDeps {
   exists: (path: string) => Promise<boolean>
   /** The `AGENTS.md` of the merge base (the clean copy's `HEAD`), not the one the diff may have changed. */
   baseAgents: (cwd: string) => Promise<string>
-  /** Runs `file` with `args` in `cwd`, without a shell; `output` is standard output and standard error together. */
-  exec: (file: string, args: string[], cwd: string) => Promise<{ code: number; output: string }>
+  /**
+   * Runs `file` with `args` in `cwd`, without a shell; `output` is standard output and standard error
+   * together. With `limit`, the command runs in its own process group, and when it is still running
+   * after `limit.timeoutMs` the group gets `SIGTERM`, then `SIGKILL` after `limit.graceMs`; the
+   * result then has `timedOut: true` and the output written so far.
+   */
+  exec: (file: string, args: string[], cwd: string, limit?: ExecLimit) => Promise<ExecResult>
+}
+
+/** The time limit of one run of `VerifyDraftDeps.exec`. */
+export interface ExecLimit {
+  /** How long the command may run, in milliseconds. */
+  timeoutMs: number
+  /** How long after `SIGTERM` its process group gets `SIGKILL`, in milliseconds. */
+  graceMs: number
+}
+
+/** What one run of `VerifyDraftDeps.exec` came to. */
+export interface ExecResult {
+  code: number
+  output: string
+  /** `true` when the run passed its `ExecLimit` and was ended. */
+  timedOut?: boolean
 }
 
 /** The outcome of `runVerifyDraft`: 0 when nothing mismatches and a command ran, 1 when a command mismatches or none ran, 2 on a usage or read error. */
@@ -49,6 +70,14 @@ export const EXIT = /\bexit(?:ed|s)?(?:\s+code)?\s+(\d+)/i
 export const LOG = /\blogs\/([^\s`),;]+)/
 const NUMBER = String.raw`\d{1,3}(?:[ ,]\d{3})+|\d+`
 const MAX_BUFFER = 256 * 1024 * 1024
+/** The default of `--timeout`, in minutes. */
+export const DEFAULT_TIMEOUT_MINUTES = 10
+/** The largest `--timeout`, in minutes: a longer delay does not fit a Node timer. */
+export const MAX_TIMEOUT_MINUTES = 35_791
+/** How long a timed-out command's process group has between `SIGTERM` and `SIGKILL`. */
+export const KILL_GRACE_MS = 10_000
+/** How many lines of a command's output are printed under its `mismatch:` line. */
+export const OUTPUT_LINES = 40
 
 /** The items of the Tests section, bullets and numbered, each with its continuation lines; `null` when there is no section. */
 export function testsEntries(draft: string): Entry[] | null {
@@ -228,6 +257,13 @@ function numbersBefore(output: string, word: string): string[] {
   )
 }
 
+/** One outcome and, for a command that ran, the output that `runVerifyDraft` prints under a mismatch. */
+interface Checked {
+  outcome: EntryOutcome
+  /** The output of the run (for a `variance`, of its last failing run); absent when nothing ran. */
+  output?: string
+}
+
 /**
  * Reads the Tests section of a pull request draft, reruns each repository command in `cwd` and
  * compares its exit code and the figures of its summary line with the draft's.
@@ -235,14 +271,28 @@ function numbersBefore(output: string, word: string): string[] {
  * @param draft - The text of the pull request draft.
  * @param logs - The directory the draft's `logs/` files are in; `undefined` when there is none (a pull request's CI), and then a command with no log is not a mismatch.
  * @param cwd - The clean copy the commands run in.
+ * @param timeoutMinutes - How long each run of a command may take; a run that passes it is ended and is a mismatch, `timed out after <n> min`.
  * @returns One outcome per bullet of the section; `null` when the draft has no Tests section.
  */
 export async function verifyDraft(
   draft: string,
   logs: string | undefined,
   cwd: string,
-  deps: VerifyDraftDeps
+  deps: VerifyDraftDeps,
+  timeoutMinutes: number = DEFAULT_TIMEOUT_MINUTES
 ): Promise<EntryOutcome[] | null> {
+  const checked = await verifyEntries(draft, logs, cwd, deps, timeoutMinutes)
+  return checked === null ? null : checked.map((entry) => entry.outcome)
+}
+
+/** `verifyDraft`, with the output of each run kept beside its outcome. */
+async function verifyEntries(
+  draft: string,
+  logs: string | undefined,
+  cwd: string,
+  deps: VerifyDraftDeps,
+  timeoutMinutes: number
+): Promise<Checked[] | null> {
   const entries = testsEntries(draft)
   if (entries === null) return null
   let manifest = ''
@@ -258,17 +308,24 @@ export async function verifyDraft(
     const key = runKey(entry, agents, scripts)
     if (key !== null) lastRun.set(key, index)
   })
-  const outcomes: EntryOutcome[] = []
+  const limit: ExecLimit = { timeoutMs: timeoutMinutes * 60_000, graceMs: KILL_GRACE_MS }
+  const timedOut = `timed out after ${timeoutMinutes} min`
+  const outcomes: Checked[] = []
   for (const [index, entry] of entries.entries()) {
     const key = runKey(entry, agents, scripts)
     if (key !== null && lastRun.get(key) !== index) {
-      outcomes.push({ kind: 'earlier', command: /^`([^`]+)`/.exec(entry.text)?.[1]?.trim() ?? '' })
+      outcomes.push({
+        outcome: {
+          kind: 'earlier',
+          command: /^`([^`]+)`/.exec(entry.text)?.[1]?.trim() ?? '',
+        },
+      })
       continue
     }
     const parsed = /^`([^`]+)`(.*)$/.exec(entry.text)
     if (parsed === null) {
       if (!/^no test:/i.test(entry.text))
-        outcomes.push({ kind: 'not-checked', criterion: entry.text })
+        outcomes.push({ outcome: { kind: 'not-checked', criterion: entry.text } })
       continue
     }
     const command = (parsed[1] ?? '').trim()
@@ -278,7 +335,7 @@ export async function verifyDraft(
       (WITHOUT_CHANGE.test(entry.text) || WITHOUT_CHANGE.test(entry.intro)) &&
       exitReported !== '0'
     ) {
-      outcomes.push({ kind: 'skipped', command })
+      outcomes.push({ outcome: { kind: 'skipped', command } })
       continue
     }
     const logName = LOG.exec(summary)?.[1]
@@ -287,32 +344,62 @@ export async function verifyDraft(
       (logName !== undefined && (await deps.exists(join(logs, basename(logName)))))
     const words = tokenize(withoutSlotPrefix(command))
     if (words === null || !isRepositoryCommand(words, agents, scripts)) {
-      outcomes.push(
-        hasLog ? { kind: 'not-run', command } : { kind: 'mismatch', command, reasons: ['no log'] }
-      )
+      outcomes.push({
+        outcome: hasLog
+          ? { kind: 'not-run', command }
+          : { kind: 'mismatch', command, reasons: ['no log'] },
+      })
       continue
     }
     const [file = '', ...args] = words
     const variance = VARIANCE.exec(summary)
     if (variance) {
       if (!hasLog) {
-        outcomes.push({ kind: 'mismatch', command, reasons: ['no log'] })
+        outcomes.push({ outcome: { kind: 'mismatch', command, reasons: ['no log'] } })
         continue
       }
       const runs = Number(variance[2])
       let failed = 0
-      for (let i = 0; i < runs; i++) if ((await deps.exec(file, args, cwd)).code !== 0) failed++
+      let lastFailing: string | undefined
+      let ended: string | undefined
+      for (let i = 0; i < runs; i++) {
+        const run = await deps.exec(file, args, cwd, limit)
+        // A run past the limit ends the entry: it is a mismatch, and the next entry runs.
+        if (run.timedOut === true) {
+          ended = run.output
+          break
+        }
+        if (run.code !== 0) {
+          failed++
+          lastFailing = run.output
+        }
+      }
+      if (ended !== undefined) {
+        outcomes.push({
+          outcome: { kind: 'mismatch', command, reasons: [timedOut] },
+          output: ended,
+        })
+        continue
+      }
       outcomes.push({
-        kind: 'variance',
-        command,
-        reported: `${variance[1]} failed of ${variance[2]}`,
-        got: `${failed} failed of ${runs}`,
+        outcome: {
+          kind: 'variance',
+          command,
+          reported: `${variance[1]} failed of ${variance[2]}`,
+          got: `${failed} failed of ${runs}`,
+        },
+        ...(lastFailing === undefined ? {} : { output: lastFailing }),
       })
       continue
     }
     const reasons: string[] = hasLog ? [] : ['no log']
     const exit = EXIT.exec(summary)?.[1]
-    const run = await deps.exec(file, args, cwd)
+    const run = await deps.exec(file, args, cwd, limit)
+    if (run.timedOut === true) {
+      reasons.push(timedOut)
+      outcomes.push({ outcome: { kind: 'mismatch', command, reasons }, output: run.output })
+      continue
+    }
     if (exit === undefined) reasons.push('the draft gives no exit code')
     else if (Number(exit) !== run.code) reasons.push(`exit code: draft ${exit}, got ${run.code}`)
     const counted = figures(summary).map(
@@ -330,11 +417,27 @@ export async function verifyDraft(
           : `${word}: draft ${number}, got ${[...new Set(got)].join(' or ')}`
       )
     }
-    outcomes.push(
-      reasons.length === 0 ? { kind: 'match', command } : { kind: 'mismatch', command, reasons }
-    )
+    outcomes.push({
+      outcome:
+        reasons.length === 0 ? { kind: 'match', command } : { kind: 'mismatch', command, reasons },
+      output: run.output,
+    })
   }
   return outcomes
+}
+
+/**
+ * The block printed under the line of an entry: for a mismatch that ran, and for a variance whose
+ * count differs from the draft's and that has a failing run, the last `OUTPUT_LINES` lines of the
+ * output, each indented by four spaces, after `    output (last 40 lines):`; otherwise nothing.
+ */
+function outputBlock({ outcome, output }: Checked): string {
+  if (output === undefined) return ''
+  if (outcome.kind === 'variance' ? outcome.reported === outcome.got : outcome.kind !== 'mismatch')
+    return ''
+  const lines = output.replace(/\r?\n$/, '').split(/\r?\n/)
+  const last = output === '' ? [] : lines.slice(-OUTPUT_LINES)
+  return `    output (last ${OUTPUT_LINES} lines):\n${last.map((text) => `    ${text}\n`).join('')}`
 }
 
 /** The printed form of one outcome. */
@@ -357,16 +460,173 @@ function line(outcome: EntryOutcome): string {
   }
 }
 
-const exec = (
-  file: string,
-  args: string[],
-  cwd: string
-): Promise<{ code: number; output: string }> =>
-  new Promise<{ code: number; output: string }>((resolve) => {
-    execFile(file, args, { cwd, maxBuffer: MAX_BUFFER }, (error, stdout, stderr) => {
-      const code = error === null ? 0 : typeof error.code === 'number' ? error.code : 1
-      resolve({ code, output: `${stdout}${stderr}` })
+/** Sends `signal` to the process group `pgid`; a group that is already gone is not an error. */
+function signalGroup(pgid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-pgid, signal)
+  } catch {
+    // the group is gone
+  }
+}
+
+/** Whether a process of the group `pgid` is still there. */
+function groupAlive(pgid: number): boolean {
+  try {
+    process.kill(-pgid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** The signals that end `verify-draft`, which it passes on to the process groups of its runs. */
+const STOP_SIGNALS: NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGHUP']
+
+/**
+ * The process groups of the runs in progress, each with the promise of its command's end. A group
+ * that outlives its command stays: until its `SIGKILL` is sent when the run timed out, else until
+ * `verify-draft` exits, which sends it `SIGKILL` (`leftovers`).
+ */
+const running = new Map<number, Promise<void>>()
+/** Set by `stop`: no run starts after it. */
+let stopping = false
+
+/**
+ * Ends `verify-draft` on `signal` the way it would have ended without a run in progress, after the
+ * runs' groups: a run's group is not ours (it is `detached`), so `herdr/factory-slot.sh run`, which
+ * signals its own group, would never reach it. Each group gets `signal`, then `SIGKILL` after
+ * `KILL_GRACE_MS` unless it is gone, and then the process raises `signal` again with no listener.
+ */
+function stop(signal: NodeJS.Signals): void {
+  stopping = true
+  for (const name of STOP_SIGNALS) process.removeListener(name, stop)
+  const groups = [...running.keys()]
+  for (const pgid of groups) signalGroup(pgid, signal)
+  let raised = false
+  const raise = (): void => {
+    if (raised) return
+    raised = true
+    for (const pgid of groups) signalGroup(pgid, 'SIGKILL')
+    process.kill(process.pid, signal)
+  }
+  const kill = setTimeout(raise, KILL_GRACE_MS)
+  const ended = [...running.values()]
+  void (async () => {
+    await Promise.all(ended)
+    if (groups.every((pgid) => !groupAlive(pgid))) {
+      clearTimeout(kill)
+      raise()
+    }
+  })()
+}
+
+/** On exit, ends the groups still recorded: processes a command left behind, which no slot reaches. */
+function leftovers(): void {
+  for (const pgid of running.keys()) signalGroup(pgid, 'SIGKILL')
+}
+
+/** Records the group of a run; the first one makes `stop` listen for `STOP_SIGNALS` and `leftovers` for the exit. */
+function track(pgid: number, ended: Promise<void>): void {
+  if (running.size === 0) {
+    for (const name of STOP_SIGNALS) process.on(name, stop)
+    process.on('exit', leftovers)
+  }
+  running.set(pgid, ended)
+}
+
+/** Forgets the group of a run that is gone; the last one removes the listeners. */
+function untrack(pgid: number): void {
+  if (!running.delete(pgid)) return
+  if (running.size === 0) {
+    for (const name of STOP_SIGNALS) process.removeListener(name, stop)
+    process.removeListener('exit', leftovers)
+  }
+}
+
+/**
+ * The real `VerifyDraftDeps.exec`, on `spawn`: as `execFile` with a `maxBuffer` of 256 MiB (a stream
+ * that passes it ends the command, code 1), plus the process group and the time limit of `limit`.
+ */
+const exec = (file: string, args: string[], cwd: string, limit?: ExecLimit): Promise<ExecResult> =>
+  new Promise<ExecResult>((resolve) => {
+    if (stopping) {
+      resolve({ code: 1, output: '' })
+      return
+    }
+    const stdout: Buffer[] = []
+    const stderr: Buffer[] = []
+    const size = { stdout: 0, stderr: 0 }
+    let failed = false
+    let timedOut = false
+    let settled = false
+    let kill: NodeJS.Timeout | undefined
+    const child = spawn(file, args, {
+      cwd,
+      detached: limit !== undefined,
+      stdio: ['pipe', 'pipe', 'pipe'],
     })
+    const pgid = limit === undefined ? undefined : child.pid
+    let closed = (): void => undefined
+    if (pgid !== undefined) {
+      track(
+        pgid,
+        new Promise<void>((done) => {
+          closed = done
+        })
+      )
+    }
+    const end = (signal: NodeJS.Signals): void => {
+      if (pgid === undefined) child.kill(signal)
+      else signalGroup(pgid, signal)
+    }
+    const collect =
+      (name: 'stdout' | 'stderr', chunks: Buffer[]) =>
+      (chunk: Buffer): void => {
+        size[name] += chunk.length
+        if (size[name] > MAX_BUFFER) {
+          if (!failed) end('SIGTERM')
+          failed = true
+          return
+        }
+        chunks.push(chunk)
+      }
+    child.stdout.on('data', collect('stdout', stdout))
+    child.stderr.on('data', collect('stderr', stderr))
+    const timer =
+      limit === undefined
+        ? undefined
+        : setTimeout(() => {
+            timedOut = true
+            end('SIGTERM')
+            kill = setTimeout(() => {
+              end('SIGKILL')
+              if (pgid !== undefined) untrack(pgid)
+              // A process that left the group may still hold the pipes: stop waiting for them.
+              child.stdout.destroy()
+              child.stderr.destroy()
+            }, limit.graceMs)
+          }, limit.timeoutMs)
+    const finish = (code: number): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      // The command ended, but a process it started may still run (or ignore the SIGTERM): the
+      // SIGKILL stays due and the group stays recorded unless the whole group is gone.
+      const lingers = pgid !== undefined && groupAlive(pgid)
+      if (kill !== undefined && !lingers) clearTimeout(kill)
+      if (pgid !== undefined && !lingers) untrack(pgid)
+      closed()
+      resolve({
+        code: failed ? 1 : code,
+        output: `${Buffer.concat(stdout).toString('utf8')}${Buffer.concat(stderr).toString('utf8')}`,
+        ...(timedOut ? { timedOut } : {}),
+      })
+    }
+    child.on('error', () => {
+      failed = true
+      finish(1)
+    })
+    child.on('close', (code) => finish(code ?? 1))
   })
 
 /** The real dependencies: the disk and `execFile`. */
@@ -396,12 +656,14 @@ const NO_COMMAND_RAN =
   'no command ran: gate 4 of the normal lane needs at least one repository command in the Tests section'
 
 const USAGE =
-  'Usage:\n  factory-tools verify-draft --draft <file> [--logs <dir>] [--cwd <clean copy>]\n'
+  'Usage:\n  factory-tools verify-draft --draft <file> [--logs <dir>] [--cwd <clean copy>] [--timeout <minutes>]\n'
 
 /**
- * `factory-tools verify-draft --draft <file> [--logs <dir>] [--cwd <clean copy>]`: the script that
- * stands in for the verifier in the `normal` lane. It prints one line per bullet of the Tests
- * section and a verdict line, `Red` when no command ran. Without `--logs` it prints `logs: not checked` before the verdict.
+ * `factory-tools verify-draft --draft <file> [--logs <dir>] [--cwd <clean copy>] [--timeout <minutes>]`:
+ * the script that stands in for the verifier in the `normal` lane. It prints one line per bullet of
+ * the Tests section, under a mismatch the last 40 lines of the command's output, and a verdict line,
+ * `Red` when no command ran. Without `--logs` it prints `logs: not checked` before the verdict. Each
+ * run of a command may take `--timeout` minutes (default 10), a positive whole number.
  *
  * @param argv - The arguments after the program name, starting with `verify-draft`.
  */
@@ -415,7 +677,7 @@ export async function runVerifyDraft(
   for (let i = 0; i < args.length; i++) {
     const name = args[i] ?? ''
     const value = args[i + 1]
-    if (!['--draft', '--logs', '--cwd'].includes(name) || value === undefined) {
+    if (!['--draft', '--logs', '--cwd', '--timeout'].includes(name) || value === undefined) {
       return { code: 2, stdout: '', stderr: `error: bad argument "${name}"\n${USAGE}` }
     }
     values.set(name, value)
@@ -426,23 +688,34 @@ export async function runVerifyDraft(
   if (draft === undefined) {
     return { code: 2, stdout: '', stderr: `error: verify-draft needs --draft\n${USAGE}` }
   }
+  const timeout = values.get('--timeout') ?? String(DEFAULT_TIMEOUT_MINUTES)
+  const minutes = Number(timeout)
+  if (!/^\d+$/.test(timeout) || minutes < 1 || minutes > MAX_TIMEOUT_MINUTES) {
+    return {
+      code: 2,
+      stdout: '',
+      stderr: `error: --timeout must be a whole number of minutes from 1 to ${MAX_TIMEOUT_MINUTES}, not "${timeout}"\n${USAGE}`,
+    }
+  }
   try {
-    const outcomes = await verifyDraft(
+    const checked = await verifyEntries(
       await deps.readText(draft),
       logs,
       values.get('--cwd') ?? defaultCwd,
-      deps
+      deps,
+      minutes
     )
-    if (outcomes === null) {
+    if (checked === null) {
       return { code: 2, stdout: '', stderr: `error: ${draft} has no "${TESTS_SECTION}" section\n` }
     }
+    const outcomes = checked.map((entry) => entry.outcome)
     const mismatches = outcomes.filter((outcome) => outcome.kind === 'mismatch').length
     const ran = outcomes.some((outcome) => ['match', 'mismatch', 'variance'].includes(outcome.kind))
     const red = mismatches > 0 || !ran
     const verdict = `Verdict: ${red ? 'Red' : 'Pass'} · ${mismatches} mismatches`
     return {
       code: red ? 1 : 0,
-      stdout: `${outcomes.map((outcome) => `${line(outcome)}\n`).join('')}${
+      stdout: `${checked.map((entry) => `${line(entry.outcome)}\n${outputBlock(entry)}`).join('')}${
         logs === undefined ? 'logs: not checked\n' : ''
       }${ran ? '' : `${NO_COMMAND_RAN}\n`}${verdict}\n`,
       stderr: '',
