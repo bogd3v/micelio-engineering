@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { tempDir } from '../../../test/support/temp.js'
 import { GhError, MARKER, applyReadiness, defaultGh, neutralise, runReady } from '../src/ready.js'
+import { MAINTAINER_RUN_LINE } from '../src/ready.js'
 import type { Gh, ReadyParams } from '../src/ready.js'
 import { backfillFields, parseProjectFields, runBackfill } from '../src/fields.js'
 import type { ProjectFields } from '../src/fields.js'
@@ -24,6 +25,10 @@ interface World {
   label?: boolean
   /** Whether the issue has the label. */
   labelled?: boolean
+  /** Whether the repository has the label `maintainer-run` (default: yes). */
+  runLabel?: boolean
+  /** Whether the issue has the label `maintainer-run` (default: no). */
+  maintainerRun?: boolean
   comments?: { id: number; login: string; body: string }[]
   /** Whether the issue already is an item of the project (default: yes). */
   item?: boolean
@@ -40,6 +45,13 @@ function fake(world: World): { gh: Gh; writes: string[] } {
       if (method === 'GET' && path === '/repos/o/r/labels/ready') {
         if (world.label === false) throw new GhError('Not Found (HTTP 404)', 404)
         return { name: 'ready' }
+      }
+      if (method === 'GET' && path === '/repos/o/r/labels/maintainer-run') {
+        if (world.runLabel === false) throw new GhError('Not Found (HTTP 404)', 404)
+        return { name: 'maintainer-run' }
+      }
+      if (method === 'GET' && path === '/repos/o/r/issues/7') {
+        return { labels: world.maintainerRun ? [{ name: 'maintainer-run' }] : [] }
       }
       if (method === 'GET' && path.startsWith('/repos/o/r/issues/7/comments')) {
         const all = world.comments ?? []
@@ -203,6 +215,88 @@ describe('applyReadiness', () => {
     const done = await applyReadiness(gh, params())
     expect(done[0]).toBe('label ready created')
     expect(writes[0]).toContain('POST /repos/o/r/labels {"name":"ready","color":"0e8a16"')
+  })
+
+  it('on a pass with the label maintainer-run, removes ready, keeps the item off Ready and says why in the comment', async () => {
+    for (const current of [ready, todo, null]) {
+      const { gh, writes } = fake({
+        labelled: true,
+        maintainerRun: true,
+        current,
+        project: await recorded('project-with-ready.json'),
+      })
+      const done = await applyReadiness(gh, params())
+      expect(done[0]).toBe('label ready removed')
+      expect(done[1]).toBe('comment created')
+      expect(writes.some((w) => w.includes('labels {"labels"'))).toBe(false)
+      expect(writes.some((w) => w === 'add to project')).toBe(false)
+      expect(writes[0]).toBe('DELETE label')
+      expect(writes[1]).toBe(
+        `POST /repos/o/r/issues/7/comments ${JSON.stringify({
+          body: `${MARKER}\n${MAINTAINER_RUN_LINE}\n\n${params().report}`,
+        })}`
+      )
+      const status = writes.filter((w) => w.startsWith('status'))
+      if (current === ready) {
+        expect(done.at(-1)).toBe('status set to Todo')
+        expect(status).toHaveLength(1)
+        expect(status[0]).toContain('"option":"f75ad846"')
+      } else {
+        expect(done.at(-1)).toMatch(/^status left as it is/)
+        expect(status).toEqual([])
+      }
+    }
+  })
+
+  it('updates its comment on an issue with the label maintainer-run, and keeps an item that is not in the project out of it', async () => {
+    const body = `${MARKER}\nold`
+    const { gh, writes } = fake({
+      labelled: false,
+      maintainerRun: true,
+      item: false,
+      current: null,
+      comments: [{ id: 2, login: 'micelio-bot[bot]', body }],
+      project: await recorded('project-with-ready.json'),
+    })
+    const done = await applyReadiness(gh, params())
+    expect(done).toEqual([
+      'label ready removed',
+      'comment updated',
+      'not in the project, left alone',
+    ])
+    expect(writes).toContain(
+      `PATCH /repos/o/r/issues/comments/2 ${JSON.stringify({
+        body: `${MARKER}\n${MAINTAINER_RUN_LINE}\n\n${params().report}`,
+      })}`
+    )
+    expect(writes).not.toContain('add to project')
+  })
+
+  it('creates the label maintainer-run only when the repository lacks it', async () => {
+    const creates = (writes: string[]): string[] =>
+      writes.filter((w) => w.startsWith('POST /repos/o/r/labels '))
+    const missing = fake({
+      runLabel: false,
+      current: null,
+      project: await recorded('project-with-ready.json'),
+    })
+    const done = await applyReadiness(missing.gh, params())
+    expect(done).toContain('label maintainer-run created')
+    expect(creates(missing.writes)).toHaveLength(1)
+    expect(creates(missing.writes)[0]).toContain('"name":"maintainer-run"')
+
+    const present = fake({ current: null, project: await recorded('project-with-ready.json') })
+    const again = await applyReadiness(present.gh, params())
+    expect(again).not.toContain('label maintainer-run created')
+    expect(creates(present.writes)).toEqual([])
+  })
+
+  it('reads the label maintainer-run from the issue on every run', async () => {
+    const world = { current: null, project: await recorded('project-with-ready.json') }
+    const before = fake({ ...world, maintainerRun: false })
+    expect((await applyReadiness(before.gh, params()))[0]).toBe('label ready added')
+    const after = fake({ ...world, maintainerRun: true })
+    expect((await applyReadiness(after.gh, params()))[0]).toBe('label ready removed')
   })
 
   it('finds its comment on a later page', async () => {

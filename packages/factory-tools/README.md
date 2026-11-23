@@ -93,7 +93,7 @@ factory-tools issue-ready <owner/repo#n> --passed <true|false> --report <file> \
 
 An issue that is closed, or whose author is not an `OWNER`, `MEMBER` or `COLLABORATOR`, is skipped
 (`skipped: …`, exit 0). A pass adds the issue to the project and sets Ready; a fail never adds it
-and only moves a Status that is Ready back to Todo.
+and only moves a Status that is Ready back to Todo. An issue with the label `maintainer-run` is treated as a fail whatever `lint-issue` says, and its comment starts with a line saying the maintainer runs it (`docs/workflows.md`, "Label: `maintainer-run`").
 
 With `--project-fields` (the workflow passes `.github/project-fields.json` of this repository), it
 then sets the item's `Release line` and `Front` from the entry of the issue's milestone, only where
