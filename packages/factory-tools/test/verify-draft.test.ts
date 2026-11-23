@@ -2,6 +2,13 @@ import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import { runVerifyDraft, tokenize, verifyDraft } from '../src/verify-draft.js'
 import type { VerifyDraftDeps } from '../src/verify-draft.js'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { defaultVerifyDeps } from '../src/verify-draft.js'
+import type { ExecLimit } from '../src/verify-draft.js'
+import { execFileSync, spawn } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 
 const AGENTS = [
   '# AGENTS.md',
@@ -655,4 +662,295 @@ describe('verify-draft', () => {
     expect(tokenize('npm test ../x')).toBeNull()
     expect(tokenize('')).toBeNull()
   })
+  it("prints the last 40 lines of a mismatched command's output under its mismatch line", async () => {
+    const output = Array.from({ length: 50 }, (_, i) => `line ${i + 1}`).join('\n') + '\n'
+    const { deps } = fake(
+      { ...BASE, '/d.md': draft('- `npm test`: exit 0, 482 passed') },
+      { 'npm test': [[1, output]] }
+    )
+    const result = await runVerifyDraft(['verify-draft', '--draft', '/d.md', '--cwd', '/c'], deps)
+    const block = Array.from({ length: 40 }, (_, i) => `    line ${i + 11}\n`).join('')
+    expect(result.stdout).toBe(
+      `mismatch: npm test: exit code: draft 0, got 1; passed: draft 482, the output has no "<n> passed"\n    output (last 40 lines):\n${block}logs: not checked\nVerdict: Red · 1 mismatches\n`
+    )
+    expect(result.stdout).not.toContain('line 10\n')
+    expect(result.code).toBe(1)
+  })
+
+  it('prints no output under a match', async () => {
+    const { deps } = fake(
+      { ...BASE, '/d.md': draft('- `npm test`: exit 0, 482 passed', '- `rm -rf x`: exit 0') },
+      { 'npm test': [[0, VITEST]] }
+    )
+    const result = await runVerifyDraft(['verify-draft', '--draft', '/d.md', '--cwd', '/c'], deps)
+    expect(result.stdout).toBe(
+      'match: npm test\nnot run: rm -rf x\nlogs: not checked\nVerdict: Pass · 0 mismatches\n'
+    )
+    expect(result.code).toBe(0)
+  })
+
+  it('prints the output of the last failing run under a variance whose count differs, and none when it agrees', async () => {
+    const runs: [number, string][] = [
+      [1, 'first failure\n'],
+      [1, 'second failure\n'],
+      [0, 'a pass\n'],
+    ]
+    const differs = await runVerifyDraft(
+      ['verify-draft', '--draft', '/d.md', '--cwd', '/c'],
+      fake({ ...BASE, '/d.md': draft('- `npm test`: 0 failed of 3') }, { 'npm test': runs }).deps
+    )
+    expect(differs.stdout).toBe(
+      'variance: npm test: draft 0 failed of 3, got 2 failed of 3\n    output (last 40 lines):\n    second failure\nlogs: not checked\nVerdict: Pass · 0 mismatches\n'
+    )
+    const agrees = await runVerifyDraft(
+      ['verify-draft', '--draft', '/d.md', '--cwd', '/c'],
+      fake({ ...BASE, '/d.md': draft('- `npm test`: 2 failed of 3') }, { 'npm test': runs }).deps
+    )
+    expect(agrees.stdout).not.toContain('output (last 40 lines)')
+  })
+
+  it('ends a command that runs past --timeout, with the processes it started, reports it as a mismatch and runs the next entry', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'verify-draft-'))
+    // The command starts a process that ignores SIGTERM, so only the SIGKILL of the group ends it.
+    await writeFile(
+      join(dir, 'hang.cjs'),
+      [
+        "const { spawn } = require('node:child_process')",
+        "const { writeFileSync } = require('node:fs')",
+        "const child = spawn(process.execPath, ['-e', \"process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)\"], { stdio: 'ignore' })",
+        "writeFileSync('pids', `${process.pid} ${child.pid}`)",
+        "console.log('started')",
+        'setInterval(() => {}, 1000)',
+        '',
+      ].join('\n')
+    )
+    await writeFile(join(dir, 'ok.cjs'), "console.log('ok')\n")
+    const agents = '# AGENTS.md\n\n## Commands\n\n```bash\nnode hang.cjs\nnode ok.cjs\n```\n'
+    const limits: (ExecLimit | undefined)[] = []
+    const deps: VerifyDraftDeps = {
+      readText: (path) =>
+        path === '/d.md'
+          ? Promise.resolve(draft('- `node hang.cjs`: exit 0', '- `node ok.cjs`: exit 0'))
+          : Promise.reject(new Error(`no ${path}`)),
+      exists: () => Promise.resolve(false),
+      baseAgents: () => Promise.resolve(agents),
+      // The real exec, with a limit of seconds instead of the minutes --timeout gives.
+      exec: (file, args, cwd, limit) => {
+        limits.push(limit)
+        return defaultVerifyDeps.exec(file, args, cwd, { timeoutMs: 3_000, graceMs: 500 })
+      },
+    }
+    let pids: number[] = []
+    try {
+      const result = await runVerifyDraft(
+        ['verify-draft', '--draft', '/d.md', '--cwd', dir, '--timeout', '3'],
+        deps
+      )
+      pids = (await readFile(join(dir, 'pids'), 'utf8')).split(' ').map(Number)
+      expect(limits).toEqual([
+        { timeoutMs: 180_000, graceMs: 10_000 },
+        { timeoutMs: 180_000, graceMs: 10_000 },
+      ])
+      expect(result.stdout).toBe(
+        'mismatch: node hang.cjs: timed out after 3 min\n    output (last 40 lines):\n    started\nmatch: node ok.cjs\nlogs: not checked\nVerdict: Red · 1 mismatches\n'
+      )
+      expect(result.code).toBe(1)
+      const [leader = 0, started = 0] = pids
+      await expect.poll(() => alive(started), { timeout: 10_000 }).toBe(false)
+      expect(alive(leader)).toBe(false)
+      expect(alive(-leader)).toBe(false)
+    } finally {
+      for (const pid of pids) {
+        try {
+          process.kill(pid, 'SIGKILL')
+        } catch {
+          // already gone
+        }
+      }
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('a run of a k failed of n entry that times out makes the entry a mismatch, and the entry runs no more', async () => {
+    const { deps, ran } = fake(
+      {
+        ...BASE,
+        '/d.md': draft('- `npm test`: 0 failed of 3', '- `npm run check`: exit 0, 482 passed'),
+      },
+      {
+        'npm test': [
+          [0, 'first\n'],
+          [0, 'second\n'],
+        ],
+        'npm run check': [[0, VITEST]],
+      }
+    )
+    const exec = deps.exec
+    let runs = 0
+    deps.exec = async (file, args, cwd, limit) =>
+      [file, ...args].join(' ') === 'npm test' && ++runs === 2
+        ? { code: 1, output: 'so far\n', timedOut: true }
+        : exec(file, args, cwd, limit)
+    const result = await runVerifyDraft(
+      ['verify-draft', '--draft', '/d.md', '--cwd', '/c', '--timeout', '4'],
+      deps
+    )
+    expect(runs).toBe(2)
+    expect(ran).toEqual(['npm test', 'npm run check'])
+    expect(result.stdout).toBe(
+      'mismatch: npm test: timed out after 4 min\n    output (last 40 lines):\n    so far\nmatch: npm run check\nlogs: not checked\nVerdict: Red · 1 mismatches\n'
+    )
+    expect(result.code).toBe(1)
+  })
+
+  it('passes a SIGTERM it gets on to the process group of the run in progress, then ends on it', async () => {
+    const dir = await repository('process.stdin.resume()')
+    let pids: number[] = []
+    try {
+      const cli = spawn(process.execPath, [CLI, 'verify-draft', '--draft', 'draft.md'], {
+        cwd: dir,
+        stdio: 'ignore',
+      })
+      const ended = new Promise<NodeJS.Signals | null>((done) => {
+        cli.on('exit', (_, signal) => done(signal))
+      })
+      await expect.poll(() => readPids(dir), { timeout: 20_000 }).toHaveLength(2)
+      pids = await readPids(dir)
+      cli.kill('SIGTERM')
+      expect(await ended).toBe('SIGTERM')
+      const [leader = 0, started = 0] = pids
+      await expect.poll(() => alive(-leader), { timeout: 10_000 }).toBe(false)
+      expect(alive(started)).toBe(false)
+    } finally {
+      for (const pid of pids) {
+        try {
+          process.kill(pid, 'SIGKILL')
+        } catch {
+          // already gone
+        }
+      }
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('ends on exit what a command left running in its process group', async () => {
+    const dir = await repository('process.exit(0)')
+    let pids: number[] = []
+    try {
+      const cli = spawn(process.execPath, [CLI, 'verify-draft', '--draft', 'draft.md'], {
+        cwd: dir,
+        stdio: 'ignore',
+      })
+      const code = await new Promise<number | null>((done) => {
+        cli.on('exit', (exit) => done(exit))
+      })
+      expect(code).toBe(0)
+      pids = await readPids(dir)
+      const [leader = 0, started = 0] = pids
+      expect(alive(leader)).toBe(false)
+      await expect.poll(() => alive(started), { timeout: 10_000 }).toBe(false)
+    } finally {
+      for (const pid of pids) {
+        try {
+          process.kill(pid, 'SIGKILL')
+        } catch {
+          // already gone
+        }
+      }
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a --timeout that is not a positive whole number with exit 2', async () => {
+    const { deps, ran } = fake(
+      { ...BASE, '/d.md': draft('- `npm test`: exit 0, 482 passed') },
+      { 'npm test': [[0, VITEST]] }
+    )
+    for (const value of ['0', '-1', '1.5', '2m', 'x', '', ' 5', '35792']) {
+      const result = await runVerifyDraft(
+        ['verify-draft', '--draft', '/d.md', '--cwd', '/c', '--timeout', value],
+        deps
+      )
+      expect(result.code).toBe(2)
+      expect(result.stdout).toBe('')
+      expect(result.stderr).toContain('--timeout')
+    }
+    const missing = await runVerifyDraft(
+      ['verify-draft', '--draft', '/d.md', '--cwd', '/c', '--timeout'],
+      deps
+    )
+    expect(missing.code).toBe(2)
+    expect(ran).toEqual([])
+    const ok = await runVerifyDraft(
+      ['verify-draft', '--draft', '/d.md', '--cwd', '/c', '--timeout', '1'],
+      deps
+    )
+    expect(ok.code).toBe(0)
+  })
 })
+
+/** Whether `pid` (a process group when negative) still has a process. */
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+const CLI = fileURLToPath(new URL('../dist/cli.js', import.meta.url))
+
+/**
+ * A git repository under `TMPDIR` whose `AGENTS.md` at `HEAD` allows `node hold.cjs`, with a draft
+ * that runs it. `hold.cjs` starts a process in its group that runs until it is killed, writes both
+ * pids to `pids`, then runs `then`.
+ */
+async function repository(then: string): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'verify-draft-'))
+  await writeFile(
+    join(dir, 'hold.cjs'),
+    [
+      "const { spawn } = require('node:child_process')",
+      "const { writeFileSync } = require('node:fs')",
+      "const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' })",
+      "writeFileSync('pids', `${process.pid} ${child.pid}`)",
+      then,
+      '',
+    ].join('\n')
+  )
+  await writeFile(
+    join(dir, 'AGENTS.md'),
+    '# AGENTS.md\n\n## Commands\n\n```bash\nnode hold.cjs\n```\n'
+  )
+  await writeFile(join(dir, 'draft.md'), draft('- `node hold.cjs`: exit 0'))
+  const git = (...args: string[]) =>
+    execFileSync(
+      'git',
+      [
+        '-c',
+        'user.name=test',
+        '-c',
+        'user.email=test@example.invalid',
+        '-c',
+        'commit.gpgsign=false',
+        '-c',
+        'core.hooksPath=/dev/null',
+        ...args,
+      ],
+      { cwd: dir, stdio: 'ignore' }
+    )
+  git('init', '-q')
+  git('add', 'AGENTS.md')
+  git('commit', '-q', '-m', 'agents')
+  return dir
+}
+
+/** The pids `hold.cjs` wrote, the command's and the one it started; empty before it wrote them. */
+async function readPids(dir: string): Promise<number[]> {
+  try {
+    return (await readFile(join(dir, 'pids'), 'utf8')).split(' ').map(Number)
+  } catch {
+    return []
+  }
+}

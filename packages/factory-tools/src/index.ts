@@ -65,7 +65,13 @@ export {
   tokenize,
   verifyDraft,
 } from './verify-draft.js'
-export type { EntryOutcome, VerifyDraftDeps, VerifyDraftResult } from './verify-draft.js'
+export type {
+  EntryOutcome,
+  ExecLimit,
+  ExecResult,
+  VerifyDraftDeps,
+  VerifyDraftResult,
+} from './verify-draft.js'
 export {
   answeredPaths,
   createDocsHitsDeps,
