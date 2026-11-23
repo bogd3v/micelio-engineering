@@ -33,12 +33,13 @@ A green canary is posted as the five `Canary |` lines of `RUN.md`, each ending `
 
 ## The host's runtime
 
-The host's engine is rootless Podman through `podman.socket`, a user unit (`systemctl --user enable --now podman.socket`), with `DOCKER_HOST=unix://$XDG_RUNTIME_DIR/podman/podman.sock`; [`herdr/factory-agent.sh`](factory-agent.sh) `enter` sets it for each agent, by hand in the maintainer's shell (`S.2`). `docker version --format '{{range .Server.Components}}{{.Name}} {{end}}'` names `Podman Engine` when it is set. The compatibility rules are [ADR-0002](../docs/adr/0002-run-the-factory-stacks-on-rootless-podman.md), Decision 5 (bind mounts with `label=disable` or `:z`, `--userns=keep-id` for a container that writes to a mounted copy, `--format docker` for `podman build`, the `buildx_buildkit_default` container); what the runbook adds:
+The host's engine is rootless Podman through `podman.socket`, a user unit (`systemctl --user enable --now podman.socket`), with `DOCKER_HOST=unix://$XDG_RUNTIME_DIR/podman/podman.sock`; [`herdr/factory-agent.sh`](factory-agent.sh) `enter` sets it for each agent, by hand in the maintainer's shell (`S.2`). `docker version --format '{{range .Server.Components}}{{.Name}} {{end}}'` names `Podman Engine` when it is set. The compatibility rules are [ADR-0002](../docs/adr/0002-run-the-factory-stacks-on-rootless-podman.md), Decision 5 (`label=disable` or `:z`, `--userns=keep-id`, `--format docker`, the `buildx_buildkit_default` container); what the runbook adds:
 
-1. **Ownership.** A container that writes to a mounted copy runs as root in the container (rootless Podman maps it to the host user), or `podman run --userns=keep-id --user "$(id -u):$(id -g)"`, or `userns_mode: keep-id` in compose. `docker run --userns=keep-id` is refused by the Docker CLI (`docker: --userns: invalid USER mode`), and `--user "$(id -u):$(id -g)"` without `keep-id` cannot write to the mount.
+1. **Ownership.** A container that writes to a mounted copy runs as root in the container, or `podman run --userns=keep-id --user "$(id -u):$(id -g)"`, or `userns_mode: keep-id` in compose. `docker run --userns=keep-id` is refused by the Docker CLI, and `--user "$(id -u):$(id -g)"` without `keep-id` cannot write to the mount.
 2. **Builds.** The shared `buildx_buildkit_default` container stays after a build; it is not an orphan of an agent and is not removed while a build runs. Builds are outside every agent's slice, limited by the `heavy` pool (`B.1`, `B.4`).
 3. **Stores.** Docker's and Podman's images and volumes are separate: the first build on Podman repeats the pulls (`podman system df`, `docker system df`).
 4. **CI and production stay on Docker** (ADR-0002, Decision 4). A difference between the engines is a finding of this runbook, a note in the repository's `AGENTS.md`, "The factory", never a compose change for one engine.
+5. **After a `podman` update** (`rpm -q podman` changes), re-run measurements 1 to 4 of [`docs/adr/0002-measurements.md`](../docs/adr/0002-measurements.md) before the next milestone and append them the same way.
 
 ## Starting an agent
 
