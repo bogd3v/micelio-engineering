@@ -21,8 +21,18 @@ export const MARKER = '<!-- micelio:issue-ready -->'
 /** The label that marks an issue that passed the Definition of Ready. */
 export const READY_LABEL = 'ready'
 
+/** The label that marks an issue the maintainer runs by hand: no worker takes it and `ready` is never put on it. */
+export const MAINTAINER_RUN_LABEL = 'maintainer-run'
+
 const LABEL_COLOR = '0e8a16'
 const LABEL_DESCRIPTION = 'Passes the Definition of Ready (lint-issue); a worker can start it'
+const MAINTAINER_RUN_COLOR = '5319e7'
+const MAINTAINER_RUN_DESCRIPTION =
+  'Run by the maintainer by hand: no worker takes it and issue-ready never marks it ready'
+
+/** The first line of the comment (after the marker) on an issue with the label `maintainer-run`. */
+export const MAINTAINER_RUN_LINE =
+  'This issue is run by the maintainer and is never taken by intake: it is never marked ready.'
 
 /** The GitHub calls `issue-ready` makes, so that tests can replace the network. */
 export interface Gh {
@@ -105,6 +115,11 @@ interface StatusField {
  *   of the project on the ready option, sets its Status to the not-ready option (Todo). It never adds an issue to the project.
  *   An issue In Progress or Done keeps its Status: moving it is not this workflow's job.
  *
+ * - Label `maintainer-run`, read from the issue through the API on every run: whatever `lint-issue`
+ *   says, it is a fail for the label `ready` and the Status (`ready` removed, an item on Ready
+ *   moved back to the not-ready option, the issue never added), and the comment is created or
+ *   updated with a first line that says the maintainer runs the issue.
+ *
  * - Fields: with `params.fields`, after the Status, sets Release line and Front of the issue's item
  *   from its milestone's entry when they have no value; a value set by hand is kept. A milestone
  *   with no entry, an issue with no milestone and one not in the project change nothing, in one line.
@@ -113,7 +128,7 @@ interface StatusField {
  * is changed. `@` mentions and images in the report are neutralised in the comment.
  */
 export async function applyReadiness(gh: Gh, params: ReadyParams): Promise<string[]> {
-  const { ref, passed } = params
+  const { ref } = params
   if (params.state !== 'open') return [`skipped: the issue is ${params.state}`]
   if (!TRUSTED_ASSOCIATIONS.includes(params.association))
     return [`skipped: the author is not a member (${params.association})`]
@@ -122,8 +137,19 @@ export async function applyReadiness(gh: Gh, params: ReadyParams): Promise<strin
   const status = findStatus(project, params)
   const fields = params.fields ? await findFields(gh, project, ref, params.fields) : null
 
-  await ensureLabel(gh, ref.repo, done)
+  await ensureLabel(gh, ref.repo, READY_LABEL, LABEL_COLOR, LABEL_DESCRIPTION, done)
+  await ensureLabel(
+    gh,
+    ref.repo,
+    MAINTAINER_RUN_LABEL,
+    MAINTAINER_RUN_COLOR,
+    MAINTAINER_RUN_DESCRIPTION,
+    done
+  )
   const issues = `/repos/${ref.repo}/issues/${ref.number}`
+  const maintainerRun = await hasLabel(gh, issues, MAINTAINER_RUN_LABEL)
+  // An issue the maintainer runs is a fail for the label and the Status, whatever `lint-issue` says.
+  const passed = params.passed && !maintainerRun
   if (passed) {
     await gh.rest('POST', `${issues}/labels`, { labels: [READY_LABEL] })
     done.push(`label ${READY_LABEL} added`)
@@ -133,7 +159,7 @@ export async function applyReadiness(gh: Gh, params: ReadyParams): Promise<strin
   }
 
   const comment = await findComment(gh, issues, params.author)
-  const body = `${MARKER}\n${neutralise(params.report)}`
+  const body = `${MARKER}\n${maintainerRun ? `${MAINTAINER_RUN_LINE}\n\n` : ''}${neutralise(params.report)}`
   if (comment) {
     if (comment.body === body) {
       done.push('comment unchanged')
@@ -142,11 +168,12 @@ export async function applyReadiness(gh: Gh, params: ReadyParams): Promise<strin
       done.push('comment updated')
     }
   } else if (!passed) {
+    // A fail and an issue the maintainer runs both get a comment, even on a pass of `lint-issue`.
     await gh.rest('POST', `${issues}/comments`, { body })
     done.push('comment created')
   }
 
-  done.push(await setStatus(gh, params, status))
+  done.push(await setStatus(gh, { ...params, passed }, status))
   if (typeof fields === 'string') done.push(fields)
   else if (fields) done.push(...(await applyFields(gh, ref.repo, ref.number, fields)))
   return done
@@ -181,18 +208,33 @@ async function findFields(
   return planFields(project, fields, ref.repo.split('/')[1] ?? '', milestone)
 }
 
-async function ensureLabel(gh: Gh, repo: string, done: string[]): Promise<void> {
+/** Whether the issue has the label now, read through the API and not from the event's payload. */
+async function hasLabel(gh: Gh, issues: string, label: string): Promise<boolean> {
+  const issue = await gh.rest('GET', issues)
+  const labels = at(issue, 'labels')
+  if (!Array.isArray(labels)) return false
+  return labels.some((item) => at(item, 'name') === label)
+}
+
+async function ensureLabel(
+  gh: Gh,
+  repo: string,
+  label: string,
+  color: string,
+  description: string,
+  done: string[]
+): Promise<void> {
   try {
-    await gh.rest('GET', `/repos/${repo}/labels/${READY_LABEL}`)
+    await gh.rest('GET', `/repos/${repo}/labels/${label}`)
   } catch (error) {
     if (!(error instanceof GhError) || error.status !== 404) throw error
     try {
       await gh.rest('POST', `/repos/${repo}/labels`, {
-        name: READY_LABEL,
-        color: LABEL_COLOR,
-        description: LABEL_DESCRIPTION,
+        name: label,
+        color,
+        description,
       })
-      done.push(`label ${READY_LABEL} created`)
+      done.push(`label ${label} created`)
     } catch (created) {
       // Another issue's run created it first.
       if (!(created instanceof GhError) || created.status !== 422) throw created
