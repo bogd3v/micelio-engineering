@@ -1,0 +1,70 @@
+[
+  {
+    "address": "t2p",
+    "name": null,
+    "parent": null,
+    "status": "working",
+    "report": {
+      "app": "claude-code",
+      "state": "working",
+      "msg": "2 shells still running"
+    },
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "master"
+      ]
+    },
+    "labels": {
+      "herdr.seen": "1795000000000",
+      "herdr.space": "sp-micelio-engineering",
+      "herdr.tab": "tb-1",
+      "where": "micelio-engineering / 1"
+    }
+  },
+  {
+    "address": "t5w",
+    "name": "worker-302",
+    "parent": "t2p",
+    "status": "working",
+    "report": {
+      "app": "claude-code",
+      "state": "working"
+    },
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "worker",
+        "--model",
+        "sonnet"
+      ]
+    },
+    "labels": {
+      "where": "micelio-engineering / 1"
+    }
+  },
+  {
+    "address": "t5r",
+    "name": "reviewer-302",
+    "parent": "t2p",
+    "status": "idle",
+    "report": {
+      "app": "claude-code",
+      "state": "idle"
+    },
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "reviewer",
+        "--model",
+        "opus"
+      ]
+    },
+    "labels": {
+      "where": "micelio-engineering / 1"
+    }
+  }
+]

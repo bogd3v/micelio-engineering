@@ -466,6 +466,7 @@ describe('the views', () => {
   it('one file per section, and none sends anything', () => {
     expect(readdirSync(join(MOD, 'views')).toSorted()).toEqual([
       'banners.js',
+      'detail.js',
       'header.js',
       'leases.js',
       'legend.js',

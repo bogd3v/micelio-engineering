@@ -93,3 +93,17 @@ export function parseAgents(terminals) {
     }
   })
 }
+
+/**
+ * The model a terminal was started with: the argument after `--model` in its argv (`sonnet`,
+ * `opus`), the only place the model is (`herdr/mod/findings.md`, question 4). `null` with none.
+ *
+ * @param {Terminal} terminal
+ * @returns {string | null}
+ */
+export function modelOf(terminal) {
+  const argv = terminal.foreground?.argv ?? []
+  const at = argv.indexOf('--model')
+  const model = at === -1 ? undefined : argv[at + 1]
+  return typeof model === 'string' && model !== '' ? model : null
+}

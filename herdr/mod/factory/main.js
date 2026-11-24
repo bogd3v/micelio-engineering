@@ -1,15 +1,29 @@
 // The factory panel of the Herdr desktop app: the machine, the slots, the leases, the milestones and
-// the stacks, docked on the right. It only reads: no command it runs writes, and no control of it
-// sends anything. The facts are read by `adapters.js`, put together by `lib/` and drawn by `views/`.
+// the stacks, docked on the right, and the detail of an issue, an overlay of the same mod (`props().detail`).
+// It only reads: no command it runs writes, and no control of it sends anything. The facts are read by `adapters.js`, put together by `lib/` and drawn by `views/`.
 
 import { View } from 'gpui-kit'
 import { ScrollHandle, v_flex } from 'gpui-base'
-import { checking, exec, nextCommand, props, readTextFile, settings, terminals } from 'herdr'
+import {
+  checking,
+  closeOverlay,
+  exec,
+  home,
+  nextCommand,
+  openOverlay,
+  props,
+  readTextFile,
+  run,
+  settings,
+  terminals,
+} from 'herdr'
 import { createAdapters, readConfig } from './adapters.js'
 import { buildGithub, buildPanel, parseStacks, pushLoad, SECTIONS } from './lib/panel.js'
+import { buildDetail, parseProgress } from './lib/detail.js'
 import { buildState } from './lib/state.js'
 import { THEMES } from './lib/tokens.js'
 import { banners } from './views/banners.js'
+import { detail } from './views/detail.js'
 import { header } from './views/header.js'
 import { leases } from './views/leases.js'
 import { machine } from './views/machine.js'
@@ -35,6 +49,11 @@ export default class Factory extends View {
     this.github = null
     this.stacks = { value: [], at: null, stale: false, error: null }
     this.history = []
+    this.terminals = []
+    /** `{ space, number }` in the overlay of an issue, `null` in the panel. */
+    this.detail = props()?.detail ?? null
+    /** The branch and the lines changed of the open issue's worktree. */
+    this.worktree = null
     this.seeded = false
     this.now = Date.now()
     this.busy = { fast: false, slow: false }
@@ -58,6 +77,26 @@ export default class Factory extends View {
         localStorage.setItem('theme', JSON.stringify(next))
         cx.notify()
       },
+      toggleTheme: (cx) => {
+        this.ui.themeName = this.themeNow() === 'dark' ? 'light' : 'dark'
+        localStorage.setItem('theme', JSON.stringify(this.ui.themeName))
+        cx.notify()
+      },
+      openDetail: (space, number) => this.openDetail(space, number),
+      // A file of the packet, in a pane that can only read it.
+      openFile: (path) => {
+        this.opened([
+          'less',
+          '-R',
+          '--',
+          path.startsWith('~/') ? `${home()}${path.slice(1)}` : path,
+        ])
+      },
+      // An agent's last lines, in a pane that can only read them: the keys go to `watch`, never to the worker.
+      watchAgent: (name, address) => {
+        this.opened(['watch', '-n', '2', 'hc', 'read', address, '--lines', '40'], name)
+      },
+      close: () => closeOverlay(props()?.overlay),
     }
     // `herdr-app check` runs init for real: no reads and no timers there.
     if (checking()) return
@@ -73,15 +112,41 @@ export default class Factory extends View {
     this.slow(cx)
   }
 
+  /** Opens `argv` in a pane beside the window and closes the overlay. @param {string[]} argv @param {string} [name] */
+  opened(argv, name) {
+    run('terminal.open', { argv, place: 'right', ...(name === undefined ? {} : { name }) })
+    closeOverlay(props()?.overlay)
+  }
+
+  /** Opens the overlay of an issue: the same mod with `detail` in its props. @param {string} space @param {number} number */
+  openDetail(space, number) {
+    openOverlay({
+      mod: 'factory',
+      kind: 'dialog',
+      width: 760,
+      height: 0.9,
+      props: { ...props(), detail: { space, number } },
+    })
+  }
+
   /**
    * A command of the panel (`herdr-app do factory.<command>`, or a key bound to it): `top` scrolls to the
    * start, `reveal:<section>` (`machine`, `slots`, `workers`, `milestones`, `stacks`, `orphans`) scrolls
-   * until that section is in view. They move the view only.
+   * until that section is in view, `detail:<number>` opens the overlay of that issue. They move the view
+   * or open a window; nothing is sent.
    *
    * @param {string} command
    */
   command(command) {
     const [name, argument] = command.split(':')
+    if (name === 'detail') {
+      const number = Number(argument)
+      const space = this.config.spaces.find((s) =>
+        this.github?.spaces[s.name]?.raw?.issues.some((i) => i.number === number)
+      )
+      if (space !== undefined) this.openDetail(space.name, number)
+      return
+    }
     const at = name === 'top' ? 0 : name === 'reveal' ? this.order.indexOf(argument) : -1
     if (at >= 0) this.scroll.scroll_to_item(at)
   }
@@ -111,6 +176,7 @@ export default class Factory extends View {
           a.readStacks(),
         ])
         this.now = now
+        this.terminals = 'terminals' in agents ? agents.terminals : this.terminals
         this.state = buildState({ now, fetched: { slots, machine, agents }, previous: this.state })
         if (!this.seeded) {
           this.seeded = true
@@ -152,10 +218,58 @@ export default class Factory extends View {
           reads,
           previous: this.github,
         })
+        await this.readWorktree()
       } finally {
         this.busy.slow = false
       }
       cx.notify()
+    })
+  }
+
+  /** The open issue, as GitHub gave it, with its comments and its space. */
+  openIssue() {
+    const space = this.config.spaces.find((s) => s.name === this.detail?.space)
+    const raw = space === undefined ? null : this.github?.spaces[space.name]?.raw
+    const issue = raw?.issues.find((i) => i.number === this.detail?.number)
+    if (space === undefined || raw == null || issue === undefined) return null
+    return { space, issue, comments: raw.comments[issue.number] ?? [], maintainer: raw.maintainer }
+  }
+
+  /** The branch and the lines changed of the open issue's worktree, named in its `### Progress`. */
+  async readWorktree() {
+    const open = this.detail === null ? null : this.openIssue()
+    if (open === null) return
+    const path = parseProgress(open.issue.body).worktree
+    if (path === null) return
+    const read = await this.adapters.readWorktree(
+      open.issue.number,
+      path.startsWith('~/') ? `${home()}${path.slice(1)}` : path
+    )
+    if (!('error' in read)) this.worktree = read
+  }
+
+  /** What the overlay shows now, `null` before GitHub was read. */
+  detailModel() {
+    const open = this.openIssue()
+    if (open === null) return null
+    const at = this.config.spaces.indexOf(open.space)
+    const agents = /** @type {import('./lib/agents.js').Agent[]} */ (
+      this.state?.sources['agents']?.value ?? []
+    ).filter((a) => a.space?.name === open.space.name)
+    return buildDetail({
+      issue: open.issue,
+      comments: open.comments,
+      maintainer: open.maintainer,
+      space: {
+        repo: open.space.repo,
+        letter: (open.space.name[0] ?? '?').toUpperCase(),
+        colour: ['space-m', 'space-f', 'space-p'][at % 3] ?? 'muted',
+      },
+      agents,
+      terminals: this.terminals,
+      stacks: this.stacks.value,
+      worktree: this.worktree,
+      theme: this.themeNow(),
     })
   }
 
@@ -186,6 +300,17 @@ export default class Factory extends View {
   render() {
     const theme = this.themeNow()
     const ctx = { c: THEMES[theme], theme, dark: theme === 'dark', ui: this.ui }
+    if (this.detail !== null) {
+      return v_flex()
+        .id('factory-detail')
+        .size_full()
+        .bg(ctx.c.bg)
+        .text_color(ctx.c.fg)
+        .font_family(MONO)
+        .text_size(12.5)
+        .overflow_y_scrollbar()
+        .child(detail(ctx, this.detailModel()))
+    }
     const p = this.panel()
     const s = p.sections
     const shown = banners(ctx, p.banners)
