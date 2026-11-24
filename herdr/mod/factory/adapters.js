@@ -7,7 +7,7 @@
 // giving it), everything is read from there and not from the machine, so a screen can be reproduced:
 // `status.txt`, `loadavg`, `meminfo`, `hwmon.json`, `cores`, `terminals.json`, `issues.json`
 // (`issues-<space>.json` first), `comments-<n>.json`, `docker-compose-ls.json`, `loadhistory.json`,
-// `worktree-<n>.json` (the branch and the lines changed of an issue's worktree), `now.txt` for the clock, `github-at.txt` for the time of the GitHub reads that work and
+// `milestones-<space>.json` (`milestones.json`) and `project-fields.json` (the factory's share), `worktree-<n>.json` (the branch and the lines changed of an issue's worktree), `now.txt` for the clock, `github-at.txt` for the time of the GitHub reads that work and
 // `github-error.txt`: with it, the first GitHub read of each space works and every later one fails with
 // its text, as a `gh` that stops answering does.
 
@@ -49,6 +49,15 @@ export function readConfig(raw) {
       })),
   }
 }
+
+/**
+ * Whether a closed issue was closed on `day` (`YYYY-MM-DD`, UTC).
+ *
+ * @param {{ closed_at?: unknown }} issue
+ * @param {string} day
+ */
+const closedOn = (issue, day) =>
+  typeof issue.closed_at === 'string' && issue.closed_at.startsWith(day)
 
 /**
  * @param {unknown} error
@@ -207,10 +216,11 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
         const issues =
           (await fixtureJson(`issues-${space.name}.json`)) ?? (await fixtureJson('issues.json'))
         if (!Array.isArray(issues)) return { error: 'no issues.json in the fixture' }
+        const today = iso(await now()).slice(0, 10)
         /** @type {Record<number, unknown>} */
         const comments = {}
         for (const issue of issues) {
-          if (issue.state === 'closed') continue
+          if (issue.state === 'closed' && !closedOn(issue, today)) continue
           comments[issue.number] = (await fixtureJson(`comments-${issue.number}.json`)) ?? []
         }
         return { at, issues, comments, maintainer: config.maintainer }
@@ -219,7 +229,11 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
         `repos/${space.repo}/issues?milestone=${space.milestone}&state=all&per_page=100`
       )
       if (!Array.isArray(issues)) throw new Error('gh api: not a list of issues')
-      const open = issues.filter((i) => i.state !== 'closed' && i.pull_request == null)
+      const today = iso(await now()).slice(0, 10)
+      // The open issues, and the ones closed today: the Board's "Merged today" shows each one's lane.
+      const open = issues.filter(
+        (i) => (i.state !== 'closed' || closedOn(i, today)) && i.pull_request == null
+      )
       /** @type {Record<number, unknown>} */
       const comments = {}
       for (let i = 0; i < open.length; i += GH_AT_ONCE) {
@@ -234,6 +248,47 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
         })
       }
       return { at, issues, comments, maintainer: config.maintainer }
+    } catch (error) {
+      return { error: reason(error) }
+    }
+  }
+
+  /**
+   * The milestones of each space's repository, for the factory's share: `gh api repos/<repo>/milestones`
+   * (`milestones-<space>.json`, then `milestones.json`, in a fixture), one read for each repository.
+   *
+   * @param {import('./lib/panel.js').SpaceConfig[]} spaces
+   */
+  async function readMilestones(spaces) {
+    const at = iso(await now())
+    try {
+      /** @type {Record<string, unknown>} */
+      const byRepo = {}
+      for (const space of spaces) {
+        if (space.repo in byRepo) continue
+        const list =
+          dirs !== null
+            ? ((await fixtureJson(`milestones-${space.name}.json`)) ??
+              (await fixtureJson('milestones.json')))
+            : await gh(`repos/${space.repo}/milestones?state=all&per_page=100`)
+        if (!Array.isArray(list)) return { error: `no milestones for ${space.repo}` }
+        byRepo[space.repo] = list
+      }
+      return { at, byRepo }
+    } catch (error) {
+      return { error: reason(error) }
+    }
+  }
+
+  /** `.github/project-fields.json` of the checkout: the Release line and the Front of each milestone. */
+  async function readProjectFields() {
+    const at = iso(await now())
+    try {
+      const text =
+        (dirs !== null ? await fixtureText('project-fields.json') : null) ??
+        (await readTextFile(`${config.checkout}/.github/project-fields.json`))
+      if (text === null) return { error: 'no .github/project-fields.json' }
+      return { at, fields: JSON.parse(text) }
     } catch (error) {
       return { error: reason(error) }
     }
@@ -302,6 +357,8 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
     readMachine,
     readAgents,
     readGithub,
+    readMilestones,
+    readProjectFields,
     readStacks,
     readHistory,
     readWorktree,

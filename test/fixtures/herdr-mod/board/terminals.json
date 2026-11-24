@@ -1,0 +1,116 @@
+[
+  {
+    "address": "t2p",
+    "name": null,
+    "parent": null,
+    "status": "working",
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "master"
+      ]
+    },
+    "labels": {
+      "herdr.space": "sp-micelio-engineering",
+      "where": "micelio-engineering / 1"
+    }
+  },
+  {
+    "address": "t3f",
+    "name": null,
+    "parent": null,
+    "status": "idle",
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "master"
+      ]
+    },
+    "labels": {
+      "herdr.space": "sp-fediverse",
+      "where": "fediverse / 1"
+    }
+  },
+  {
+    "address": "t4a",
+    "name": "worker-803",
+    "parent": "t2p",
+    "status": "working",
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "worker",
+        "--model",
+        "sonnet"
+      ]
+    },
+    "labels": {}
+  },
+  {
+    "address": "t4b",
+    "name": "reviewer-804",
+    "parent": "t2p",
+    "status": "working",
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "reviewer",
+        "--model",
+        "opus"
+      ]
+    },
+    "labels": {}
+  },
+  {
+    "address": "t4c",
+    "name": "verifier-805",
+    "parent": "t2p",
+    "status": "working",
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "verifier",
+        "--model",
+        "sonnet"
+      ]
+    },
+    "labels": {}
+  },
+  {
+    "address": "t4d",
+    "name": "verifier-808",
+    "parent": "t2p",
+    "status": "idle",
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "verifier",
+        "--model",
+        "sonnet"
+      ]
+    },
+    "labels": {}
+  },
+  {
+    "address": "t4e",
+    "name": "reviewer-5",
+    "parent": "t3f",
+    "status": "working",
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "reviewer",
+        "--model",
+        "opus"
+      ]
+    },
+    "labels": {}
+  }
+]

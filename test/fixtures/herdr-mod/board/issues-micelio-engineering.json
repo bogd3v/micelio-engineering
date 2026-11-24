@@ -1,0 +1,152 @@
+[
+  {
+    "number": 790,
+    "title": "Epic: the maintainer runs the factory from a Herdr mod",
+    "state": "open",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z",
+    "labels": []
+  },
+  {
+    "number": 801,
+    "title": "feat(herdr): the board",
+    "state": "open",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z",
+    "labels": [
+      {
+        "name": "ready"
+      }
+    ]
+  },
+  {
+    "number": 802,
+    "title": "docs: not ready yet",
+    "state": "open",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z",
+    "labels": []
+  },
+  {
+    "number": 803,
+    "title": "feat(herdr): the worker column",
+    "state": "open",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z",
+    "labels": [
+      {
+        "name": "ready"
+      }
+    ]
+  },
+  {
+    "number": 804,
+    "title": "feat(herdr): the review column",
+    "state": "open",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z",
+    "labels": [
+      {
+        "name": "ready"
+      }
+    ]
+  },
+  {
+    "number": 805,
+    "title": "feat(herdr): the verify column",
+    "state": "open",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z",
+    "labels": [
+      {
+        "name": "ready"
+      }
+    ]
+  },
+  {
+    "number": 806,
+    "title": "feat(herdr): the sign-off column",
+    "state": "open",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z",
+    "labels": [
+      {
+        "name": "ready"
+      }
+    ]
+  },
+  {
+    "number": 807,
+    "title": "fix(herdr): CI on the merge",
+    "state": "open",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z",
+    "labels": [
+      {
+        "name": "ready"
+      }
+    ]
+  },
+  {
+    "number": 808,
+    "title": "feat(herdr): a red verify",
+    "state": "open",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z",
+    "labels": []
+  },
+  {
+    "number": 809,
+    "title": "docs: the express one",
+    "state": "open",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z",
+    "labels": []
+  },
+  {
+    "number": 810,
+    "title": "feat(herdr): merged this morning",
+    "state": "closed",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z",
+    "labels": [],
+    "closed_at": "2026-11-24T09:40:00Z"
+  },
+  {
+    "number": 811,
+    "title": "feat(herdr): merged yesterday",
+    "state": "closed",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z",
+    "labels": [],
+    "closed_at": "2026-11-23T22:00:00Z"
+  },
+  {
+    "number": 812,
+    "title": "feat(herdr): the panel",
+    "state": "open",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z",
+    "labels": [
+      {
+        "name": "ready"
+      }
+    ],
+    "pull_request": {
+      "url": "x",
+      "merged_at": null
+    }
+  },
+  {
+    "number": 813,
+    "title": "feat(herdr): blocked one",
+    "state": "open",
+    "body": "## Depends on\n\n- #801 (the board)\n",
+    "created_at": "2026-11-20T10:00:00Z",
+    "labels": [
+      {
+        "name": "ready"
+      }
+    ]
+  }
+]

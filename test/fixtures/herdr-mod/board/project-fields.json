@@ -1,0 +1,22 @@
+{
+  "Micelio · Corte 0.8 — El núcleo 0.4": {
+    "releaseLine": "0.8",
+    "front": "Plugin core"
+  },
+  "Micelio · Catálogo de bloques": {
+    "releaseLine": "later",
+    "front": "Plugin core"
+  },
+  "Micelio · Fábrica por carriles": {
+    "releaseLine": "later",
+    "front": "Foundations"
+  },
+  "Micelio · Fábrica — Mod de Herdr": {
+    "releaseLine": "later",
+    "front": "Foundations"
+  },
+  "Micelio · Créditos de traducción en el fediverso": {
+    "releaseLine": "later",
+    "front": "Fediverse"
+  }
+}

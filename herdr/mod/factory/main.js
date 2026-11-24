@@ -1,5 +1,5 @@
 // The factory panel of the Herdr desktop app: the machine, the slots, the leases, the milestones and
-// the stacks, docked on the right, and the detail of an issue, an overlay of the same mod (`props().detail`).
+// the stacks, docked on the right, the detail of an issue, an overlay of the same mod (`props().detail`), and the Board, a tab of the same mod (`props().board`).
 // It only reads: no command it runs writes, and no control of it sends anything. The facts are read by `adapters.js`, put together by `lib/` and drawn by `views/`.
 
 import { View } from 'gpui-kit'
@@ -19,10 +19,12 @@ import {
 } from 'herdr'
 import { createAdapters, readConfig } from './adapters.js'
 import { buildGithub, buildPanel, parseStacks, pushLoad, SECTIONS } from './lib/panel.js'
+import { buildBoard, factoryShare } from './lib/board.js'
 import { buildDetail, parseProgress } from './lib/detail.js'
 import { buildState } from './lib/state.js'
 import { THEMES } from './lib/tokens.js'
 import { banners } from './views/banners.js'
+import { board } from './views/board.js'
 import { detail } from './views/detail.js'
 import { header } from './views/header.js'
 import { leases } from './views/leases.js'
@@ -52,6 +54,12 @@ export default class Factory extends View {
     this.terminals = []
     /** `{ space, number }` in the overlay of an issue, `null` in the panel. */
     this.detail = props()?.detail ?? null
+    /** The Board tab is this mod opened with `board` in its props (`tab.new {mod, props}`). */
+    this.board = props()?.board === true
+    /** The Board's filters: `all` or a space's name, `all` or a lane tag. */
+    this.boardFilter = { space: 'all', lane: 'all' }
+    /** The milestones of each repository and `.github/project-fields.json`, for the factory's share. */
+    this.share = { milestones: null, fields: null }
     /** The branch and the lines changed of the open issue's worktree. */
     this.worktree = null
     this.seeded = false
@@ -83,6 +91,11 @@ export default class Factory extends View {
         cx.notify()
       },
       openDetail: (space, number) => this.openDetail(space, number),
+      openBoard: () => this.openBoard(),
+      setBoardFilter: (kind, key, cx) => {
+        this.boardFilter = { ...this.boardFilter, [kind]: key }
+        cx.notify()
+      },
       // A file of the packet, in a pane that can only read it.
       openFile: (path) => {
         this.opened([
@@ -116,6 +129,11 @@ export default class Factory extends View {
   opened(argv, name) {
     run('terminal.open', { argv, place: 'right', ...(name === undefined ? {} : { name }) })
     closeOverlay(props()?.overlay)
+  }
+
+  /** Opens the Board as a tab of its own: this mod with `board` in its props. */
+  openBoard() {
+    run('tab.new', { name: 'Board', mod: 'factory', props: { ...props(), board: true } })
   }
 
   /** Opens the overlay of an issue: the same mod with `detail` in its props. @param {string} space @param {number} number */
@@ -218,11 +236,42 @@ export default class Factory extends View {
           reads,
           previous: this.github,
         })
+        await this.readShare()
         await this.readWorktree()
       } finally {
         this.busy.slow = false
       }
       cx.notify()
+    })
+  }
+
+  /** The milestones of each repository and the project fields; a failed read keeps the last one. */
+  async readShare() {
+    const [milestones, fields] = await Promise.all([
+      this.adapters.readMilestones(this.config.spaces),
+      this.adapters.readProjectFields(),
+    ])
+    this.share = {
+      milestones: 'byRepo' in milestones ? milestones.byRepo : this.share.milestones,
+      fields: 'fields' in fields ? fields.fields : this.share.fields,
+    }
+  }
+
+  /** What the Board shows now. */
+  boardModel() {
+    const state = this.state ?? buildState({ now: this.now, fetched: {} })
+    const { milestones, fields } = this.share
+    return buildBoard({
+      now: this.now,
+      state,
+      github: this.github,
+      config: this.config,
+      share:
+        milestones === null || fields === null
+          ? null
+          : factoryShare({ fields, milestones, spaces: this.config.spaces }),
+      filter: this.boardFilter,
+      theme: this.themeNow(),
     })
   }
 
@@ -310,6 +359,17 @@ export default class Factory extends View {
         .text_size(12.5)
         .overflow_y_scrollbar()
         .child(detail(ctx, this.detailModel()))
+    }
+    if (this.board) {
+      return v_flex()
+        .id('factory-board')
+        .size_full()
+        .bg(ctx.c.bg)
+        .text_color(ctx.c.fg)
+        .font_family(MONO)
+        .text_size(12.5)
+        .overflow_y_scrollbar()
+        .child(board(ctx, this.boardModel()))
     }
     const p = this.panel()
     const s = p.sections
