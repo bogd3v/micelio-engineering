@@ -7,9 +7,11 @@
 // giving it), everything is read from there and not from the machine, so a screen can be reproduced:
 // `status.txt`, `loadavg`, `meminfo`, `hwmon.json`, `cores`, `terminals.json`, `issues.json`
 // (`issues-<space>.json` first), `comments-<n>.json`, `docker-compose-ls.json`, `loadhistory.json`,
-// `now.txt` for the clock, `github-at.txt` for the time of the GitHub reads that work and
+// `worktree-<n>.json` (the branch and the lines changed of an issue's worktree), `now.txt` for the clock, `github-at.txt` for the time of the GitHub reads that work and
 // `github-error.txt`: with it, the first GitHub read of each space works and every later one fails with
 // its text, as a `gh` that stops answering does.
+
+import { parseNumstat } from './lib/detail.js'
 
 /** The hwmon folders looked at, `hwmon0` to `hwmon15`. */
 const HWMON_FOLDERS = 16
@@ -265,5 +267,43 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
     }))
   }
 
-  return { now, readSlots, readMachine, readAgents, readGithub, readStacks, readHistory }
+  /**
+   * The branch of an issue's worktree and the lines it changes against `origin/main`, read with
+   * `git rev-parse`, `git merge-base` and `git diff --numstat`: none of them writes, and a file that
+   * is not tracked yet is not counted.
+   *
+   * @param {number} issue
+   * @param {string} path the worktree
+   */
+  async function readWorktree(issue, path) {
+    try {
+      if (dirs !== null) {
+        const found = await fixtureJson(`worktree-${issue}.json`)
+        return found === null ? { error: `no worktree-${issue}.json in the fixture` } : found
+      }
+      /** @param {string[]} args */
+      const git = async (args) => {
+        const run = await exec('git', ['-C', path, ...args], { timeout: 15_000 })
+        if (run.code !== 0) throw new Error(run.stderr.trim() || `git exit ${run.code}`)
+        return run.stdout.trim()
+      }
+      const branch = await git(['rev-parse', '--abbrev-ref', 'HEAD'])
+      const base = await git(['merge-base', 'HEAD', 'origin/main'])
+      const { added, removed } = parseNumstat(await git(['diff', '--numstat', base]))
+      return { branch, added, removed }
+    } catch (error) {
+      return { error: reason(error) }
+    }
+  }
+
+  return {
+    now,
+    readSlots,
+    readMachine,
+    readAgents,
+    readGithub,
+    readStacks,
+    readHistory,
+    readWorktree,
+  }
 }

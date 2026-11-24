@@ -31,6 +31,7 @@ const OMITTED = { express: [3, 4], normal: [], full: [] }
  * @property {number | null} blocking the `K Blocking` of a Gate 3 comment
  * @property {number | null} mismatches the `M mismatches` of a Gate 4 comment
  * @property {number} at milliseconds since the epoch of the comment
+ * @property {string} summary what the comment's first line says after `Gate N, round K (agent)`, `''` when it says nothing
  */
 
 /**
@@ -56,6 +57,22 @@ function firstLine(body) {
     .replaceAll(/<[^>]*>/g, '')
     .replaceAll('*', '')
     .replace(/^\s*#+\s*/, '')
+    .trim()
+}
+
+/**
+ * What a gate comment's first line says of its gate: the line without `Gate N`, `, round K` and the
+ * agent in parentheses, and without the separator that follows them.
+ *
+ * @param {string} line the first line without markup
+ * @returns {string}
+ */
+export function summaryOf(line) {
+  return line
+    .replace(/^gate \d\b/i, '')
+    .replace(/^[\s,]*round \d+/i, '')
+    .replace(/^\s*\([^)]*\)/, '')
+    .replace(/^[\s·:,–—-]+/, '')
     .trim()
 }
 
@@ -158,6 +175,7 @@ export function parseGates({ comments, maintainer, closed = false, needsYou = fa
       gate: n,
       round: round === null ? null : Number(round[1]),
       at,
+      summary: summaryOf(line),
       ...outcomeOf(n, line),
     })
     since = at

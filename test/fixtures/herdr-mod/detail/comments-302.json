@@ -1,0 +1,74 @@
+[
+  {
+    "id": 101,
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-11-24T09:10:00Z",
+    "body": "**Gate 1 (master): pass**\n\nlane: normal\n"
+  },
+  {
+    "id": 102,
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-11-24T10:00:00Z",
+    "body": "**Gate 2, round 1 (worker-302)** \u00b7 draft ok"
+  },
+  {
+    "id": 103,
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-11-24T10:05:00Z",
+    "body": "tokens | 2026-11-24 | 302 | worker | 1 | 1200000 | 700000 | 9000000\ntokens | 2026-11-24 | 301 | worker | 1 | 5 | 5 | 5"
+  },
+  {
+    "id": 104,
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-11-24T10:30:00Z",
+    "body": "**Gate 3, round 1 (reviewer-302)** \u00b7 1 Blocking, 4 Important"
+  },
+  {
+    "id": 105,
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-11-24T10:31:00Z",
+    "body": "**Gate 4, round 1 (verifier-302)** \u00b7 2 mismatches: 3143 vs 3147 tests"
+  },
+  {
+    "id": 106,
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-11-24T10:35:00Z",
+    "body": "tokens | 2026-11-24 | 302 | reviewer | 1 | 300000 | 120000 | 2000000\ntokens | 2026-11-24 | 302 | verifier | 1 | 400000 | 200000 | 3000000"
+  },
+  {
+    "id": 107,
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-11-24T11:00:00Z",
+    "body": "**Gate 2, round 2 (worker-302)** \u00b7 draft ok"
+  },
+  {
+    "id": 108,
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-11-24T11:10:00Z",
+    "body": "tokens | 2026-11-24 | 302 | worker | 2 | 300000 | 100000 | 1000000"
+  },
+  {
+    "id": 199,
+    "user": {
+      "login": "someone-else"
+    },
+    "created_at": "2026-11-24T11:11:00Z",
+    "body": "tokens | 2026-11-24 | 302 | worker | 2 | 9000000 | 9000000 | 1"
+  }
+]
