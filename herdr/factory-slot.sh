@@ -2,8 +2,12 @@
 # factory-slot.sh — a machine-wide budget for the factory's heavy commands and long-lived agents.
 #
 #   factory-slot.sh run [--pool heavy] -- <command...>
-#   factory-slot.sh acquire --pool workers --agent <name>     (exit 75 when the pool is full)
+#   factory-slot.sh acquire --pool workers --agent <name>     (exit 75, and nothing written, when the
+#                                                             pool is full or the factory is paused)
 #   factory-slot.sh release --agent <name>
+#   factory-slot.sh pause | resume                            (no new worker while paused)
+#   factory-slot.sh hold --agent maintainer                   (a heavy slot for the maintainer;
+#                                                             exit 75 when none is free)
 #   factory-slot.sh status
 #   factory-slot.sh reap
 #
@@ -22,7 +26,7 @@ WORKERS="${FACTORY_WORKER_SLOTS:-6}"
 GRACE="${FACTORY_REAP_GRACE:-300}"
 
 die() { echo "factory-slot: $*" >&2; exit 2; }
-usage() { sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
 positive() { [[ "$1" =~ ^[1-9][0-9]*$ ]] || die "$2 must be a positive whole number, got '$1'"; }
 positive "$HEAVY" FACTORY_HEAVY_SLOTS
@@ -65,7 +69,10 @@ cmd_run() {
     if [[ "$oldest" == "$ticket" ]]; then
       for ((i = 1; i <= HEAVY; i++)); do
         exec {fd}>>"$pdir/slot-$i.lock"
-        if flock -n "$fd"; then slot=$i; break 2; fi
+        # A slot the maintainer holds counts as taken.
+        if flock -n "$fd"; then
+          [[ -e "$pdir/slot-$i.hold" ]] || { slot=$i; break 2; }
+        fi
         exec {fd}>&-
       done
     fi
@@ -124,6 +131,11 @@ cmd_acquire() {
   exec {n}>>"$pdir/.lock"
   flock "$n"
   if [[ ! -e "$file" ]]; then
+    # A lease already held is kept while paused: only a new worker waits.
+    if [[ -e "$DIR/paused" ]]; then
+      echo paused
+      exit 75
+    fi
     local count
     count=$(find "$pdir" -maxdepth 1 -name 'lease-*' | wc -l)
     if ((count >= WORKERS)); then
@@ -145,6 +157,48 @@ cmd_release() {
   done
   valid_agent "$agent" || die "--agent needs a name"
   rm -f "$DIR/workers/lease-${agent}"
+  [[ "$agent" == maintainer ]] && rm -f "$DIR"/heavy/slot-*.hold
+  return 0
+}
+
+cmd_pause() {
+  mkdir -p "$DIR" || die "cannot create $DIR"
+  : >"$DIR/paused"
+}
+
+cmd_resume() { rm -f "$DIR/paused"; }
+
+# Takes one heavy slot for the maintainer, or exits 75 when none is free. The hold is a file
+# written while the slot's lock is held, so a `run` that gets the lock afterwards sees it.
+cmd_hold() {
+  local agent=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --agent) agent="${2:-}"; shift 2 ;;
+      *) usage ;;
+    esac
+  done
+  [[ "$agent" == maintainer ]] || die "hold takes --agent maintainer"
+  local pdir="$DIR/heavy" i fd f
+  mkdir -p "$pdir" || die "cannot create $pdir"
+  for f in "$pdir"/slot-*.hold; do
+    [[ -e "$f" ]] && { echo "factory-slot: already holding slot ${f##*slot-}" >&2; return 0; }
+  done
+  for ((i = 1; i <= HEAVY; i++)); do
+    exec {fd}>>"$pdir/slot-$i.lock"
+    if flock -n "$fd"; then
+      if [[ ! -e "$pdir/slot-$i.hold" ]]; then
+        printf 'agent=maintainer\nstart=%s\n' "$(date +%s)" >"$pdir/slot-$i.hold.tmp" \
+          && mv "$pdir/slot-$i.hold.tmp" "$pdir/slot-$i.hold"
+        exec {fd}>&-
+        echo "held slot $i"
+        return 0
+      fi
+    fi
+    exec {fd}>&-
+  done
+  echo "no free slot"
+  exit 75
 }
 
 # --- status and reap ---------------------------------------------------------------------
@@ -154,6 +208,11 @@ fmt_time() { date -d "@$1" '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null || echo "$1"; }
 # Prints "pool<TAB>slot<TAB>agent<TAB>pid<TAB>start<TAB>command<TAB>state" per slot and lease.
 list_entries() {
   local f pid
+  for f in "$DIR"/heavy/slot-*.hold; do
+    [[ -e "$f" ]] || continue
+    printf 'heavy\t%s\t%s\t-\t%s\thold\theld\n' "$(basename "$f" .hold | sed 's/^slot-//')" \
+      "$(field "$f" agent)" "$(fmt_time "$(field "$f" start)")"
+  done
   for f in "$DIR"/heavy/slot-*.owner; do
     [[ -e "$f" ]] || continue
     pid=$(field "$f" pid)
@@ -178,6 +237,7 @@ descends_from() { # $1 pid, $2 ancestor
 }
 
 cmd_status() {
+  [[ -e "$DIR/paused" ]] && echo paused
   list_entries
   local root="${TMP_ROOT%/}" pgids="" wrappers="" f p cwd
   for f in "$DIR"/heavy/slot-*.owner; do
@@ -284,6 +344,7 @@ kill_group() {
   kill -KILL -- "-$pg" 2>/dev/null
 }
 
+# A hold (slot-N.hold) is the maintainer's: reap never removes one.
 cmd_reap() {
   declare -A state
   local f agent pid st now
@@ -328,6 +389,9 @@ case "${1:-}" in
   run) shift; cmd_run "$@" ;;
   acquire) shift; cmd_acquire "$@" ;;
   release) shift; cmd_release "$@" ;;
+  pause) cmd_pause ;;
+  resume) cmd_resume ;;
+  hold) shift; cmd_hold "$@" ;;
   status) cmd_status ;;
   reap) cmd_reap ;;
   *) usage ;;
