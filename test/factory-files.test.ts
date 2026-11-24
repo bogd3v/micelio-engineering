@@ -101,7 +101,7 @@ describe('the factory roles', () => {
       const prompt = readFileSync(join(agents, `${name}.md`), 'utf8')
       const prompted = runbook
         .split('\n')
-        .filter((line) => line.includes(`herdr agent prompt ${name}-`))
+        .filter((line) => line.includes(`hc send ${name}-`))
         .join('\n')
       const named = skills.filter((skill) =>
         new RegExp(`\`${skill}\`|${skill} skill`).test(`${prompt}\n${prompted}`)
@@ -113,7 +113,7 @@ describe('the factory roles', () => {
 
   it("the runbook gives a later reviewer the previous diff without an earlier round's directory", () => {
     const lines = runbook.split('\n')
-    const prompts = lines.filter((line) => line.includes('herdr agent prompt '))
+    const prompts = lines.filter((line) => line.includes('hc send '))
     const later = lines.filter((line) => line.startsWith('From round 2, add:'))
     expect(later).toHaveLength(1)
     expect(later[0]).toContain('<packets>/<N>/r<K>/previous.patch')
@@ -131,7 +131,7 @@ describe('the factory roles', () => {
   })
 
   it('the runbook writes each report in a directory no prompt names and moves it to archive/', () => {
-    const prompts = runbook.split('\n').filter((line) => line.includes('herdr agent prompt '))
+    const prompts = runbook.split('\n').filter((line) => line.includes('hc send '))
     expect(runbook).toMatch(/^uuidgen .*<packets>\/<N>\/reports\/<that id>$/m)
     expect(runbook).toMatch(/^mkdir -p <report dir> /m)
     expect(runbook).toContain(
@@ -140,28 +140,36 @@ describe('the factory roles', () => {
     expect(runbook).toContain('it is not a sandbox')
     expect(runbook).not.toContain('$out')
     for (const name of ['reviewer', 'verifier']) {
-      const line = prompts.find((l) => l.includes(`herdr agent prompt ${name}-`))
+      const line = prompts.find((l) => l.includes(`hc send ${name}-`))
       expect(line, name).toContain('Write report.md and summary.md in <report dir>.')
       expect(line, name).not.toMatch(/reports\/|archive\//)
     }
   })
 
-  it('the runbook enters a slice with exec and never reuses a pane', () => {
-    const sends = runbook
-      .split('\n')
-      .filter((line) => /factory-agent\.sh\S* enter [<\w]/.test(line))
-    expect(sends.length).toBeGreaterThan(0)
-    for (const line of sends) {
-      expect(line).toMatch(/exec [^"`]*factory-agent\.sh\S* enter [<\w]/)
+  it('the runbook starts each agent with hc run in a new terminal that enters its slice, and never with exec or a used terminal', () => {
+    const runs = runbook.split('\n').filter((line) => line.startsWith('hc run '))
+    expect(runs.length).toBeGreaterThan(0)
+    for (const line of runs) {
+      expect(line).toMatch(
+        /^hc run --bg --name \S+ --cwd \S+ --no-notify -- <path of herdr\/factory-agent\.sh> enter \S+$/
+      )
     }
-    expect(runbook).toMatch(/exec … enter <name>/)
+    expect(runbook).not.toMatch(/exec [^"`\n]*factory-agent\.sh/)
     const start = runbook.indexOf('## Starting an agent')
     const section = runbook.slice(start, runbook.indexOf('\n## ', start + 1))
-    expect(section).toMatch(/Every agent gets a new pane/)
-    expect(section).not.toMatch(/same pane/i)
+    expect(section).toMatch(/Every agent gets a new terminal, never a used one/)
+    expect(section).not.toMatch(/same (pane|terminal)/i)
     expect(section).not.toMatch(/reuse/i)
-    expect(section).not.toMatch(/\/exit[^\n]*agent start/)
-    expect(section).toMatch(/factory-agent\.sh stop <name>/)
+    expect(section).toMatch(/`hc kill <name>`, `hc rm <name>` and `factory-agent\.sh stop <name>`/)
+    expect(section).toContain('--session-id <id from uuidgen>')
+  })
+
+  it('the runbook never sends with hc send --force and never starts an agent with --no-parent or --outlive-parent', () => {
+    const commands = runbook.split('\n').filter((line) => /^hc (run|send) /.test(line))
+    expect(commands.length).toBeGreaterThan(0)
+    for (const line of commands) expect(line).not.toMatch(/--force|--no-parent|--outlive-parent/)
+    expect(runbook).toMatch(/never `hc send --force`/)
+    expect(runbook).toMatch(/Never start an agent with `--no-parent` or `--outlive-parent`/)
   })
 
   it("every git diff of the master's runbook follows git add -N", () => {

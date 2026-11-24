@@ -498,11 +498,35 @@ describe('factory-slot.sh reap', () => {
     }
   })
 
-  it('reap prints unknown and leaves a slot alone when herdr is missing or answers another error', async () => {
+  it('reap, with no herdr on PATH, kills and releases an agent hc answers not_found or finished, and keeps one hc lists', async () => {
+    for (const answer of [finished, notFound]) {
+      const { run, pgid } = await startOwned('worker-5')
+      expect(slot(['acquire', '--pool', 'workers', '--agent', 'worker-5']).code).toBe(0)
+      const r = slot(['reap'], {}, pathWith('worker-5', { hc: answer }))
+      expect(r.code).toBe(0)
+      expect(r.out).toContain(`killed ${owned()}`)
+      expect(r.out).toContain(`released ${leaseOf('worker-5')}`)
+      await run.exited
+      expect(groupAlive(pgid)).toBe(false)
+      expect(existsSync(owned())).toBe(false)
+      expect(existsSync(leaseOf('worker-5'))).toBe(false)
+      rmSync(upOf('a'), { force: true })
+    }
     const { run, pgid } = await startOwned('worker-5')
     expect(slot(['acquire', '--pool', 'workers', '--agent', 'worker-5']).code).toBe(0)
-    const answers: (Answer | undefined)[] = [
-      undefined,
+    const r = slot(['reap'], {}, pathWith('worker-5', { hc: hcLive }))
+    expect(r.out).toBe('')
+    expect(groupAlive(pgid)).toBe(true)
+    expect(existsSync(owned())).toBe(true)
+    expect(existsSync(leaseOf('worker-5'))).toBe(true)
+    release('a')
+    await run.exited
+  })
+
+  it('reap prints unknown and leaves a slot alone when herdr answers another error', async () => {
+    const { run, pgid } = await startOwned('worker-5')
+    expect(slot(['acquire', '--pool', 'workers', '--agent', 'worker-5']).code).toBe(0)
+    const answers: Answer[] = [
       serverDown,
       { exit: 1, body: 'boom' },
       { exit: 2, body: agentNotFound.body },
@@ -512,7 +536,7 @@ describe('factory-slot.sh reap', () => {
     ]
     for (const herdr of answers) {
       for (const hc of [notFound, finished]) {
-        const path = pathWith('worker-5', { ...(herdr === undefined ? {} : { herdr }), hc })
+        const path = pathWith('worker-5', { herdr, hc })
         const r = slot(['reap'], {}, path)
         expect(r.out).toContain(`unknown ${owned()}`)
         expect(r.out).toContain(`unknown ${leaseOf('worker-5')}`)

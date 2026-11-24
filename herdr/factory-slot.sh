@@ -14,7 +14,8 @@
 # Environment: FACTORY_SLOT_DIR, FACTORY_TMP, FACTORY_RUN_TMP, FACTORY_CORES, FACTORY_HEAVY_SLOTS,
 # FACTORY_WORKER_SLOTS, FACTORY_REAP_GRACE, FACTORY_AGENT, HC_TERMINAL_ID.
 # See docs/factory.md, "Machine budget". Needs only bash, flock, ps, setsid and coreutils;
-# `herdr agent get` and `hc get` (herdr-core) are optional and called by `reap` alone.
+# `herdr agent get` and `hc get` (herdr-core) are optional and called by `reap` alone; with no `herdr`
+# on PATH, `hc get` alone says whether an agent runs.
 set -u
 
 DIR="${FACTORY_SLOT_DIR:-$HOME/Git/factory/run/slots}"
@@ -261,10 +262,11 @@ cmd_status() {
   done
 }
 
-# Prints live, gone or unknown for what `herdr agent get` says of an agent.
+# Prints live, gone, unknown or absent (no `herdr` on PATH) for what `herdr agent get` says of an agent.
 herdr_answer() {
   local out rc
-  # herdr writes its agent_not_found answer to stderr, so read both streams. A missing herdr exits 127.
+  command -v herdr >/dev/null 2>&1 || { echo absent; return; }
+  # herdr writes its agent_not_found answer to stderr, so read both streams.
   out=$(herdr agent get "$1" 2>&1)
   rc=$?
   # Any agent_status counts: done and idle have finished a turn and are still live.
@@ -319,14 +321,15 @@ hc_answer() {
 }
 
 # Prints ended, running or unknown for an agent. Either tool listing it makes it running; it has
-# ended only when both herdr and hc say it is gone; any other pair is unknown.
+# ended only when both herdr and hc say it is gone; any other pair is unknown. With no herdr on PATH,
+# hc alone decides; a herdr that is there and fails still gives unknown.
 agent_state() {
   local from_herdr from_hc
   from_herdr=$(herdr_answer "$1")
   from_hc=$(hc_answer "$1")
   if [[ "$from_herdr" == live || "$from_hc" == live ]]; then
     echo running
-  elif [[ "$from_herdr" == gone && "$from_hc" == gone ]]; then
+  elif [[ "$from_hc" == gone && ( "$from_herdr" == gone || "$from_herdr" == absent ) ]]; then
     echo ended
   else
     echo unknown

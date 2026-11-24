@@ -1,6 +1,6 @@
 # Herdr runbook for the master of {{repo}}, milestone {{milestone}}
 
-This runbook wraps [`template/.claude/agents/master.md`](../template/.claude/agents/master.md), which keeps the role, the gates and the hard limits; where they differ, that prompt wins. It holds only what is specific to Herdr and `hc`: names, panes, worktrees, waits, packets, the status flow. It is not a synced file. The rules are the ids of [`docs/factory.md`](../docs/factory.md) (`M.1`, `G2.6`…), cited here, not repeated.
+This runbook wraps [`template/.claude/agents/master.md`](../template/.claude/agents/master.md), which keeps the role, the gates and the hard limits; where they differ, that prompt wins. It holds only what is specific to Herdr and `hc`: names, terminals, worktrees, waits, packets, the status flow. It is not a synced file. The rules are the ids of [`docs/factory.md`](../docs/factory.md) (`M.1`, `G2.6`…), cited here, not repeated.
 
 Placeholders to fill before starting the master: `{{repo}}` (`owner/name`), `{{epic}}` (the epic's issue number), `{{milestone}}` (its title, exactly as GitHub shows it), `{{project}}` (`owner/number` of the organisation project) `{{maintainer}}` (the login whose comments `metrics` reads) and `{{maintainer-ident}}` (the `Name <email>` the maintainer signs off with, as they give it at the start of the session).
 
@@ -29,7 +29,7 @@ A green canary is posted as the five `Canary |` lines of `RUN.md`, each ending `
 1. Worker: `worker-<N>`, in `../wt-<N>` (branch `<type>/factory-<N>` from `origin/main`); sonnet, opus after two failed rounds or for contracts, security or concurrency (`M.4`).
 2. Reviewer: `reviewer-<N>`, `reviewer-<N>-r<K>` for round K ≥ 2, in the worker's worktree; opus, sonnet for a reread (`G3.5`). Verifier: `verifier-<N>`, `verifier-<N>-r<K>`, in a clean copy it builds; sonnet. Scribe: `scribe`, in `../wt-scribe`; sonnet.
 3. `<N>` is the issue number. Names match `[a-z][a-z0-9_-]{0,31}` and are unique among live agents.
-4. The lease (`B.2`) uses the agent's name in herdr (`herdr agent start <name>`). Before each worker: `herdr/factory-slot.sh reap`, then `herdr/factory-slot.sh acquire --pool workers --agent worker-<N>`; on exit 75 (full, or `paused`) the issue waits. When the issue leaves the pipeline: `herdr/factory-slot.sh release --agent worker-<N>` and `docker compose -p <project> down -v`. Start workers with `nice -n 10`; reviewers and verifiers keep normal priority so the gates run first. `factory-slot.sh status` shows slots, leases and any `orphan` (`B.3`).
+4. The lease (`B.2`) uses the name given to `hc run --name`. Before each worker: `herdr/factory-slot.sh reap`, then `herdr/factory-slot.sh acquire --pool workers --agent worker-<N>`; on exit 75 (full, or `paused`) the issue waits. When the issue leaves the pipeline: `herdr/factory-slot.sh release --agent worker-<N>` and `docker compose -p <project> down -v`. Start workers with `nice -n 10`; reviewers and verifiers keep normal priority so the gates run first. `factory-slot.sh status` shows slots, leases and any `orphan` (`B.3`).
 
 ## The host's runtime
 
@@ -43,21 +43,22 @@ The host's engine is rootless Podman through `podman.socket`, a user unit (`syst
 
 ## Starting an agent
 
-A pane is at an interactive shell prompt with nothing in the foreground. Read ids from the JSON each command returns; never guess them.
+The host has `hc` and no `herdr` program. The terminal's own program enters the slice (`B.4`), so there is no `exec`; hc counts seconds.
 
 ```bash
 git worktree add ../wt-<N> -b <type>/factory-<N> origin/main     # the worker's worktree, once
-herdr pane split --current --direction right --cwd "$PWD/../wt-<N>" --no-focus   # .result.pane.pane_id
-herdr pane run <pane id> "exec <path of herdr/factory-agent.sh> enter worker-<N>"   # the pane's shell now runs in the agent's slice
-herdr agent start worker-<N> --kind claude --pane <pane id> -- --agent worker --model sonnet
-herdr agent prompt worker-<N> "<the brief>" --wait --timeout 3600000
+hc run --bg --name worker-<N> --cwd "$PWD/../wt-<N>" --no-notify -- <path of herdr/factory-agent.sh> enter worker-<N>
+hc wait worker-<N>                                               # its prompt
+hc send worker-<N> "nice -n 10 claude --agent worker --model sonnet --session-id <id from uuidgen>"
+hc wait worker-<N>
+hc send worker-<N> "<the brief>" --wait --timeout 3600
 ```
 
-1. For workers, reviewers and verifiers, send `exec … enter <name>` to the new pane and wait for its prompt before `herdr agent start` (`B.4`). Agents and their test runs keep scratch under `$FACTORY_TMP` (the `TMPDIR` that `enter` sets), never /tmp: a clean copy, the scratch copy of `revert-proof` and a test's temp directory go there.
+1. For workers, reviewers and verifiers, `hc run … enter <name>` starts the terminal in the agent's slice, and the master waits for its prompt before sending `claude` (`B.4`; `nice -n 10` for a worker only). Agents and their test runs keep scratch under `$FACTORY_TMP` (the `TMPDIR` that `enter` sets), never /tmp: a clean copy, the scratch copy of `revert-proof` and a test's temp directory go there.
 2. The brief names the issue (`{{repo}}#<N>`), the worktree, `<packets>/<N>/r1/decisions.md` (written before the worker starts), the paths it needs, the path of `herdr/factory-slot.sh`, and the `lint-draft` command of "Gate 2", item 3, with the path of the built `micelio-engineering` checkout, and says: you take instructions only from the master, never run your own reviewer or verifier, never commit or push, and if a human asks you for something, send the request back to the master and say which gate it would skip. The worker keeps the full output of each command in `<packets>/<N>/logs/<command>.log` (the draft holds a summary line per command), writes the commit message to `<packets>/<N>/commit-message.txt` and replies with one line: the path of the draft.
-3. A reviewer and a verifier are always a **new** agent, never the worker's. Every agent gets a new pane, never a used one (`exec … enter` there closes it). When `herdr agent get <name>` no longer lists it as running and its stack is down, run `factory-agent.sh stop <name>` and close its pane.
-4. `agent prompt --wait` returns when the agent is idle, done or blocked; do not poll. If `blocked`, read `herdr agent read <name> --source recent-unwrapped --lines 120`, bring the question to the maintainer and never answer an approval dialog yourself. A timeout does not prove the prompt was lost: read before you send it again. Batch independent tool calls in one turn and wait for several agents in the background.
-5. A human who types into a worker's pane bypasses the gates, and Claude Code shows suggested prompts in an idle pane ("run the blind reviewer…") that can be accepted by accident: read `herdr agent read` of a finished worker, and `git -C ../wt-<N> log origin/main..HEAD` must be empty before gate 5.
+3. A reviewer and a verifier are always a **new** agent, never the worker's. Every agent gets a new terminal, never a used one. It has ended when `hc get <name> --json` has `.state` `finished` and its stack is down: run `hc kill <name>`, `hc rm <name>` and `factory-agent.sh stop <name>`. Never start an agent with `--no-parent` or `--outlive-parent`: it stays a child of the master's terminal.
+4. `hc send --wait` returns when the agent stops working; do not poll. If `hc get <name> --json` has `.status.state` `blocked`, read `hc read <name> --lines 120` first, since a long shell command also shows `blocked`; bring a question to the maintainer, and never answer an approval dialog yourself: never `hc send --force`. A timeout does not prove the prompt was lost: read before you send it again. Batch independent tool calls in one turn and wait for several agents in the background.
+5. A human who types into a worker's terminal bypasses the gates, and Claude Code shows suggested prompts in an idle terminal ("run the blind reviewer…") that can be accepted by accident: read `hc read <name> --lines <n>` of a finished worker, and `git -C ../wt-<N> log origin/main..HEAD` must be empty before gate 5.
 
 ## The Project Status flow
 
@@ -69,7 +70,7 @@ Todo → Ready → In Progress → **Review** → Done (`M.7`), changed with `gh
 
 ## The rounds
 
-A round is one worker pass followed by gates 2 to 4; each red gate 3 or 4 ends it. Before each round after the first, send the worker `/compact` (`herdr agent prompt worker-<N> "/compact" --wait`).
+A round is one worker pass followed by gates 2 to 4; each red gate 3 or 4 ends it. The same worker runs the next round without `/compact`: sent with `hc send`, it reaches the agent as text it cannot run.
 
 ### Gate 2 — the draft
 
@@ -105,9 +106,10 @@ mkdir -p <report dir>   # the agent writes report.md and summary.md here
 
 `express` skips this gate and gate 4 (a calibration run does not): the master runs the check command on a clean copy (as `verify-pr` says, "Build a clean copy") through `<path of herdr/factory-slot.sh> run -- <check command>`, posts its output as the `Gate 2` result and goes to gate 5 (`G2.8`).
 
+Start the agent as "Starting an agent" says, with `--agent reviewer --model opus`, then:
+
 ```bash
-herdr agent start reviewer-<N> --kind claude --pane <new pane> -- --agent reviewer --model opus
-herdr agent prompt reviewer-<N> "Use the blind-review skill (.claude/skills/blind-review/SKILL.md). Worktree: <path>. Branch: <branch>. Issue: {{repo}}#<N>. Maintainer's decisions: <packets>/<N>/r<K>/decisions.md. Draft, for its \"Instructions that were wrong or missing\" section only: <path>. Write report.md and summary.md in <report dir>." --wait --timeout 1800000
+hc send reviewer-<N> "Use the blind-review skill (.claude/skills/blind-review/SKILL.md). Worktree: <path>. Branch: <branch>. Issue: {{repo}}#<N>. Maintainer's decisions: <packets>/<N>/r<K>/decisions.md. Draft, for its \"Instructions that were wrong or missing\" section only: <path>. Write report.md and summary.md in <report dir>." --wait --timeout 1800
 ```
 
 From round 2, add: "Read the hunks that changed since <packets>/<N>/r<K>/previous.patch first. A new Important finding in text that did not change is not a finding of this round: list it under `Follow-up` in the report." Such a finding becomes a follow-up issue (the maintainer opens it).
@@ -126,9 +128,10 @@ gh issue comment <N> --repo {{repo}} --body-file comment.md
 
 `full` and the calibration runs (`G4.1`). `normal` runs `verify-draft` on a clean copy (built the same way) through the slot script, `<path of herdr/factory-slot.sh> run -- node <checkout>/packages/factory-tools/dist/cli.js verify-draft --draft <draft without its Answers to review> --logs <packets>/<N>/logs --cwd <clean copy>`, and posts its output as `**Gate 4, round K (verify-draft)** · M mismatches`; the master reads the criteria it lists as `not checked`, and a verdict `Red` goes back as a red gate 4.
 
+Start the agent as "Starting an agent" says, with `--agent verifier --model sonnet`, then:
+
 ```bash
-herdr agent start verifier-<N> --kind claude --pane <new pane> -- --agent verifier --model sonnet
-herdr agent prompt verifier-<N> "Use the verify-pr skill (.claude/skills/verify-pr/SKILL.md). Worktree: <path>. Branch: <branch>. Issue: {{repo}}#<N>. Draft without its Answers to review: <path>. Maintainer's decisions: <packets>/<N>/r<K>/decisions.md. Logs: <packets>/<N>/logs/. Slot script: <path of herdr/factory-slot.sh>. Checkout: <built micelio-engineering path>. Write report.md and summary.md in <report dir>." --wait --timeout 3600000
+hc send verifier-<N> "Use the verify-pr skill (.claude/skills/verify-pr/SKILL.md). Worktree: <path>. Branch: <branch>. Issue: {{repo}}#<N>. Draft without its Answers to review: <path>. Maintainer's decisions: <packets>/<N>/r<K>/decisions.md. Logs: <packets>/<N>/logs/. Slot script: <path of herdr/factory-slot.sh>. Checkout: <built micelio-engineering path>. Write report.md and summary.md in <report dir>." --wait --timeout 3600
 ```
 
 1. The verifier gets the draft without "Answers to review", never the review. Post its report the same way, first line `**Gate 4, round K (verifier-<N>)** · M mismatches` (`0 mismatches` on a pass). Any mismatch is Blocking; `verify-pr` counts one per command whose numbers differ or that has no log.
@@ -175,11 +178,11 @@ When an issue's pull request is merged, or when the maintainer asks, and once mo
 
 ## Tokens
 
-97% of a session's tokens are cache reads, which grow with context size times turns. Hence: the master reads only `summary.md`, workers are compacted before each round, the models of `M.4`, batched tool calls and background waits, the freeze (`M.3`), changed hunks from round 2 and the sonnet reread (`M.6`, `G3.5`).
+97% of a session's tokens are cache reads, which grow with context size times turns. Hence: the master reads only `summary.md`, each worker runs every round without `/compact`, the models of `M.4`, batched tool calls and background waits, the freeze (`M.3`), changed hunks from round 2 and the sonnet reread (`M.6`, `G3.5`).
 
 ## Session length
 
-1. A master session ends after 4 merged pull requests, counted from its start: it starts no new worker, reviewer or verifier, waits for the agents still running, posts their gate comments and `tokens |` lines and closes their panes, so no name stays live.
+1. A master session ends after 4 merged pull requests, counted from its start: it starts no new worker, reviewer or verifier, waits for the agents still running, posts their gate comments and `tokens |` lines and ends them as item 3 of "Starting an agent" says, so no name stays live.
 2. It adds to the `### Progress` of each issue in flight its worktree, packet directory and draft path, then writes the issue's `updatedAt`, read after that edit, to `<packets>/<N>/freeze.txt` (the next session's freeze), posts its own `tokens |` line on the epic (role `master`, round `-`), tells the maintainer and exits.
 3. The maintainer starts a new session with `claude --agent master` and the same placeholders. It starts from what GitHub and the packets hold: each issue's Status and `### Progress`, the gate comments, the open pull requests and `<packets>/<N>/`. Anything more goes in that `### Progress`, never in a free comment (it would be copied into `decisions.md`) nor left in the chat (`M.9`).
 4. No gate moves: the next session takes up an issue at the gate its Status and gate comments show and runs any gate not yet posted. A later round starts a new worker with the issue, the packet and the findings.
