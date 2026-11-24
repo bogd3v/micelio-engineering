@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -490,41 +491,42 @@ describe('run-canary.sh', () => {
   })
 })
 
-describe('run-canary.sh with a stand-in for herdr', () => {
+describe('run-canary.sh with a stand-in for hc', () => {
   const canary = join(FIXTURES, 'run-canary.sh')
 
   /**
-   * A `herdr` that starts every agent and, when told to write `summary.md` in a directory, writes
-   * `$FAKE_SUMMARY` there (a first line and the finding lines after it); every prompt is kept in `prompts`.
+   * An `hc` that starts every agent and, when told to write `summary.md` in a directory, writes
+   * `$FAKE_SUMMARY` there (a first line and the finding lines after it). Every call is kept in `calls`,
+   * every text sent in `prompts` and the `claude` lines in `claudes`; `$FAKE_RUN_FAIL` makes `hc run` fail.
    */
-  function setup(
-    summary: string,
-    agentStart = '{"result":{}}',
-    verify = 'Verdict: Red · 1 mismatches\n'
-  ) {
+  function setup(summary: string, runFails = false, verify = 'Verdict: Red · 1 mismatches\n') {
     const home = tempDir('factory-canary-')
     const bin = join(home, 'bin')
     mkdirSync(bin)
-    const herdr = join(bin, 'herdr')
+    const hc = join(bin, 'hc')
     writeFileSync(
-      herdr,
+      hc,
       `#!/usr/bin/env bash
-case "$1 $2" in
-  "pane split") echo '{"result":{"pane":{"pane_id":"p"}}}' ;;
-  "agent start") echo '${agentStart}' ;;
-  "agent get") echo '{"result":{"agent":{"agent_session":{"value":"s"}}}}' ;;
-  "agent prompt")
-    echo "$4" >> "${home}/prompts"
-    dir=\${4##*summary.md in }; dir=\${dir%.}
-    if [ -d "$dir" ]; then
-      case "$4" in *verify-pr*) printf '%s' "$FAKE_VERIFY" > "$dir/summary.md" ;; *) printf '%s' "$FAKE_SUMMARY" > "$dir/summary.md" ;; esac
-      echo report > "$dir/report.md"
-    fi ;;
+echo "$*" >> "${home}/calls"
+case "$1" in
+  run)
+    if [ -n "$FAKE_RUN_FAIL" ]; then echo '{"error":"no"}' >&2; exit 1; fi ;;
+  send)
+    case "$3" in
+      claude\\ *) echo "$2 $3" >> "${home}/claudes" ;;
+      *)
+        echo "$3" >> "${home}/prompts"
+        dir=\${3##*summary.md in }; dir=\${dir%.}
+        if [ -d "$dir" ]; then
+          case "$3" in *verify-pr*) printf '%s' "$FAKE_VERIFY" > "$dir/summary.md" ;; *) printf '%s' "$FAKE_SUMMARY" > "$dir/summary.md" ;; esac
+          echo report > "$dir/report.md"
+        fi ;;
+    esac ;;
 esac
 exit 0
 `
     )
-    chmodSync(herdr, 0o755)
+    chmodSync(hc, 0o755)
     const env = {
       ...process.env,
       HOME: home,
@@ -532,9 +534,16 @@ exit 0
       CANARY_NAP: '0',
     }
     const run = (label: string, extra: Record<string, string> = {}) => {
-      const result = spawnSync('bash', [canary, label, ROOT, 'pane'], {
+      const result = spawnSync('bash', [canary, label, ROOT], {
         encoding: 'utf8',
-        env: { ...env, ONLY3: '1', FAKE_SUMMARY: summary, FAKE_VERIFY: verify, ...extra },
+        env: {
+          ...env,
+          ONLY3: '1',
+          FAKE_SUMMARY: summary,
+          FAKE_VERIFY: verify,
+          FAKE_RUN_FAIL: runFails ? '1' : '',
+          ...extra,
+        },
       })
       const out = join(home, '.cache/factory/packets', `canary-${label}`)
       const read = (name: string) => {
@@ -563,7 +572,7 @@ exit 0
   })
 
   it('exits 1 when an agent does not start', () => {
-    const { run } = setup(red, '{"error":"no"}')
+    const { run } = setup(red, true)
     const result = run('nostart')
     expect(result.code).toBe(1)
     expect(result.read('results.txt')).toContain('FAILED: start failed')
@@ -634,7 +643,7 @@ exit 0
   })
 
   it('exits 1 when run 2 does not report one mismatch', () => {
-    const { run } = setup(red, '{"result":{}}', 'Verdict: Green\n')
+    const { run } = setup(red, false, 'Verdict: Green\n')
     const result = run('ver', { ONLY3: '' })
     expect(result.code).toBe(1)
     expect(result.read('results.txt')).toContain(
@@ -650,5 +659,57 @@ exit 0
     expect(readFileSync(join(home, 'Git/scratch-clamps-noclamp/draft.md'), 'utf8')).not.toContain(
       'Answers to review'
     )
+  })
+
+  it('run-canary.sh rejects a label with a capital letter or a dot, which hc does not take in a name', () => {
+    const { run, home } = setup(red)
+    for (const label of ['Upper', 'a.b']) expect(run(label).code, label).toBe(2)
+    expect(existsSync(join(home, 'calls'))).toBe(false)
+  })
+
+  it('run-canary.sh names no herdr command and ends each agent with hc kill, hc rm and factory-agent.sh stop', () => {
+    const script = readFileSync(canary, 'utf8')
+    expect(script).not.toMatch(/herdr (agent|pane)/)
+    const { run, home } = setup(red)
+    const result = run('ends')
+    expect(result.code, result.text).toBe(0)
+    const calls = readFileSync(join(home, 'calls'), 'utf8').split('\n')
+    const runs = calls.filter((line) => line.startsWith('run '))
+    expect(runs).toHaveLength(3)
+    for (const line of runs) {
+      const name = /--name (\S+)/.exec(line)?.[1] ?? ''
+      expect(line).toContain('--bg')
+      expect(line).toContain('--no-notify')
+      expect(line).toMatch(/--cwd \S*scratch-clamps-ends /)
+      expect(line).toMatch(new RegExp(`herdr/factory-agent\\.sh enter ${name}$`))
+      expect(calls).toContain(`kill ${name}`)
+      expect(calls).toContain(`rm ${name}`)
+    }
+    expect(script).toMatch(/factory-agent\.sh" stop "\$1"/)
+  })
+
+  it('takes the session id from the kernel when uuidgen is not installed', () => {
+    const { run, home } = setup(red)
+    writeFileSync(join(home, 'bin/uuidgen'), '#!/bin/sh\nexit 127\n')
+    chmodSync(join(home, 'bin/uuidgen'), 0o755)
+    const result = run('nouuid')
+    expect(result.code, result.text).toBe(0)
+    const claudes = readFileSync(join(home, 'claudes'), 'utf8').trim().split('\n')
+    expect(claudes).toHaveLength(3)
+    for (const line of claudes) expect(line).toMatch(/--session-id [0-9a-f-]{36}$/)
+  })
+
+  it('run-canary.sh writes the session id it gave claude for each agent to session-<name>.txt', () => {
+    const { run, home } = setup(red)
+    const result = run('sid', { ONLY3: '' })
+    expect(result.code, result.text).toBe(0)
+    const claudes = readFileSync(join(home, 'claudes'), 'utf8').trim().split('\n')
+    expect(claudes).toHaveLength(5)
+    for (const line of claudes) {
+      const [name, id] = [line.split(' ')[0] ?? '', /--session-id (\S+)$/.exec(line)?.[1] ?? '']
+      expect(id).toMatch(/^[0-9a-f-]{36}$/)
+      expect(result.read(`session-${name}.txt`).trim()).toBe(id)
+    }
+    expect(new Set(claudes.map((l) => /--session-id (\S+)$/.exec(l)?.[1])).size).toBe(5)
   })
 })

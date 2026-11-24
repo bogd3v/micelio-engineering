@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# The master's canary (fixtures/factory/RUN.md, "Canary"): the three runs of agents, started in Herdr from <checkout>,
-# each report moved out of the next agent's reach, and the two lane cases (runs 4 and 5), which run a command of
+# The master's canary (fixtures/factory/RUN.md, "Canary"): the three runs of agents, started with hc as herdr/master.md
+# ("Starting an agent") says, each in a new terminal in the scratch directory of its run, each report moved out of the next agent's reach, and the two lane cases (runs 4 and 5), which run a command of
 # the checkout and need no agent. Build the checkout first (npm run build).
 #
-#   fixtures/factory/run-canary.sh <label> <checkout> <pane to split from>
+#   fixtures/factory/run-canary.sh <label> <checkout>
 #
-# <label> is 1 to 15 letters, digits, dots, dashes or underscores (it goes into agent names, which Herdr
-# limits to 32 characters). The scratch repositories are ~/Git/scratch-pages-<label> and
+# <label> is 1 to 15 of a-z, 0-9, dashes and underscores (it goes into agent names, which hc limits to
+# 32 characters of a-z 0-9 - _). The scratch repositories are ~/Git/scratch-pages-<label> and
 # ~/Git/scratch-clamps-<label>; the results, the reports and the token counts go to $CANARY_OUT (default
 # ~/.cache/factory/packets/canary-<label>). All three directories must be empty or new: the script never
 # reuses an earlier run. ONLY3=1 runs only run 3 (and no lane case). It reads no RUN.md: the agents never do.
@@ -16,11 +16,10 @@
 # (the lines are in results.txt, after `FAILED:`); 2 for a bad argument or a directory in use.
 set -uo pipefail
 
-usage='usage: run-canary.sh <label> <checkout> <pane to split from>'
+usage='usage: run-canary.sh <label> <checkout>'
 L=${1:?$usage}
 SRC=${2:?$usage}
-from=${3:?$usage}
-[[ $L =~ ^[A-Za-z0-9._-]{1,15}$ ]] || { echo "bad label: $L ($usage)" >&2; exit 2; }
+[[ $L =~ ^[a-z0-9_-]{1,15}$ ]] || { echo "bad label: $L ($usage)" >&2; exit 2; }
 SRC=$(cd "$SRC" && pwd) || { echo "no checkout: $2" >&2; exit 2; }
 TOK="$SRC/fixtures/factory/tok.py"
 OUT=${CANARY_OUT:-$HOME/.cache/factory/packets/canary-$L}
@@ -35,25 +34,24 @@ nap() { sleep "${CANARY_NAP:-$1}"; }
 note() { echo "$*" >> "$OUT/results.txt"; }
 bad() { note "FAILED: $*"; }
 
-# start <name> <pane> <agent> <model>: retries while the pane is busy.
+# start <name> <dir> <agent> <model>: a new terminal in <dir> whose program enters the agent's slice, then claude
+# with a session id the script chooses (SID, which finish writes down).
 start() {
-  local o i
-  for i in 1 2 3 4 5 6 7 8 9 10; do
-    o=$(herdr agent start "$1" --kind claude --pane "$2" --timeout 60000 -- --agent "$3" --model "$4" 2>&1)
-    if ! grep -q agent_pane_busy <<<"$o"; then
-      grep -q '"error"' <<<"$o" || return 0
-      bad "start failed $1: $o"
-      return 1
-    fi
-    nap 3
-  done
-  bad "start failed $1: $o"
-  return 1
+  local o
+  SID=$(uuidgen 2> /dev/null || cat /proc/sys/kernel/random/uuid 2> /dev/null)
+  [[ $SID =~ ^[0-9a-f-]{36}$ ]] || { bad "start failed $1: no session id (uuidgen and /proc/sys/kernel/random/uuid gave none)"; return 1; }
+  o=$(hc run --bg --name "$1" --cwd "$2" --no-notify -- "$SRC/herdr/factory-agent.sh" enter "$1" 2>&1) || { bad "start failed $1: $o"; return 1; }
+  hc wait "$1" > /dev/null 2>&1
+  o=$(hc send "$1" "claude --agent $3 --model $4 --session-id $SID" 2>&1) || { bad "start failed $1: $o"; return 1; }
+  hc wait "$1" > /dev/null 2>&1
 }
+# finish <name>: writes the session id the script gave claude, then ends the agent.
 finish() {
-  herdr agent get "$1" | jq -r .result.agent.agent_session.value > "$OUT/session-$1.txt"
-  herdr agent prompt "$1" /exit > /dev/null
-  nap 5
+  local i
+  echo "$SID" > "$OUT/session-$1.txt"
+  hc kill "$1" > /dev/null 2>&1
+  for i in 1 2 3 4 5; do hc rm "$1" > /dev/null 2>&1 && break; nap 1; done
+  "$SRC/herdr/factory-agent.sh" stop "$1" > /dev/null
 }
 # line1 <summary.md>: the verdict line, empty when the file is missing.
 line1() { [ -f "$1" ] && sed -n 1p "$1"; }
@@ -73,9 +71,6 @@ for D in "$P" "$C"; do
   echo None > "$D/packets/1/r1/decisions.md"
   diff_of "$D" 1
 done
-p1=$(herdr pane split "$from" --direction down --cwd "$P" --no-focus | jq -r .result.pane.pane_id)
-p2=$(herdr pane split "$p1" --direction down --cwd "$C" --no-focus | jq -r .result.pane.pane_id)
-nap 5
 
 run3() {
   local k a x n v
@@ -83,8 +78,8 @@ run3() {
     a=e94_c${L}_3_review-r$k
     x=""
     [ "$k" -gt 1 ] && x=" Read the hunks that changed since $C/packets/1/r$k/prev.patch first. A new Important finding in text that did not change is not a finding of this round: list it under \`Follow-up\` in the report."
-    start "$a" "$p2" reviewer opus || { bad "run3 r$k: agent did not start"; return 1; }
-    herdr agent prompt "$a" "$(rev "$C" "$k" "$x")" --wait --timeout 1800000 > /dev/null
+    start "$a" "$C" reviewer opus || { bad "run3 r$k: agent did not start"; return 1; }
+    hc send "$a" "$(rev "$C" "$k" "$x")" --wait --timeout 1800 > /dev/null
     finish "$a"
     mkdir -p "$OUT/clamps/r$k"
     mv "$C/packets/1/r$k/review" "$OUT/clamps/r$k/review" || { bad "run3 r$k: no review directory"; return 1; }
@@ -115,7 +110,6 @@ tokens() {
     echo "$(basename "$f" .txt) $("$TOK" "$(cat "$f")" 2> /dev/null || echo 'no log')" >> "$OUT/tokens.txt"
   done
 }
-close() { herdr pane close "$p1" > /dev/null; herdr pane close "$p2" > /dev/null; }
 report() { cat "$OUT/results.txt"; cat "$OUT/tokens.txt" 2> /dev/null; grep -q '^FAILED:' "$OUT/results.txt" && exit 1; exit 0; }
 
 # Run 3 — escalation after the third red round (never-fixes, three rounds with the stub, a new reviewer each)
@@ -123,7 +117,7 @@ run3 &
 r3=$!
 if [ "${ONLY3:-}" = 1 ]; then
   wait "$r3" || true
-  nap 2; close; tokens 'session-*3_review*.txt'; report
+  tokens 'session-*3_review*.txt'; report
 fi
 
 # Run 4 — the express diff is raised to normal (lane-express: lint-lane --diff of a diff that touches AGENTS.md)
@@ -155,8 +149,8 @@ run4; run5
 # Run 1 — the reviewer flags a lowered threshold (planted-coverage)
 run1() {
   local a=e94_c${L}_1_review v
-  start "$a" "$p1" reviewer opus || return 1
-  herdr agent prompt "$a" "$(rev "$P" 1 "")" --wait --timeout 1800000 > /dev/null
+  start "$a" "$P" reviewer opus || return 1
+  hc send "$a" "$(rev "$P" 1 "")" --wait --timeout 1800 > /dev/null
   finish "$a"
   mkdir -p "$OUT/pages"
   mv "$P/packets/1/r1/review" "$OUT/pages/review" || { bad "run1: no review directory"; return 1; }
@@ -174,8 +168,8 @@ run2() {
     printf "> npm test\n\nℹ tests 4\nℹ pass 4\nℹ fail 0\n" > "$P/logs/npm-test.log"
     lg=" Logs: $P/logs/."
   fi
-  start "$a" "$p1" verifier sonnet || return 1
-  herdr agent prompt "$a" "Use the verify-pr skill (.claude/skills/verify-pr/SKILL.md). Worktree: $P/repo. Branch: main. Issue: $P/repo/ISSUE.md. Draft without its Answers to review: $P/draft.md.$lg Maintainer's decisions: $P/packets/1/r1/decisions.md. factory-slot.sh: $SRC/herdr/factory-slot.sh. Write report.md and summary.md in $P/packets/1/r1/verify/." --wait --timeout 1800000 > /dev/null
+  start "$a" "$P" verifier sonnet || return 1
+  hc send "$a" "Use the verify-pr skill (.claude/skills/verify-pr/SKILL.md). Worktree: $P/repo. Branch: main. Issue: $P/repo/ISSUE.md. Draft without its Answers to review: $P/draft.md.$lg Maintainer's decisions: $P/packets/1/r1/decisions.md. factory-slot.sh: $SRC/herdr/factory-slot.sh. Write report.md and summary.md in $P/packets/1/r1/verify/." --wait --timeout 1800 > /dev/null
   finish "$a"
   cp -r "$P/packets/1/r1/verify" "$OUT/pages/verify" || { bad "run2: no verify directory"; return 1; }
   v=$(line1 "$OUT/pages/verify/summary.md")
@@ -184,4 +178,4 @@ run2() {
 }
 run1 && run2
 wait "$r3" || true
-nap 2; close; tokens 'session-*.txt'; report
+tokens 'session-*.txt'; report
