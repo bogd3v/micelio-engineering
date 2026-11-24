@@ -22,6 +22,7 @@ import {
   run,
   settings,
   terminals,
+  theme,
 } from 'herdr'
 import { createAdapters, readConfig } from './adapters.js'
 import { buildGithub, buildPanel, formatAge, parseStacks, pushLoad, SECTIONS } from './lib/panel.js'
@@ -37,7 +38,7 @@ import {
 } from './lib/needs.js'
 import { buildDetail, parseProgress } from './lib/detail.js'
 import { buildState } from './lib/state.js'
-import { THEMES } from './lib/tokens.js'
+import { colours } from './lib/tokens.js'
 import { banners } from './views/banners.js'
 import { board } from './views/board.js'
 import { detail } from './views/detail.js'
@@ -55,9 +56,6 @@ import { MONO } from './views/ui.js'
 /** What the slots, the machine, the agents and the stacks are read every, and GitHub. */
 const FAST_MS = 5000
 const SLOW_MS = 60_000
-
-/** The three choices of the theme toggle. */
-const THEME_CHOICES = ['dark', 'light', 'follow']
 
 export default class Factory extends View {
   init(_props, cx) {
@@ -98,26 +96,12 @@ export default class Factory extends View {
     /** What the last send did, for one line under the cards. */
     this.sentNote = null
     this.outbox = createOutbox({ send: (target, text) => this.sendLine(target, text) })
-    const stored = this.load('theme', props()?.theme ?? 'dark')
     this.ui = {
-      themeName: THEME_CHOICES.includes(stored) ? stored : 'dark',
       toggle: (name, cx) => {
         if (!SECTIONS.includes(name)) return
         const was = this.panel().sections[name].open
         this.open = { ...this.open, [name]: !was }
         localStorage.setItem('open', JSON.stringify(this.open))
-        cx.notify()
-      },
-      cycleTheme: (cx) => {
-        const next =
-          THEME_CHOICES[(THEME_CHOICES.indexOf(this.ui.themeName) + 1) % THEME_CHOICES.length]
-        this.ui.themeName = next
-        localStorage.setItem('theme', JSON.stringify(next))
-        cx.notify()
-      },
-      toggleTheme: (cx) => {
-        this.ui.themeName = this.themeNow() === 'dark' ? 'light' : 'dark'
-        localStorage.setItem('theme', JSON.stringify(this.ui.themeName))
         cx.notify()
       },
       openDetail: (space, number) => this.openDetail(space, number),
@@ -594,11 +578,9 @@ export default class Factory extends View {
     })
   }
 
-  /** The theme being drawn. */
+  /** The app's appearance now: the mod has no pick of its own. */
   themeNow() {
-    const pick = this.ui.themeName
-    if (pick === 'follow') return settings().dark === false ? 'light' : 'dark'
-    return pick
+    return settings().dark === false ? 'light' : 'dark'
   }
 
   /** What the panel shows now. */
@@ -619,10 +601,15 @@ export default class Factory extends View {
   }
 
   render() {
-    const theme = this.themeNow()
+    const appearance = this.themeNow()
     this.ui.pending = this.outbox.state(Date.now())
     this.ui.sentNote = this.sentNote
-    const ctx = { c: THEMES[theme], theme, dark: theme === 'dark', ui: this.ui }
+    const ctx = {
+      c: colours(theme(), appearance === 'dark'),
+      theme: appearance,
+      dark: appearance === 'dark',
+      ui: this.ui,
+    }
     if (this.detail !== null) {
       return v_flex()
         .id('factory-detail')

@@ -50,3 +50,31 @@ export const THEMES = {
     track: '#e2e0d6',
   },
 }
+
+/** The mod's neutral tokens, by the name of the app's `theme()` colour each one takes. */
+const FROM_APP = {
+  bg: 'canvas',
+  surface: 'surface',
+  surface2: 'raised',
+  line: 'border',
+  fg: 'foreground',
+  muted: 'muted',
+}
+
+/**
+ * The colours to draw with: the neutral tokens (`bg`, `surface`, `surface2`, `line`, `fg`, `muted`) from the
+ * Herdr app's `theme()`, every other token (the colours of meaning) from `THEMES` for the appearance.
+ * A name `app` lacks, or whose value is not a string, keeps the value of `THEMES`. Reads no global.
+ * @param {Record<string, unknown> | null | undefined} app the object `theme()` returns
+ * @param {boolean} dark whether the app's appearance is dark
+ * @returns {Record<string, string>}
+ */
+export function colours(app, dark) {
+  /** @type {Record<string, string>} */
+  const out = { ...(dark ? THEMES.dark : THEMES.light) }
+  for (const [token, name] of Object.entries(FROM_APP)) {
+    const value = app?.[name]
+    if (typeof value === 'string') out[token] = value
+  }
+  return out
+}

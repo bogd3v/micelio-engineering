@@ -1,7 +1,8 @@
 // Small parts the views share: the two typefaces, a badge, a lane tag, a gate mark, a cat and a
-// section's heading. `ctx` is `{ c, dark, ui }`: `c` the colours of the theme being drawn (the names
-// of `herdr/mod/design/tokens.json`), `dark` whether it is the dark one (the only one that glows) and
-// `ui` the panel's own state (`toggle(section, cx)`, `cycleTheme(cx)`, `themeName`).
+// section's heading. `ctx` is `{ c, dark, ui }`: `c` the colours to draw with (the names
+// of `herdr/mod/design/tokens.json`: the neutral ones are the Herdr app's `theme()`, the rest the design's
+// for the app's appearance), `dark` whether the app is dark (the only appearance that glows) and
+// `ui` the panel's own state (`toggle(section, cx)`, `openDetail`, …).
 
 import { div, image } from 'gpui-kit'
 import { h_flex, v_flex } from 'gpui-base'

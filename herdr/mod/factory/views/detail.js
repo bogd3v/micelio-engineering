@@ -6,7 +6,7 @@
 // file in a pane (`less`), an agent's name opens a pane that only shows its last lines (`watch` over
 // `hc read`), and neither focuses a worker for typing.
 // `ctx` is as in `views/ui.js`, with `ctx.ui.openFile(path)`, `ctx.ui.watchAgent(target)`,
-// `ctx.ui.toggleTheme(cx)`, `ctx.ui.close(cx)` and, for the decision, `ctx.ui.answer` (`option`,
+// `ctx.ui.close(cx)` and, for the decision, `ctx.ui.answer` (`option`,
 // `note`, `choose(letter, cx)`), `ctx.ui.send(model, cx)`, `ctx.ui.undo(cx)` and `ctx.ui.pending`.
 
 import { div } from 'gpui-kit'
@@ -103,13 +103,6 @@ function top(ctx, model) {
         .gap(2)
         .child(facts)
         .child(displayBold(div()).text_size(22).text_color(ctx.c['fg']).child(model.title))
-    )
-    .child(
-      button(
-        'detail-theme',
-        ctx.dark ? 'LIGHT' : 'DARK',
-        (/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.toggleTheme(cx)
-      )
     )
     .child(
       button('detail-close', 'CLOSE', (/** @type {any} */ _e, /** @type {any} */ cx) =>

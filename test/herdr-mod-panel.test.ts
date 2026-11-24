@@ -18,7 +18,7 @@ import {
 // @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { buildState } from '../herdr/mod/factory/lib/state.js'
 // @ts-expect-error a plain JavaScript module of the mod, with no declarations
-import { THEMES } from '../herdr/mod/factory/lib/tokens.js'
+import { colours, THEMES } from '../herdr/mod/factory/lib/tokens.js'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const MOD = join(ROOT, 'herdr/mod/factory')
@@ -317,6 +317,44 @@ describe('the model of the panel', () => {
       themes: unknown
     }
     expect(THEMES).toEqual(tokens.themes)
+  })
+
+  it("the neutral colours are the app's theme() and the colours of meaning are those of tokens.json for the app's appearance", () => {
+    const app = {
+      canvas: '#111111',
+      surface: '#222222',
+      raised: '#333333',
+      border: '#444444',
+      foreground: '#555555',
+      muted: '#666666',
+      working: '#010203',
+      blocked: '#040506',
+      accent: '#070809',
+    }
+    const neutral = {
+      bg: '#111111',
+      surface: '#222222',
+      surface2: '#333333',
+      line: '#444444',
+      fg: '#555555',
+      muted: '#666666',
+    }
+    for (const dark of [true, false]) {
+      const base = dark ? THEMES.dark : THEMES.light
+      const got = colours(app, dark)
+      expect(got).toEqual({ ...base, ...neutral })
+      // The app's working, blocked and accent colours are never used.
+      expect(Object.values(got)).not.toContain('#010203')
+      expect(Object.values(got)).not.toContain('#040506')
+      expect(Object.values(got)).not.toContain('#070809')
+    }
+  })
+
+  it("a colour the app's theme() lacks keeps the value of tokens.json", () => {
+    const got = colours({ canvas: '#111111', surface: 42, raised: null, border: undefined }, false)
+    expect(got).toEqual({ ...THEMES.light, bg: '#111111' })
+    expect(colours({}, true)).toEqual(THEMES.dark)
+    expect(colours(undefined, true)).toEqual(THEMES.dark)
   })
 
   it('the two glows are the cyan and magenta of the dark theme', () => {
