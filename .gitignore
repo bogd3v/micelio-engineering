@@ -2,3 +2,6 @@ node_modules/
 dist/
 coverage/
 *.tsbuildinfo
+
+# The agent cats of the factory mod, built by herdr/mod/build-cats.mjs
+herdr/mod/factory/cats/
