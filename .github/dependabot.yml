@@ -50,6 +50,9 @@ updates:
       - dependency-name: '*'
         update-types:
           - version-update:semver-major
+      # The v2.6.0 image cannot be pulled (ossf/scorecard-action#1752); a later release still comes.
+      - dependency-name: ossf/scorecard-action
+        versions: ['2.6.0']
     groups:
       actions:
         patterns:

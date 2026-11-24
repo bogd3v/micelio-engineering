@@ -862,6 +862,42 @@ describe('verify-draft.yml', () => {
   })
 })
 
+const SCORECARD = readFileSync(join(ROOT, '.github/workflows/scorecard.yml'), 'utf8')
+
+describe('scorecard.yml', () => {
+  it('scorecard.yml pins ossf/scorecard-action at v2.5.0, and every action it uses by a commit SHA', () => {
+    // The v2.6.0 image cannot be pulled (ossf/scorecard-action#1752): v2.5.0 until a fixed release.
+    const step = stepOf(SCORECARD, 'Run Scorecard')
+    expect(step).toContain(
+      '        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0\n'
+    )
+    expect(step).toMatch(
+      /^ {8}# .*ossf\/scorecard-action#1752.*\n {8}uses: ossf\/scorecard-action@/
+    )
+    expect(SCORECARD).not.toContain('23f22cd43608bae7a1f1fa2603d7314dee9538a5')
+    // Its inputs stay as they were.
+    for (const input of [
+      'results_file: results.sarif',
+      'results_format: sarif',
+      'publish_results: ${{ inputs.publish-results }}',
+    ]) {
+      expect(step, input).toContain(`          ${input}\n`)
+    }
+    // Every action, an action in a folder of its repository (upload-sarif) too, by a commit SHA.
+    const uses = SCORECARD.split('\n').filter((line) => /^\s*(- )?uses:/.test(line))
+    expect(uses.length).toBe(4)
+    const pinned = /^ +uses: [\w.-]+\/[\w.-]+(?:\/[\w.-]+)*@[0-9a-f]{40} # v\d+\.\d+\.\d+$/
+    for (const line of uses) expect(line).toMatch(pinned)
+    for (const line of [
+      '        uses: github/codeql-action/upload-sarif@v4 # v4.39.4',
+      '        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea',
+      '        uses: ossf/scorecard-action@main # v2.5.0',
+    ]) {
+      expect(line).not.toMatch(pinned)
+    }
+  })
+})
+
 const ISSUE_READY = readFileSync(join(ROOT, '.github/workflows/issue-ready.yml'), 'utf8')
 const TOOLS_WORKFLOWS = { 'issue-ready.yml': ISSUE_READY, 'verify-draft.yml': VERIFY }
 
