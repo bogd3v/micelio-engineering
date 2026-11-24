@@ -5,3 +5,7 @@ coverage/
 
 # The agent cats of the factory mod, built by herdr/mod/build-cats.mjs
 herdr/mod/factory/cats/
+
+# What herdr-app writes into a mod folder
+herdr/mod/factory/**/*.d.ts
+herdr/mod/factory/**/jsconfig.json

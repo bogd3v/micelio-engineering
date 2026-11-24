@@ -1,0 +1,12 @@
+heavy	1	verifier-801	1998149	2026-11-24T10:56:08-0500	npm run check	alive
+heavy	2	worker-792	1998158	2026-11-24T10:57:50-0500	docker compose build	alive
+heavy	3	worker-788	1998170	2026-11-24T10:58:29-0500	build-scratch.sh	alive
+workers	reviewer-792	reviewer-792	-	2026-11-24T10:32:35-0500	-	-
+workers	worker-788	worker-788	-	2026-11-24T10:32:35-0500	-	-
+workers	worker-792	worker-792	-	2026-11-24T10:32:35-0500	-	-
+workers	worker-801	worker-801	-	2026-11-24T10:32:35-0500	-	-
+workers	verifier-801	verifier-801	-	2026-11-24T10:32:35-0500	-	-
+workers	reviewer-801	reviewer-801	-	2026-11-24T10:32:35-0500	-	-
+queue	worker-810	worker-810	-	2026-11-24T10:57:20-0500	npx vitest run e2e	-
+queue	verifier-810	verifier-810	-	2026-11-24T10:58:55-0500	docker compose build	-
+orphan	1998180	/srv/factory/tmp/orphan-job	sleep 602 
