@@ -7,7 +7,7 @@
 // giving it), everything is read from there and not from the machine, so a screen can be reproduced:
 // `status.txt`, `loadavg`, `meminfo`, `hwmon.json`, `cores`, `terminals.json`, `issues.json`
 // (`issues-<space>.json` first), `comments-<n>.json`, `docker-compose-ls.json`, `loadhistory.json`,
-// `milestones-<space>.json` (`milestones.json`) and `project-fields.json` (the factory's share), `worktree-<n>.json` (the branch and the lines changed of an issue's worktree), `now.txt` for the clock, `github-at.txt` for the time of the GitHub reads that work and
+// `milestones-<space>.json` (`milestones.json`) and `project-fields.json` (the factory's share), `diffs.json` (the minutes before `now.txt` each issue's diff was opened), `commit-<n>.txt` (the commit message of an issue's packet), `worktree-<n>.json` (the branch and the lines changed of an issue's worktree), `now.txt` for the clock, `github-at.txt` for the time of the GitHub reads that work and
 // `github-error.txt`: with it, the first GitHub read of each space works and every later one fails with
 // its text, as a `gh` that stops answering does.
 
@@ -351,8 +351,45 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
     }
   }
 
+  /**
+   * The first line of an issue's commit message, the subject: `<packet>/commit-message.txt`, or
+   * `commit-<issue>.txt` of the fixture. `null` when there is none.
+   *
+   * @param {number} issue
+   * @param {string} packet the packet directory
+   * @returns {Promise<string | null>}
+   */
+  async function readCommit(issue, packet) {
+    try {
+      const text =
+        dirs !== null
+          ? await fixtureText(`commit-${issue}.txt`)
+          : await readTextFile(`${packet.replace(/\/+$/, '')}/commit-message.txt`)
+      const line = text?.split(/\r?\n/, 1)[0]?.trim()
+      return line === undefined || line === '' ? null : line
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * With a fixture, the diffs the maintainer is taken to have opened: `diffs.json`, the minutes before
+   * `now.txt` that each issue's diff was opened. Nothing is read from a real run, where the maintainer's
+   * click opens them.
+   *
+   * @returns {Promise<Record<string, number>>}
+   */
+  async function readDiffs() {
+    const found = dirs === null ? null : await fixtureJson('diffs.json')
+    return found !== null && typeof found === 'object'
+      ? /** @type {Record<string, number>} */ (found)
+      : {}
+  }
+
   return {
     now,
+    readCommit,
+    readDiffs,
     readSlots,
     readMachine,
     readAgents,
