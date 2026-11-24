@@ -3,7 +3,7 @@
 
 import { div } from 'gpui-kit'
 import { h_flex, v_flex } from 'gpui-base'
-import { badge, cat, gateMark, heading, label, laneTag, section } from './ui.js'
+import { badge, cat, displayBold, gateMark, heading, label, laneTag, section } from './ui.js'
 import { legend } from './legend.js'
 
 /**
@@ -11,7 +11,18 @@ import { legend } from './legend.js'
  * @param {any} m `panel.sections.milestones`
  */
 export function milestones(ctx, m) {
-  const box = section(ctx).child(heading(ctx, 'milestones', 'Milestones', m.open, div()))
+  const open = displayBold(div())
+    .id('open-board')
+    .cursor_pointer()
+    .min_h(24)
+    .flex()
+    .items_center()
+    .text_size(11)
+    .text_color(ctx.c['cyan'])
+    .tooltip('Open the Board in a tab')
+    .on_click(() => ctx.ui.openBoard())
+    .child('OPEN BOARD >')
+  const box = section(ctx).child(heading(ctx, 'milestones', 'Milestones', m.open, open))
   if (!m.open) return box
   if (m.note !== null) box.child(label(`! ${m.note}`, ctx.c['red'], 11).mt(8))
   for (const space of m.spaces) {

@@ -1,0 +1,31 @@
+[
+  {
+    "number": 5,
+    "title": "feat: outbox queue",
+    "state": "open",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z",
+    "labels": []
+  },
+  {
+    "number": 6,
+    "title": "feat: signatures",
+    "state": "open",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z",
+    "labels": [
+      {
+        "name": "ready"
+      }
+    ]
+  },
+  {
+    "number": 7,
+    "title": "feat: inbox",
+    "state": "closed",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z",
+    "labels": [],
+    "closed_at": "2026-11-24T11:05:00Z"
+  }
+]

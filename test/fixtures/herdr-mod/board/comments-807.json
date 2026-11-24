@@ -1,0 +1,42 @@
+[
+  {
+    "id": 1,
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-11-24T08:00:00Z",
+    "body": "**Gate 1 (master): pass**\n\nlane: full\n"
+  },
+  {
+    "id": 2,
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-11-24T08:30:00Z",
+    "body": "**Gate 2, round 1 (master)** \u00b7 pass"
+  },
+  {
+    "id": 3,
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-11-24T09:00:00Z",
+    "body": "**Gate 3, round 1 (reviewer-807)** \u00b7 0 Blocking"
+  },
+  {
+    "id": 4,
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-11-24T09:10:00Z",
+    "body": "**Gate 4, round 1 (verify-draft)** \u00b7 0 mismatches"
+  },
+  {
+    "id": 5,
+    "user": {
+      "login": "ale9420"
+    },
+    "created_at": "2026-11-24T15:40:00Z",
+    "body": "Progress updated: pull request #9 opened"
+  }
+]

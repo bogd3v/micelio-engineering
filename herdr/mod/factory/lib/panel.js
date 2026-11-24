@@ -16,7 +16,7 @@ export const SECTIONS = ['machine', 'slots', 'workers', 'milestones', 'stacks', 
 export const HISTORY_MS = 15 * 60_000
 
 /** The token that colours a space's badge, by the space's position in the layout's props. */
-const SPACE_COLOURS = ['space-m', 'space-f', 'space-p']
+export const SPACE_COLOURS = ['space-m', 'space-f', 'space-p']
 
 const ROLE_LETTER = {
   master: 'M',
