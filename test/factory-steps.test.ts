@@ -9,11 +9,28 @@ const AGENTS = 'template/.claude/agents/'
 const SKILLS = 'template/.claude/skills/'
 
 /**
+ * The lines the Herdr mod sends to a master and the comments the master posts for the mod to
+ * show (ADR-0004), each with the files that state it: the master prompt, the runbook that holds
+ * the rules, the mod's README and, for the lines `docs/factory.md` cites, that file.
+ */
+const MOD_FILES = [`${AGENTS}master.md`, 'herdr/master.md', 'herdr/mod/README.md']
+const MOD_LINES: Record<string, string[]> = {
+  'approved, sign off #N': [...MOD_FILES, 'docs/factory.md'],
+  'answer #N:': MOD_FILES,
+  'retry #N': MOD_FILES,
+  'log #N |': [...MOD_FILES, 'docs/factory.md'],
+  'time #N:': [...MOD_FILES, 'docs/factory.md'],
+  '**Decision needed**': MOD_FILES,
+  'held |': MOD_FILES,
+}
+
+/**
  * The words the factory's steps share, each with the files that state it today.
  * A step that changes in one of these files and not in the others fails here, instead
  * of reaching the reviewer. A new shared term is added to this table (planner, step 3).
  */
 const STEPS: Record<string, string[]> = {
+  ...MOD_LINES,
   lane: [
     'docs/engineering-standard.md',
     'docs/factory.md',
@@ -228,6 +245,16 @@ describe("the terms the factory's steps share", () => {
     expect(levels).toMatch(/It is not the lane calibration/)
     // ship-pr records the same order in the time line
     expect(readRepo(`${SKILLS}ship-pr/SKILL.md`)).toContain('`diff` in `express`')
+  })
+
+  it("the lines the mod sends and the comments the master posts for it are named by the master prompt, the runbook and the mod's README", () => {
+    for (const files of Object.values(MOD_LINES))
+      expect(files).toEqual(expect.arrayContaining(MOD_FILES))
+    const terms = new Set(Object.keys(MOD_LINES))
+    const missing = missingTerms(readRepo).filter((line) =>
+      [...terms].some((term) => line.endsWith(`does not name "${term}"`))
+    )
+    expect(missing).toEqual([])
   })
 
   it('a listed file that drops the term fails and names the file', () => {

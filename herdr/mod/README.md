@@ -32,7 +32,7 @@ Every screen of the mod shows the same facts, so they are read once, by plain fu
 | `agents.js`  | each agent's name, role, status and space                                                                                                     | the rows of Herdr's `terminals()`, never `agents()` (findings, question 4)                                                                                         |
 | `state.js`   | all of it, with an age per source and a `stale` mark on a source whose last read failed (it keeps its last value)                             | what the other modules read, as one `fetched` object                                                                                                               |
 
-The gate comments are those of `herdr/master.md`: `**Gate 1 …**` with a `lane: <lane>` line (and `(calibration: full)`), `**Gate 2, round K …**`, `**Gate 3, round K (reviewer-N)** · K Blocking …` and `**Gate 4, round K …** · M mismatches`. A comment with a Blocking above 0, a mismatch above 0 or `not ready` marks its gate red until a later round of that gate passes; `express` omits G3 and G4. G5 needs the maintainer once the gates before it passed, G5 is passed from the `Progress updated … pull request #N opened` comment and a closed issue has every gate passed. The `held` mark is read from the line that issue #303 defines; until then no issue is held.
+The gate comments are those of `herdr/master.md`: `**Gate 1 …**` with a `lane: <lane>` line (and `(calibration: full)`), `**Gate 2, round K …**`, `**Gate 3, round K (reviewer-N)** · K Blocking …` and `**Gate 4, round K …** · M mismatches`. A comment with a Blocking above 0, a mismatch above 0 or `not ready` marks its gate red until a later round of that gate passes; `express` omits G3 and G4. G5 needs the maintainer once the gates before it passed, G5 is passed from the `Progress updated … pull request #N opened` comment and a closed issue has every gate passed. The `held` mark is to be read from the `held |` comment of "The lines" below; the model does not read it yet, so no issue is held.
 
 A role comes from a terminal's `name` (`worker-<N>`, `reviewer-<N>`, `reviewer-<N>-r<K>`, `verifier-<N>`, `verifier-<N>-r<K>`, `scribe`) or, with no name, from `--agent master` or `--agent planner` in `foreground.argv`. Its status is the terminal's `status`, and `blocked` means it needs the maintainer. Its space is that of its root terminal (the one with no `parent`), from that root's `herdr.space` label. The state carries no context size and no model: no field of `agents()` or `terminals()` gives a context size, and the model is only an argument of a command that the master's did not have.
 
@@ -75,6 +75,23 @@ A section folds with a click on its heading; the fold and the theme (Dark, Light
 | Orphans       | the `orphan` lines of `factory-slot.sh status`                                                                                                                                                                                                       | 5 s   |
 
 A failed `gh` makes GitHub stale: the banner gives its age, Milestones keeps its last rows dimmed, and the other sections go on. The panel shows no context size (no field of `terminals()` gives one, `findings.md`, question 4), no memory per stack and no age of a stack: `docker compose ls` gives neither. A `blocked` terminal is shown as an agent that may need you, as the model reads it ("needs the maintainer"), with a caveat: `hc get` reported `blocked` for a worker that was only running a long shell command, so a needs-you cat, mark or count can be a false alarm; the note says "is blocked: it may need you". The rows of Milestones are built at each redraw from the agents of the last 5 s read and the last 60 s read of GitHub, so an agent that starts, stops or blocks shows within 5 s. The design's "Needs you", the buttons and the keys are not in the panel yet.
+
+### The lines
+
+What the panel's buttons will send (#304, #305, #306) and what the master posts for the panel to show; the rules are [`herdr/master.md`](../master.md), "Lines from the mod", with `G5.2`, `G5.5`, `M.8` and `C.1` of [`docs/factory.md`](../../docs/factory.md). The mod sends each line bare (`hc send`, no `HC_TERMINAL_ID`), only to the master of the issue's space, and only after the maintainer's click and the 10 s undo (ADR-0004).
+
+Each line the mod sends, and what the master does with it:
+
+- `approved, sign off #N`, followed or not by a line `time: <minutes>m diff|report[, <minutes>m stack|test][ (<remark>)]`: the master signs off (`G5.2`), then posts the `time:` line as the pull request's review comment (`G5.5`).
+- `answer #N: <option>[ — <note>]`: it records the answer in `decisions.md` and on the issue, then passes it to the worker.
+- `retry #N`: it reruns the held check once through `herdr/factory-slot.sh run`; a second failure is red.
+- `log #N | <what> | <category>`: it posts `factory-log | <date> | #N | <what> | <category> | -` on the issue.
+- `time #N: <the time line>`: it posts the time line on the open pull request that has none.
+
+The master posts on the issue, for the panel to read:
+
+- `**Decision needed** · #N`, the question and one list item per option (`- A: …`), when a worker waits for the maintainer ("Decision for you" of `IssueDetail`).
+- `held | <date> | #N | <gate> | <reason>` when a check failed only on timeouts while the load was above the core count (the held check of `PanelSaturated`).
 
 ### Fonts
 
