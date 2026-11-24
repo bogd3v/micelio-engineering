@@ -1,6 +1,6 @@
 // The calls the model is kept free of. Each read gives the shape `lib/state.js` and `lib/panel.js`
 // take: `{ at, … }` when it worked, `{ error }` when it did not. Nothing here writes: the commands are
-// `herdr/factory-slot.sh status`, `nproc`, `gh api` of a GET endpoint, `docker compose ls`, Herdr's
+// `herdr/factory-slot.sh status`, `nproc`, `gh api` of a GET endpoint, `docker -H <dockerHost> compose ls` (every `docker` call goes through `dockerArgs`), Herdr's
 // `terminals()` and files of `/proc`, `/sys` and the fixture folder.
 //
 // With `fixture` in the block's props (a folder, or a list of folders, the first that has a file
@@ -23,7 +23,7 @@ const GH_AT_ONCE = 4
  * The block's props as the panel reads them.
  *
  * @param {unknown} raw
- * @returns {{ checkout: string, maintainer: string, fixture: string[] | null, spaces: import('./lib/panel.js').SpaceConfig[] }}
+ * @returns {{ checkout: string, maintainer: string, dockerHost: string, fixture: string[] | null, spaces: import('./lib/panel.js').SpaceConfig[] }}
  */
 export function readConfig(raw) {
   const props =
@@ -33,6 +33,7 @@ export function readConfig(raw) {
   return {
     checkout: typeof props['checkout'] === 'string' ? props['checkout'] : '',
     maintainer: typeof props['maintainer'] === 'string' ? props['maintainer'] : '',
+    dockerHost: typeof props['dockerHost'] === 'string' ? props['dockerHost'] : '',
     fixture:
       typeof fixture === 'string'
         ? [fixture]
@@ -48,6 +49,18 @@ export function readConfig(raw) {
         epic: s.epic === undefined || s.epic === null ? null : Number(s.epic),
       })),
   }
+}
+
+/**
+ * The arguments of a `docker` call: Herdr's `exec` takes no environment, so the engine's socket goes
+ * in the CLI's global `-H` flag, with the `dockerHost` the install wrote in the layout.
+ *
+ * @param {{ dockerHost: string }} config
+ * @param {string[]} args
+ * @returns {string[]}
+ */
+export function dockerArgs(config, args) {
+  return config.dockerHost === '' ? args : ['-H', config.dockerHost, ...args]
 }
 
 /**
@@ -302,7 +315,9 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
         const text = await fixtureText('docker-compose-ls.json')
         return { at, text: text ?? '[]' }
       }
-      const run = await exec('docker', ['compose', 'ls', '--format', 'json'], { timeout: 15_000 })
+      const run = await exec('docker', dockerArgs(config, ['compose', 'ls', '--format', 'json']), {
+        timeout: 15_000,
+      })
       return run.code === 0
         ? { at, text: run.stdout }
         : { error: run.stderr.trim() || `exit ${run.code}` }
