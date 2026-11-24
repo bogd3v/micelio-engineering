@@ -150,6 +150,7 @@ const STEPS: Record<string, string[]> = {
   'herdr agent get': ['herdr/factory-slot.sh', 'docs/factory.md'],
   'hc get': ['herdr/factory-slot.sh', 'herdr/master.md', 'docs/factory.md'],
   'hc run --bg': ['herdr/master.md', 'fixtures/factory/run-canary.sh'],
+  'hc run --name': [`${AGENTS}master.md`, 'herdr/master.md', 'docs/factory.md'],
   'factory-agent.sh': ['herdr/master.md', 'docs/factory.md'],
   "the repository's stack": [
     `${AGENTS}worker.md`,
