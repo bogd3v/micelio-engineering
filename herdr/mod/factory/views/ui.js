@@ -146,6 +146,43 @@ export function cat(ctx, file, size, state) {
     .child(picture.absolute().left(0).top(0))
 }
 
+/** A text button: filled when it is the card's main action, outlined otherwise, flat when disabled. */
+export function button(
+  /** @type {any} */ ctx,
+  /** @type {string} */ id,
+  /** @type {string} */ text,
+  /** @type {{ primary?: boolean, disabled?: boolean, tone?: string, fg?: string, tip?: string, click?: any }} */ o = {}
+) {
+  const tone = o.tone ?? 'cyan'
+  const el = displayBold(div())
+    .id(id)
+    .min_h(36)
+    .px(12)
+    .flex()
+    .items_center()
+    .justify_center()
+    .text_size(12)
+    .whitespace_nowrap()
+    .child(text)
+  if (o.disabled === true) {
+    return el
+      .bg(ctx.c['track'])
+      .text_color(ctx.c['muted'])
+      .border_1()
+      .border_color(ctx.c['track'])
+      .tooltip(o.tip ?? ctx.ui.lockedNote)
+  }
+  el.cursor_pointer().on_click(o.click)
+  if (o.primary === true) {
+    return el
+      .bg(ctx.c[tone])
+      .text_color(ctx.c[o.fg ?? 'badge-fg'])
+      .border_1()
+      .border_color(ctx.c[tone])
+  }
+  return el.text_color(ctx.c[tone]).border_1().border_color(ctx.c[tone])
+}
+
 /**
  * The heading of a section: `// NAME [-]`, a button that folds it, and what is on its right.
  *

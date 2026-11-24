@@ -1,0 +1,17 @@
+[
+  {
+    "Name": "wt-792",
+    "Status": "running(2)",
+    "ConfigFiles": "/srv/wt-792/compose.yml"
+  },
+  {
+    "Name": "wt-788",
+    "Status": "running(2)",
+    "ConfigFiles": "/srv/wt-788/compose.yml"
+  },
+  {
+    "Name": "wt-160",
+    "Status": "running(3)",
+    "ConfigFiles": "/srv/wt-160/compose.yml"
+  }
+]

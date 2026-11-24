@@ -1,12 +1,12 @@
 // The calls the model is kept free of. Each read gives the shape `lib/state.js` and `lib/panel.js`
 // take: `{ at, … }` when it worked, `{ error }` when it did not. Nothing here writes: the commands are
-// `herdr/factory-slot.sh status`, `nproc`, `gh api` of a GET endpoint, `docker -H <dockerHost> compose ls` (every `docker` call goes through `dockerArgs`), Herdr's
+// `herdr/factory-slot.sh status`, `nproc`, `gh api` of a GET endpoint, `docker -H <dockerHost> compose ls` and `docker -H <dockerHost> ps -a`, `ps -o etimes=,pcpu= -p <pid>` (every `docker` call goes through `dockerArgs`), Herdr's
 // `terminals()` and files of `/proc`, `/sys` and the fixture folder.
 //
 // With `fixture` in the block's props (a folder, or a list of folders, the first that has a file
 // giving it), everything is read from there and not from the machine, so a screen can be reproduced:
 // `status.txt`, `loadavg`, `meminfo`, `hwmon.json`, `cores`, `terminals.json`, `issues.json`
-// (`issues-<space>.json` first), `comments-<n>.json`, `docker-compose-ls.json`, `loadhistory.json`,
+// (`issues-<space>.json` first), `comments-<n>.json`, `docker-compose-ls.json`, `process-<pid>.json` (an orphan's cores and minutes), `stack-ages.json` (the minutes before `now.txt` each stack was created), `loadhistory.json`,
 // `milestones-<space>.json` (`milestones.json`) and `project-fields.json` (the factory's share), `diffs.json` (the minutes before `now.txt` each issue's diff was opened), `commit-<n>.txt` (the commit message of an issue's packet), `worktree-<n>.json` (the branch and the lines changed of an issue's worktree), `now.txt` for the clock, `github-at.txt` for the time of the GitHub reads that work and
 // `github-error.txt`: with it, the first GitHub read of each space works and every later one fails with
 // its text, as a `gh` that stops answering does.
@@ -61,6 +61,25 @@ export function readConfig(raw) {
  */
 export function dockerArgs(config, args) {
   return config.dockerHost === '' ? args : ['-H', config.dockerHost, ...args]
+}
+
+/**
+ * The creation time of the oldest container of a project, from the `CreatedAt` of each one
+ * (`2026-11-24 10:32:45 -0500 EST`, with or without fractions of a second).
+ *
+ * @param {string} text one `CreatedAt` for each line
+ * @returns {number | null} milliseconds since the epoch
+ */
+export function oldestCreated(text) {
+  /** @type {number[]} */
+  const times = []
+  for (const line of text.split('\n')) {
+    const m = /^(\d{4}-\d\d-\d\d) (\d\d:\d\d:\d\d)(\.\d+)? ([+-]\d\d)(\d\d)/.exec(line.trim())
+    if (m === null) continue
+    const ms = Date.parse(`${m[1]}T${m[2]}${m[3] ?? ''}${m[4]}:${m[5]}`)
+    if (!Number.isNaN(ms)) times.push(ms)
+  }
+  return times.length === 0 ? null : Math.min(...times)
 }
 
 /**
@@ -326,6 +345,63 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
     }
   }
 
+  /**
+   * When a stack was created: the oldest of its containers, `docker ps -a` filtered by the Compose project
+   * label (`stack-ages.json` of a fixture: the minutes before `now.txt`). `null` when unknown.
+   *
+   * @param {string} project
+   * @returns {Promise<number | null>} milliseconds since the epoch
+   */
+  async function readStackAge(project) {
+    try {
+      if (dirs !== null) {
+        const found = /** @type {Record<string, number> | null} */ (
+          await fixtureJson('stack-ages.json')
+        )
+        const minutes = found?.[project]
+        return typeof minutes === 'number' ? (await now()) - minutes * 60_000 : null
+      }
+      const run = await exec(
+        'docker',
+        dockerArgs(config, [
+          'ps',
+          '-a',
+          '--filter',
+          `label=com.docker.compose.project=${project}`,
+          '--format',
+          '{{.CreatedAt}}',
+        ]),
+        { timeout: 15_000 }
+      )
+      return run.code === 0 ? oldestCreated(run.stdout) : null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * The cores and the age of a process, read with `ps` (`process-<pid>.json` of a fixture: `cores`, `minutes`).
+   *
+   * @param {number} pid
+   * @returns {Promise<{ cores: number, ageMs: number } | null>}
+   */
+  async function readProcess(pid) {
+    try {
+      if (dirs !== null) {
+        const found = /** @type {{ cores: number, minutes: number } | null} */ (
+          await fixtureJson(`process-${pid}.json`)
+        )
+        return found === null ? null : { cores: found.cores, ageMs: found.minutes * 60_000 }
+      }
+      const run = await exec('ps', ['-o', 'etimes=,pcpu=', '-p', String(pid)], { timeout: 5000 })
+      const [etimes, pcpu] = run.stdout.trim().split(/\s+/)
+      if (run.code !== 0 || etimes === undefined || pcpu === undefined) return null
+      return { cores: Math.round(Number(pcpu) / 10) / 10, ageMs: Number(etimes) * 1000 }
+    } catch {
+      return null
+    }
+  }
+
   /** The loads of the last 15 minutes the fixture holds, oldest first, 30 s apart. */
   async function readHistory() {
     const loads = await fixtureJson('loadhistory.json')
@@ -412,6 +488,8 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
     readMilestones,
     readProjectFields,
     readStacks,
+    readStackAge,
+    readProcess,
     readHistory,
     readWorktree,
   }

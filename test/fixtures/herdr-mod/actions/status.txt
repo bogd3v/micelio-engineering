@@ -1,0 +1,7 @@
+paused
+heavy	1	verifier-792	1998149	2026-11-24T10:32:35-0500	sleep 600	alive
+heavy	2	worker-801	1998158	2026-11-24T10:32:35-0500	sleep 601	alive
+heavy	3	maintainer	-	2026-11-24T10:55:45-0500	hold	held
+workers	worker-788	worker-788	-	2026-11-24T10:32:35-0500	-	-
+workers	worker-792	worker-792	-	2026-11-24T10:32:35-0500	-	-
+orphan	4242	/home/factory/tmp/r4-late	vitest run --pool=forks 
