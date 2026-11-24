@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # install.sh — installs the factory mod into the Herdr desktop app's configuration folder.
 #
-#   herdr/mod/install.sh [--maintainer <login>] [--spaces <file.json>] [--theme dark|light|follow] [--fixture <folder>]...
+#   herdr/mod/install.sh [--maintainer <login>] [--spaces <file.json>] [--fixture <folder>]...
 #
 # Builds the agent cats (herdr/mod/build-cats.mjs) and copies the mod to <app>/mods/factory/ and the
 # layout, with the panel docked on the right of Herdr's `main`, to <app>/layouts/factory.json; <app> is
@@ -14,7 +14,6 @@
 #
 #   --maintainer <login>   the GitHub login whose gate comments count (default $FACTORY_MAINTAINER)
 #   --spaces <file.json>   the layout's `spaces`: [{ "name", "repo", "milestone", "epic" }, …]
-#   --theme <name>         the theme the panel starts in until the maintainer picks one (default dark)
 #   --fixture <folder>     read the recordings of <folder> instead of the machine (repeat for a list)
 #
 # Needs bash, node, tar and the coreutils.
@@ -25,24 +24,21 @@ CHECKOUT="$(cd "$HERE/../.." && pwd)"
 APP="${HERDR_APP_DIR:-$HOME/.config/herdr-app}"
 MAINTAINER="${FACTORY_MAINTAINER:-}"
 SPACES=""
-THEME=""
 FIXTURES=()
 
 die() { echo "install.sh: $*" >&2; exit 2; }
-usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --maintainer) MAINTAINER="${2:-}"; shift 2 ;;
     --spaces) SPACES="${2:-}"; shift 2 ;;
-    --theme) THEME="${2:-}"; shift 2 ;;
     --fixture) FIXTURES+=("${2:-}"); shift 2 ;;
     -h|--help) usage ;;
     *) usage ;;
   esac
 done
 [[ -z "$SPACES" || -f "$SPACES" ]] || die "no such file: $SPACES"
-case "$THEME" in ''|dark|light|follow) ;; *) die "--theme is dark, light or follow, got '$THEME'" ;; esac
 
 STAGE="$(mktemp -d "${TMPDIR:-/tmp}/factory-mod-install.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
@@ -53,7 +49,7 @@ tar -C "$HERE/factory" --exclude=./cats --exclude='*.d.ts' --exclude=jsconfig.js
 node "$HERE/build-cats.mjs" --out "$STAGE/mods/factory/cats" >/dev/null
 FIXTURE_LIST="$(printf '%s\n' "${FIXTURES[@]+"${FIXTURES[@]}"}")"
 DOCKER_HOST_VALUE="unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
-DOCKER_HOST_VALUE="$DOCKER_HOST_VALUE" CHECKOUT="$CHECKOUT" MAINTAINER="$MAINTAINER" SPACES="$SPACES" THEME="$THEME" FIXTURE_LIST="$FIXTURE_LIST" \
+DOCKER_HOST_VALUE="$DOCKER_HOST_VALUE" CHECKOUT="$CHECKOUT" MAINTAINER="$MAINTAINER" SPACES="$SPACES" FIXTURE_LIST="$FIXTURE_LIST" \
   LAYOUT_IN="$HERE/layouts/factory.json" LAYOUT_OUT="$STAGE/layouts/factory.json" node -e '
 const fs = require("node:fs");
 const layout = JSON.parse(fs.readFileSync(process.env.LAYOUT_IN, "utf8"));
@@ -62,7 +58,6 @@ const props = find(layout).content.props;
 props.checkout = process.env.CHECKOUT;
 props.maintainer = process.env.MAINTAINER;
 props.dockerHost = process.env.DOCKER_HOST_VALUE;
-if (process.env.THEME) props.theme = process.env.THEME;
 if (process.env.SPACES) props.spaces = JSON.parse(fs.readFileSync(process.env.SPACES, "utf8"));
 const fixtures = process.env.FIXTURE_LIST.split("\n").filter(Boolean);
 if (fixtures.length > 0) props.fixture = fixtures;

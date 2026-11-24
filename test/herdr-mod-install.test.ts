@@ -40,7 +40,7 @@ const walk = (dir: string, base = ''): string[] =>
 
 describe('install.sh', () => {
   it('install.sh copies the mod and the layout into HERDR_APP_DIR and builds the 120 cats', () => {
-    const run = install('--maintainer', 'someone', '--theme', 'light')
+    const run = install('--maintainer', 'someone')
     expect(run.status).toBe(0)
     const mod = join(app, 'mods/factory')
     expect(walk(join(mod, 'cats'))).toHaveLength(120)
@@ -63,7 +63,7 @@ describe('install.sh', () => {
     const text = JSON.stringify(layout)
     expect(text).toContain(`"checkout":"${ROOT.replace(/\/$/, '')}"`)
     expect(text).toContain('"maintainer":"someone"')
-    expect(text).toContain('"theme":"light"')
+    expect(text).not.toContain('"theme"')
     expect(text).toContain('"mod":"factory"')
     expect(text).toContain('"size":{"px":380}')
     // It records what it wrote, and a second run replaces it.
@@ -127,7 +127,7 @@ describe('install.sh', () => {
     expect(dockerHost(without)).toBe(`unix:///run/user/${uid}/podman/podman.sock`)
   })
 
-  it('install.sh refuses a theme that does not exist', () => {
+  it('install.sh refuses an option it does not know', () => {
     const run = install('--theme', 'sepia')
     expect(run.status).toBe(2)
     expect(walk(app)).toEqual([])
