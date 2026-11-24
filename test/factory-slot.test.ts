@@ -754,3 +754,76 @@ describe('the guard of beforeEach', () => {
     expect(underRealSlotDir(join(tmpdir(), 'factory-slot-x/slots'))).toBe(false)
   })
 })
+
+describe('factory-slot.sh pause and hold', () => {
+  const acquire = (agent: string) => slot(['acquire', '--pool', 'workers', '--agent', agent])
+
+  it('acquire prints paused, exits 75 and writes no lease while paused, and works again after resume', () => {
+    expect(slot(['pause']).code).toBe(0)
+    const paused = acquire('worker-1')
+    expect(paused.code).toBe(75)
+    expect(paused.out.trim()).toBe('paused')
+    expect(existsSync(join(root, 'slots/workers/lease-worker-1'))).toBe(false)
+    expect(slot(['resume']).code).toBe(0)
+    expect(acquire('worker-1').code).toBe(0)
+    expect(existsSync(join(root, 'slots/workers/lease-worker-1'))).toBe(true)
+  })
+
+  it('run starts its command while paused', () => {
+    slot(['pause'])
+    const r = slot(['run', '--', 'sh', '-c', 'exit 7'])
+    expect(r.code).toBe(7)
+    expect(slot(['release', '--agent', 'worker-1']).code).toBe(0)
+  })
+
+  it('a held slot counts as taken: with two commands running and one slot held, a third run waits', async () => {
+    const three = { FACTORY_HEAVY_SLOTS: '3' }
+    expect(slot(['hold', '--agent', 'maintainer'], three).code).toBe(0)
+    const a = start(['run', ...holder('a')], three)
+    const b = start(['run', ...holder('b')], three)
+    await until(() => existsSync(upOf('a')) && existsSync(upOf('b')), 'two commands')
+    const c = start(['run', ...holder('c')], three)
+    await until(() => readdirSync(join(root, 'slots/heavy/queue')).length === 1, 'a ticket')
+    await sleepMs(500)
+    expect(existsSync(upOf('c'))).toBe(false)
+    release('a')
+    await a.exited
+    await until(() => existsSync(upOf('c')), 'the third command')
+    release('b')
+    release('c')
+    await b.exited
+    await c.exited
+  })
+
+  it('hold exits 75 when every heavy slot is taken', async () => {
+    const run = start(['run', ...holder('a')])
+    await until(() => existsSync(upOf('a')), 'the slot command')
+    const r = slot(['hold', '--agent', 'maintainer'])
+    expect(r.code).toBe(75)
+    expect(r.out.trim()).toBe('no free slot')
+    expect(readdirSync(join(root, 'slots/heavy')).some((n) => n.endsWith('.hold'))).toBe(false)
+    expect(slot(['hold', '--agent', 'worker-1']).code).toBe(2)
+    release('a')
+    await run.exited
+  })
+
+  it('release --agent maintainer frees the held slot, and reap never removes a hold', () => {
+    expect(slot(['hold', '--agent', 'maintainer']).code).toBe(0)
+    const hold = join(root, 'slots/heavy/slot-1.hold')
+    expect(existsSync(hold)).toBe(true)
+    expect(slot(['reap']).code).toBe(0)
+    expect(existsSync(hold)).toBe(true)
+    expect(slot(['release', '--agent', 'maintainer']).code).toBe(0)
+    expect(existsSync(hold)).toBe(false)
+    expect(slot(['hold', '--agent', 'maintainer']).code).toBe(0)
+  })
+
+  it('status prints paused first and the held slot with the agent maintainer', () => {
+    expect(slot(['status']).out).not.toMatch(/^paused$/m)
+    slot(['pause'])
+    slot(['hold', '--agent', 'maintainer'])
+    const lines = slot(['status']).out.trim().split('\n')
+    expect(lines[0]).toBe('paused')
+    expect(lines[1]).toMatch(/^heavy\t1\tmaintainer\t-\t.+\thold\theld$/)
+  })
+})
