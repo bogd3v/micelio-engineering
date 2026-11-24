@@ -473,6 +473,7 @@ describe('the views', () => {
       'legend.js',
       'machine.js',
       'milestones.js',
+      'needs.js',
       'orphans.js',
       'slots.js',
       'stacks.js',

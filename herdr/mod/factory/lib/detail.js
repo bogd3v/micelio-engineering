@@ -6,7 +6,8 @@
 import { modelOf } from './agents.js'
 import { catFile } from './cat.js'
 import { parseGates } from './gates.js'
-import { catState } from './panel.js'
+import { parseDecision } from './decision.js'
+import { catState, formatAge } from './panel.js'
 
 /** The six columns of "Gates by round". */
 export const GATE_NAMES = ['G1 READY', 'G2 WORKER', 'G3 REVIEW', 'G4 SCRIPT', 'G5 YOU', 'G6 CI']
@@ -133,12 +134,13 @@ function stateOf(status) {
  * @param {{ number: number, title?: string, body?: string | null, state?: string }} input.issue
  * @param {{ user?: { login?: string }, body?: string, created_at?: string, id?: number }[]} input.comments
  * @param {string} input.maintainer
- * @param {{ repo: string, letter: string, colour: string }} input.space
+ * @param {{ repo: string, letter: string, colour: string, name?: string }} input.space
  * @param {import('./agents.js').Agent[]} input.agents the agents of the space
  * @param {import('./agents.js').Terminal[]} input.terminals the rows of `terminals()`, for the model
  * @param {{ name: string }[]} input.stacks the stacks up
  * @param {{ branch: string | null, added: number | null, removed: number | null } | null} input.worktree what the worktree says
  * @param {'dark' | 'light'} input.theme
+ * @param {number} [input.now] milliseconds since the epoch, for the age of a decision
  */
 export function buildDetail({
   issue,
@@ -150,6 +152,7 @@ export function buildDetail({
   stacks,
   worktree,
   theme,
+  now = 0,
 }) {
   const closed = issue.state === 'closed'
   const onIt = agents.filter((a) => a.issue === issue.number && a.role !== null)
@@ -270,6 +273,21 @@ export function buildDetail({
     },
   ]
 
+  // Decision for you: the master's open `**Decision needed**` comment of the issue.
+  const asked = closed ? null : parseDecision(comments, maintainer)
+  const live = gates.marks.findIndex((m) => m === 'needs' || m === 'running')
+  const decision =
+    asked === null
+      ? null
+      : {
+          number: issue.number,
+          title: `Decision for you · G${live === -1 ? 2 : live + 1} · R${Math.max(1, gates.round)} · waiting ${formatAge(Math.max(0, now - asked.at))}`,
+          question: asked.question,
+          options: asked.options,
+          master: master?.address ?? null,
+          masterName: space.name ?? space.repo,
+        }
+
   const stack = stacks.find((s) => new RegExp(`(?:^|\\D)${issue.number}$`).test(s.name))
   return {
     number: issue.number,
@@ -287,6 +305,8 @@ export function buildDetail({
     gateNames: GATE_NAMES,
     rounds,
     agents: rows,
+    // Left out when no decision is open, so an issue without one has the model it had before.
+    ...(decision === null ? {} : { decision }),
     packet,
     closing: CLOSING,
   }

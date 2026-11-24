@@ -1,0 +1,66 @@
+[
+  {
+    "address": "tfix-master",
+    "name": null,
+    "parent": null,
+    "status": "idle",
+    "report": {
+      "app": "claude-code",
+      "state": "idle"
+    },
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "master"
+      ]
+    },
+    "labels": {
+      "herdr.space": "sp-fixture",
+      "where": "fixture-space / 1"
+    }
+  },
+  {
+    "address": "tfix-worker",
+    "name": "worker-792",
+    "parent": "tfix-master",
+    "status": "blocked",
+    "report": {
+      "app": "claude-code",
+      "state": "blocked"
+    },
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "worker",
+        "--model",
+        "sonnet"
+      ]
+    },
+    "labels": {
+      "where": "fixture-space / 1"
+    }
+  },
+  {
+    "address": "tfix-master2",
+    "name": null,
+    "parent": null,
+    "status": "blocked",
+    "report": {
+      "app": "claude-code",
+      "state": "blocked"
+    },
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "master"
+      ]
+    },
+    "labels": {
+      "herdr.space": "sp-other",
+      "where": "fixture-other / 1"
+    }
+  }
+]
