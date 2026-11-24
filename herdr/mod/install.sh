@@ -8,7 +8,9 @@
 # $HERDR_APP_DIR, else ~/.config/herdr-app. It never overwrites a file it did not write: it records the
 # hash of each file it writes in <app>/factory-mod-install.json, and when one of the files it would write
 # exists with another hash (or is not recorded), it writes nothing, says which, and exits 1. A file it
-# wrote and nobody changed is replaced, so running it again updates the install.
+# wrote and nobody changed is replaced, so running it again updates the install. It also writes the
+# `dockerHost` prop, unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock (the rule of
+# herdr/factory-agent.sh, ADR-0002): the panel passes it to `docker -H`, as Herdr's `exec` has no environment.
 #
 #   --maintainer <login>   the GitHub login whose gate comments count (default $FACTORY_MAINTAINER)
 #   --spaces <file.json>   the layout's `spaces`: [{ "name", "repo", "milestone", "epic" }, …]
@@ -27,7 +29,7 @@ THEME=""
 FIXTURES=()
 
 die() { echo "install.sh: $*" >&2; exit 2; }
-usage() { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -50,7 +52,8 @@ mkdir -p "$STAGE/mods/factory" "$STAGE/layouts"
 tar -C "$HERE/factory" --exclude=./cats --exclude='*.d.ts' --exclude=jsconfig.json -cf - . | tar -C "$STAGE/mods/factory" -xf -
 node "$HERE/build-cats.mjs" --out "$STAGE/mods/factory/cats" >/dev/null
 FIXTURE_LIST="$(printf '%s\n' "${FIXTURES[@]+"${FIXTURES[@]}"}")"
-CHECKOUT="$CHECKOUT" MAINTAINER="$MAINTAINER" SPACES="$SPACES" THEME="$THEME" FIXTURE_LIST="$FIXTURE_LIST" \
+DOCKER_HOST_VALUE="unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
+DOCKER_HOST_VALUE="$DOCKER_HOST_VALUE" CHECKOUT="$CHECKOUT" MAINTAINER="$MAINTAINER" SPACES="$SPACES" THEME="$THEME" FIXTURE_LIST="$FIXTURE_LIST" \
   LAYOUT_IN="$HERE/layouts/factory.json" LAYOUT_OUT="$STAGE/layouts/factory.json" node -e '
 const fs = require("node:fs");
 const layout = JSON.parse(fs.readFileSync(process.env.LAYOUT_IN, "utf8"));
@@ -58,6 +61,7 @@ const find = (n) => (n.id === "factory" ? n : (n.children ?? []).map(find).find(
 const props = find(layout).content.props;
 props.checkout = process.env.CHECKOUT;
 props.maintainer = process.env.MAINTAINER;
+props.dockerHost = process.env.DOCKER_HOST_VALUE;
 if (process.env.THEME) props.theme = process.env.THEME;
 if (process.env.SPACES) props.spaces = JSON.parse(fs.readFileSync(process.env.SPACES, "utf8"));
 const fixtures = process.env.FIXTURE_LIST.split("\n").filter(Boolean);

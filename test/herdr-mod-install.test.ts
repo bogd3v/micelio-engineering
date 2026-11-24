@@ -104,6 +104,29 @@ describe('install.sh', () => {
     expect(readFileSync(join(app, 'layouts/factory.json'), 'utf8')).toBe('{"edited":true}\n')
   })
 
+  it("install.sh writes the Podman socket of XDG_RUNTIME_DIR as the layout's dockerHost", () => {
+    const dockerHost = (env: NodeJS.ProcessEnv) => {
+      const dir = mkdtempSync(join(tmpdir(), 'herdr-app-'))
+      try {
+        const run = spawnSync('bash', [INSTALL], {
+          encoding: 'utf8',
+          env: { ...env, HERDR_APP_DIR: dir },
+        })
+        expect(run.status).toBe(0)
+        const text = readFileSync(join(dir, 'layouts/factory.json'), 'utf8')
+        return /"dockerHost": "([^"]*)"/.exec(text)?.[1]
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    }
+    const withRuntime = { ...process.env, XDG_RUNTIME_DIR: '/run/user/4242' }
+    expect(dockerHost(withRuntime)).toBe('unix:///run/user/4242/podman/podman.sock')
+    const without = { ...process.env }
+    delete without['XDG_RUNTIME_DIR']
+    const uid = spawnSync('id', ['-u'], { encoding: 'utf8' }).stdout.trim()
+    expect(dockerHost(without)).toBe(`unix:///run/user/${uid}/podman/podman.sock`)
+  })
+
   it('install.sh refuses a theme that does not exist', () => {
     const run = install('--theme', 'sepia')
     expect(run.status).toBe(2)

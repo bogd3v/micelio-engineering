@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 // @ts-expect-error a plain JavaScript module of the mod, with no declarations
-import { createAdapters, readConfig } from '../herdr/mod/factory/adapters.js'
+import { createAdapters, dockerArgs, readConfig } from '../herdr/mod/factory/adapters.js'
 import {
   buildGithub,
   buildPanel,
@@ -27,9 +27,11 @@ const SPACES = [
   { name: 'micelio-engineering', repo: 'bogd3v/micelio-engineering', milestone: 12, epic: 790 },
   { name: 'fediverse', repo: 'bogd3v/fediverse', milestone: 3, epic: null },
 ]
+const DOCKER_HOST = 'unix:///run/user/1000/podman/podman.sock'
 const props = (fixture: string[] | null) => ({
   checkout: ROOT.replace(/\/$/, ''),
   maintainer: 'ale9420',
+  dockerHost: DOCKER_HOST,
   fixture,
   spaces: SPACES,
 })
@@ -377,7 +379,7 @@ describe('the adapters', () => {
     expect(lines.filter((l) => !l.startsWith('gh '))).toEqual([
       `bash ${ROOT.replace(/\/$/, '')}/herdr/factory-slot.sh status`,
       'nproc',
-      'docker compose ls --format json',
+      `docker -H ${DOCKER_HOST} compose ls --format json`,
     ])
     const gh = calls.filter(([cmd]) => cmd === 'gh')
     expect(gh.length).toBe(2)
@@ -387,6 +389,35 @@ describe('the adapters', () => {
       expect(args[1]).toMatch(/^repos\/bogd3v\/micelio-engineering\/issues(\?|\/5\/comments\?)/)
     }
     for (const path of reads) expect(path).toMatch(/^\/(proc|sys)\//)
+  })
+
+  it("every docker call carries -H with the layout's dockerHost, and a layout with none runs docker with no -H", async () => {
+    const run = async (raw: unknown) => {
+      const calls: [string, string[]][] = []
+      const a = createAdapters({
+        exec: async (cmd: string, args: string[]) => {
+          calls.push([cmd, args])
+          return { code: 0, stdout: '[]', stderr: '' }
+        },
+        readTextFile,
+        terminals: () => [],
+        config: readConfig(raw),
+      })
+      await a.readStacks()
+      return calls.filter(([cmd]) => cmd === 'docker')
+    }
+    const withHost = await run(props(null))
+    expect(withHost).toEqual([['docker', ['-H', DOCKER_HOST, 'compose', 'ls', '--format', 'json']]])
+    for (const dockerHost of [undefined, 7, null]) {
+      const none = await run({ ...props(null), dockerHost })
+      expect(none).toEqual([['docker', ['compose', 'ls', '--format', 'json']]])
+    }
+    expect(dockerArgs(readConfig(props(null)), ['ps'])).toEqual(['-H', DOCKER_HOST, 'ps'])
+    expect(dockerArgs(readConfig({}), ['ps'])).toEqual(['ps'])
+    // A fixture runs no program and does not read dockerHost.
+    const fixture = readConfig(props([FIXTURES]))
+    const a = createAdapters({ exec: noExec, readTextFile, terminals: () => [], config: fixture })
+    expect(await a.readStacks()).toHaveProperty('text')
   })
 
   it('a gh that fails makes GitHub stale with its age, and the rest of the panel keeps working', async () => {
