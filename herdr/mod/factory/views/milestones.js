@@ -1,0 +1,71 @@
+// Milestones: per space its master's cat and the pull requests merged; per issue its gate track,
+// gate label, lane tag, the cats of its agents and its note. A stale read dims the section.
+
+import { div } from 'gpui-kit'
+import { h_flex, v_flex } from 'gpui-base'
+import { badge, cat, gateMark, heading, label, laneTag, section } from './ui.js'
+import { legend } from './legend.js'
+
+/**
+ * @param {any} ctx
+ * @param {any} m `panel.sections.milestones`
+ */
+export function milestones(ctx, m) {
+  const box = section(ctx).child(heading(ctx, 'milestones', 'Milestones', m.open, div()))
+  if (!m.open) return box
+  if (m.note !== null) box.child(label(`! ${m.note}`, ctx.c['red'], 11).mt(8))
+  for (const space of m.spaces) {
+    const issues = v_flex()
+      .mt(12)
+      .child(
+        h_flex()
+          .items_center()
+          .gap(8)
+          .child(badge(ctx, space.letter, space.colour, 18))
+          .child(cat(ctx, space.masterFile, 24, space.master ?? 'idle'))
+          .child(div().flex_1().font_bold().child(space.name))
+          .child(label(`PRs ${space.merged}`, ctx.c['muted'], 11))
+      )
+      .children(
+        space.issues.map((/** @type {any} */ issue) =>
+          v_flex()
+            .py(7)
+            .pl(26)
+            .border_b(1)
+            .border_color(ctx.c['line'])
+            .child(
+              h_flex()
+                .items_center()
+                .gap(10)
+                .child(label(issue.id, ctx.c['fg'], 12).w(62).flex_none())
+                .child(
+                  h_flex()
+                    .gap(2)
+                    .tooltip(issue.aria)
+                    .children(issue.marks.map((/** @type {string} */ mark) => gateMark(ctx, mark)))
+                )
+                .child(div().flex_grow(1))
+                .child(
+                  div()
+                    .font_bold()
+                    .text_size(11)
+                    .whitespace_nowrap()
+                    .text_color(ctx.c[issue.tone])
+                    .child(issue.label)
+                )
+            )
+            .child(
+              h_flex()
+                .mt(3)
+                .items_center()
+                .gap(6)
+                .children(issue.cats.map((/** @type {any} */ k) => cat(ctx, k.file, 16, k.state)))
+                .child(laneTag(ctx, issue.lane))
+                .child(label(issue.note, ctx.c['muted'], 11).flex_1().min_w(0).truncate())
+            )
+        )
+      )
+    box.child(m.dim ? issues.opacity(0.6) : issues)
+  }
+  return box.child(legend(ctx))
+}

@@ -35,3 +35,51 @@ Every screen of the mod shows the same facts, so they are read once, by plain fu
 The gate comments are those of `herdr/master.md`: `**Gate 1 …**` with a `lane: <lane>` line (and `(calibration: full)`), `**Gate 2, round K …**`, `**Gate 3, round K (reviewer-N)** · K Blocking …` and `**Gate 4, round K …** · M mismatches`. A comment with a Blocking above 0, a mismatch above 0 or `not ready` marks its gate red until a later round of that gate passes; `express` omits G3 and G4. G5 needs the maintainer once the gates before it passed, G5 is passed from the `Progress updated … pull request #N opened` comment and a closed issue has every gate passed. The `held` mark is read from the line that issue #303 defines; until then no issue is held.
 
 A role comes from a terminal's `name` (`worker-<N>`, `reviewer-<N>`, `reviewer-<N>-r<K>`, `verifier-<N>`, `verifier-<N>-r<K>`, `scribe`) or, with no name, from `--agent master` or `--agent planner` in `foreground.argv`. Its status is the terminal's `status`, and `blocked` means it needs the maintainer. Its space is that of its root terminal (the one with no `parent`), from that root's `herdr.space` label. The state carries no context size and no model: no field of `agents()` or `terminals()` gives a context size, and the model is only an argument of a command that the master's did not have.
+
+## The panel
+
+[`factory/`](factory/) is the mod: a panel docked on the right of the window (`mod.json`: `place: right`, 380 px) that shows the state of the factory and changes nothing. No command it runs writes and no control of it sends anything; it reads no token and stores none (`gh` finds its own login). `main.js` puts the reads of [`adapters.js`](factory/adapters.js) through the model above and the sections of [`factory/lib/panel.js`](factory/lib/panel.js) into one description, which one file of [`factory/views/`](factory/views/) per section draws: `header.js`, `strip.js`, `banners.js`, `machine.js`, `slots.js`, `leases.js`, `milestones.js` (with `legend.js`), `stacks.js` and `orphans.js`.
+
+### Install
+
+```bash
+herdr/mod/install.sh --maintainer <your GitHub login> --spaces <spaces.json>
+```
+
+It builds the cats and copies the mod to `${HERDR_APP_DIR:-$HOME/.config/herdr-app}/mods/factory/` and the layout to `layouts/factory.json` (Herdr's `main` with the panel on the right; `layout.switch {name: "factory"}`, or `ctrl-shift-l`, shows it). It never overwrites a file it did not write: it records the hash of each file it writes in `factory-mod-install.json` of that folder, and when a file it would write exists with another hash (one it did not write, or one it wrote and you then edited) it writes nothing, names the file and exits 1. Run again, it replaces what it wrote. `--theme dark|light|follow` sets the theme the panel starts in and `--fixture <folder>` (repeatable) makes it read recordings, as below. Herdr loads the `fonts/` folder at start and at the next look change, not when the mod reloads: a first install shows the interface font until then.
+
+### Configure
+
+The block's props in `layouts/factory.json` (`install.sh` writes them):
+
+| Prop         | Meaning                                                                                                                                                              |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `checkout`   | this repository's checkout, where `herdr/factory-slot.sh` is (`install.sh` sets it to the one it ran from)                                                           |
+| `maintainer` | the login whose comments are the master's gate comments (`--maintainer`, else `$FACTORY_MAINTAINER`)                                                                 |
+| `spaces`     | one `{ "name", "repo", "milestone", "epic" }` per space: the Herdr space's name, its repository, the milestone's number and the epic's number (left out of the rows) |
+| `theme`      | `dark`, `light` or `follow` until the maintainer picks one with the toggle in the header                                                                             |
+| `fixture`    | a folder, or a list of folders (the first that has a file gives it): the panel reads their recordings and runs nothing                                               |
+
+A section folds with a click on its heading; the fold and the theme (Dark, Light or Follow Herdr) are kept in the mod's `localStorage`. Whether they survive a restart of the app was not run (`findings.md`, question 12). The commands `factory.top` and `factory.reveal:<section>` (`herdr-app do factory.reveal:milestones`) only scroll the panel.
+
+### What each section reads
+
+| Section       | Reads                                                                                                                                                                                                                                                | Every |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| Header, strip | the age of the freshest read; the counts of the other sections (needs: the issues that wait for you and the agents asking, with no issue)                                                                                                            | 5 s   |
+| Machine       | `/proc/loadavg`, `/proc/meminfo`, `/sys/class/hwmon/*` and `nproc`; the load of the last 15 minutes is the panel's own record of what it read                                                                                                        | 5 s   |
+| Heavy slots   | `herdr/factory-slot.sh status`                                                                                                                                                                                                                       | 5 s   |
+| Worker leases | the same text; the letter is the space of the agent that holds it                                                                                                                                                                                    | 5 s   |
+| Milestones    | `gh api repos/<repo>/issues?milestone=<n>&state=all` and, for each open issue, its comments; the agents of each issue from `terminals()`. `PRs a/b` is the closed issues over all of them (the factory closes an issue with its merged pull request) | 60 s  |
+| Stacks up     | `docker compose ls --format json`; a stack belongs to the agent whose issue number ends its name (`wt-792`: `worker-792`)                                                                                                                            | 5 s   |
+| Orphans       | the `orphan` lines of `factory-slot.sh status`                                                                                                                                                                                                       | 5 s   |
+
+A failed `gh` makes GitHub stale: the banner gives its age, Milestones keeps its last rows dimmed, and the other sections go on. The panel shows no context size (no field of `terminals()` gives one, `findings.md`, question 4), no memory per stack and no age of a stack: `docker compose ls` gives neither. A `blocked` terminal is shown as an agent that may need you, as the model reads it ("needs the maintainer"), with a caveat: `hc get` reported `blocked` for a worker that was only running a long shell command, so a needs-you cat, mark or count can be a false alarm; the note says "is blocked: it may need you". The rows of Milestones are built at each redraw from the agents of the last 5 s read and the last 60 s read of GitHub, so an agent that starts, stops or blocks shows within 5 s. The design's "Needs you", the buttons and the keys are not in the panel yet.
+
+### Fonts
+
+`factory/fonts/` holds Chakra Petch (Medium, SemiBold, Bold) and JetBrains Mono (Regular, Medium, Bold) with the OFL text of each; the views name them by family and pick the weight with `font_medium()`, `font_semibold()` and `font_bold()`. They are SIL OFL 1.1 (`REUSE.toml`, [`THIRD-PARTY.md`](../../THIRD-PARTY.md)).
+
+### Reproducing a screen
+
+With `fixture` set, the panel reads `test/fixtures/herdr-mod/` (`normal/`, `saturated/` and `stale/` hold what differs): `now.txt` is its clock, and `github-error.txt` makes every GitHub read after the first fail. `test/herdr-mod-panel.test.ts` runs the same files through the same functions.

@@ -1,0 +1,198 @@
+[
+  {
+    "address": "t2p",
+    "name": null,
+    "parent": null,
+    "status": "working",
+    "report": {
+      "app": "claude-code",
+      "state": "working",
+      "msg": "2 shells still running"
+    },
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "master"
+      ]
+    },
+    "labels": {
+      "herdr.seen": "1795000000000",
+      "herdr.space": "sp-micelio-engineering",
+      "herdr.tab": "tb-1",
+      "where": "micelio-engineering / 1"
+    }
+  },
+  {
+    "address": "t4k",
+    "name": "worker-792",
+    "parent": "t2p",
+    "status": "working",
+    "report": {
+      "app": "claude-code",
+      "state": "working"
+    },
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "worker",
+        "--model",
+        "sonnet"
+      ]
+    },
+    "labels": {
+      "where": "micelio-engineering / 1"
+    }
+  },
+  {
+    "address": "t4m",
+    "name": "worker-788",
+    "parent": "t2p",
+    "status": "working",
+    "report": {
+      "app": "claude-code",
+      "state": "working"
+    },
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "worker",
+        "--model",
+        "sonnet"
+      ]
+    },
+    "labels": {
+      "where": "micelio-engineering / 1"
+    }
+  },
+  {
+    "address": "t4n",
+    "name": "worker-801",
+    "parent": "t2p",
+    "status": "idle",
+    "report": {
+      "app": "claude-code",
+      "state": "idle"
+    },
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "worker",
+        "--model",
+        "sonnet"
+      ]
+    },
+    "labels": {
+      "where": "micelio-engineering / 1"
+    }
+  },
+  {
+    "address": "t4p",
+    "name": "reviewer-792",
+    "parent": "t2p",
+    "status": "working",
+    "report": {
+      "app": "claude-code",
+      "state": "working"
+    },
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "reviewer"
+      ]
+    },
+    "labels": {
+      "where": "micelio-engineering / 1"
+    }
+  },
+  {
+    "address": "t4q",
+    "name": "reviewer-801",
+    "parent": "t2p",
+    "status": "idle",
+    "report": {
+      "app": "claude-code",
+      "state": "idle"
+    },
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "reviewer"
+      ]
+    },
+    "labels": {
+      "where": "micelio-engineering / 1"
+    }
+  },
+  {
+    "address": "t4r",
+    "name": "verifier-801",
+    "parent": "t2p",
+    "status": "working",
+    "report": {
+      "app": "claude-code",
+      "state": "working"
+    },
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "verifier",
+        "--model",
+        "sonnet"
+      ]
+    },
+    "labels": {
+      "where": "micelio-engineering / 1"
+    }
+  },
+  {
+    "address": "t4s",
+    "name": "worker-810",
+    "parent": "t2p",
+    "status": "idle",
+    "report": {
+      "app": "claude-code",
+      "state": "idle"
+    },
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "worker",
+        "--model",
+        "sonnet"
+      ]
+    },
+    "labels": {
+      "where": "micelio-engineering / 1"
+    }
+  },
+  {
+    "address": "t4t",
+    "name": "verifier-810",
+    "parent": "t2p",
+    "status": "idle",
+    "report": {
+      "app": "claude-code",
+      "state": "idle"
+    },
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "verifier",
+        "--model",
+        "sonnet"
+      ]
+    },
+    "labels": {
+      "where": "micelio-engineering / 1"
+    }
+  }
+]

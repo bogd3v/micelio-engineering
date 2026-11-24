@@ -1,0 +1,55 @@
+[
+  {
+    "number": 790,
+    "title": "Epic: the maintainer runs the factory from a Herdr mod",
+    "state": "open",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z"
+  },
+  {
+    "number": 297,
+    "title": "docs(herdr): the runbook compacts a worker",
+    "state": "closed",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z"
+  },
+  {
+    "number": 788,
+    "title": "feat(herdr): the board",
+    "state": "open",
+    "body": "## Why\n\nx\n\n## Depends on\n\n- #792 (the panel)\n",
+    "created_at": "2026-11-20T10:00:00Z"
+  },
+  {
+    "number": 792,
+    "title": "feat(herdr): the factory panel",
+    "state": "open",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z"
+  },
+  {
+    "number": 801,
+    "title": "feat(herdr): needs you",
+    "state": "open",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z"
+  },
+  {
+    "number": 810,
+    "title": "docs: one line of the README",
+    "state": "open",
+    "body": null,
+    "created_at": "2026-11-20T10:00:00Z"
+  },
+  {
+    "number": 811,
+    "title": "feat(herdr): the panel",
+    "state": "open",
+    "body": null,
+    "created_at": "2026-11-24T10:00:00Z",
+    "pull_request": {
+      "url": "x",
+      "merged_at": null
+    }
+  }
+]
