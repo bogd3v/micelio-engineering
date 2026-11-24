@@ -1,6 +1,6 @@
 # ADR-0004: Run the factory from a Herdr mod, whose click sends the maintainer's line to a master
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-11-24
 **Deciders:** The maintainer
 
