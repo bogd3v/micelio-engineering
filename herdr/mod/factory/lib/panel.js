@@ -311,6 +311,7 @@ function catsOf(row, onIt, master, theme) {
  * @param {{ stale: boolean, sources: Record<string, Source> }} input.state
  * @param {Github | null} input.github
  * @param {{ value: { name: string, status: string }[], at: string | null, stale: boolean, error: string | null }} [input.stacks]
+ * @param {Record<string, number>} [input.stackAges] when each unowned stack was created (milliseconds since the epoch), by project
  * @param {{ at: number, load: number }[]} [input.history]
  * @param {{ spaces: SpaceConfig[] }} input.config
  * @param {'dark' | 'light'} [input.theme] the theme the cat files are named for
@@ -321,6 +322,7 @@ export function buildPanel({
   state,
   github,
   stacks = { value: [], at: null, stale: false, error: null },
+  stackAges = {},
   history = [],
   config,
   theme = 'dark',
@@ -432,7 +434,10 @@ export function buildPanel({
   const fresh = Object.values(state.sources)
     .map((s) => s.ageMs)
     .filter((n) => n !== null)
+  const reserved = slots?.heavy.slots.some((s) => s.held) === true
   const header = {
+    pause: { on: paused, label: paused ? 'Resume workers' : 'Pause new workers' },
+    reserve: { on: reserved, label: reserved ? 'Release my slot' : 'Reserve a slot' },
     sync: githubStale
       ? { text: `GH STALE ${formatAge(staleAge).toUpperCase()}`, stale: true }
       : { text: `sync ${formatAge(fresh.length === 0 ? null : Math.min(...fresh))}`, stale: false },
@@ -575,9 +580,25 @@ export function buildPanel({
       .filter((a) => a.issue === Number(issue) && a.role !== 'master' && a.role !== 'planner')
       .map((a) => a.name ?? a.address)
   }
+  /** The worker lease of the issue a stack's name ends in. */
+  const leaseOf = (/** @type {string} */ name) => {
+    const issue = /(\d+)$/.exec(name)?.[1]
+    if (issue === undefined) return null
+    return (
+      (slots?.leases.leases ?? []).find((l) => /(\d+)$/.exec(l.agent)?.[1] === issue)?.agent ?? null
+    )
+  }
   const stackRows = stacks.value.map((s) => {
-    const owner = owners(s.name)
-    return { name: s.name, status: s.status, owner: owner[0] ?? null }
+    const owner = owners(s.name)[0] ?? leaseOf(s.name)
+    const since = stackAges[s.name]
+    return {
+      name: s.name,
+      status: s.status,
+      owner,
+      // No live agent and no lease: the only stack that can be brought down.
+      removable: owner === null,
+      age: owner === null && since !== undefined ? formatAge(Math.max(0, now - since)) : null,
+    }
   })
 
   // Orphans.

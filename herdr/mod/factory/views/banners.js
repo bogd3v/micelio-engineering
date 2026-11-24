@@ -7,9 +7,10 @@ import { displayBold, label } from './ui.js'
 /**
  * @param {any} ctx
  * @param {any} banners `panel.banners`
+ * @param {any} [controls] the two buttons of the machine, which the design puts under the alarms and above the paused line
  * @returns {any[]} the elements to show, none when nothing is wrong
  */
-export function banners(ctx, banners) {
+export function banners(ctx, banners, controls = null) {
   /** @type {any[]} */
   const out = []
   if (banners.saturated !== null) {
@@ -40,6 +41,7 @@ export function banners(ctx, banners) {
         .child(div().child(banners.stale.text))
     )
   }
+  if (controls !== null) out.push(controls)
   if (banners.paused !== null) {
     out.push(
       h_flex()

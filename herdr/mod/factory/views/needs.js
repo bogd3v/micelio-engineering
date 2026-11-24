@@ -7,40 +7,7 @@
 
 import { div } from 'gpui-kit'
 import { h_flex, Input, v_flex } from 'gpui-base'
-import { badge, cat, display, displayBold, label, laneTag } from './ui.js'
-
-/** A text button: filled when it is the card's main action, outlined otherwise, flat when disabled. */
-function button(
-  /** @type {any} */ ctx,
-  /** @type {string} */ id,
-  /** @type {string} */ text,
-  /** @type {{ primary?: boolean, disabled?: boolean, tone?: string, click?: any }} */ o = {}
-) {
-  const tone = o.tone ?? 'cyan'
-  const el = displayBold(div())
-    .id(id)
-    .min_h(36)
-    .px(12)
-    .flex()
-    .items_center()
-    .justify_center()
-    .text_size(12)
-    .whitespace_nowrap()
-    .child(text)
-  if (o.disabled === true) {
-    return el
-      .bg(ctx.c['track'])
-      .text_color(ctx.c['muted'])
-      .border_1()
-      .border_color(ctx.c['track'])
-      .tooltip(ctx.ui.lockedNote)
-  }
-  el.cursor_pointer().on_click(o.click)
-  if (o.primary === true) {
-    return el.bg(ctx.c[tone]).text_color(ctx.c['badge-fg']).border_1().border_color(ctx.c[tone])
-  }
-  return el.text_color(ctx.c[tone]).border_1().border_color(ctx.c[tone])
-}
+import { badge, button, cat, display, displayBold, label, laneTag } from './ui.js'
 
 /** A pill of the time form: selected is filled cyan. */
 function pill(
@@ -354,6 +321,27 @@ function decision(ctx, card) {
 }
 
 /** @param {any} ctx @param {any} card */
+function held(ctx, card) {
+  const body = v_flex()
+    .child(top(ctx, card))
+    .child(displayBold(div()).mt(8).text_size(14).child(card.text))
+    .child(
+      h_flex()
+        .mt(10)
+        .gap(8)
+        .child(
+          button(ctx, `retry-${card.number}`, card.retryLabel, {
+            disabled: card.master === null,
+            tip: 'This space has no master to send retry to.',
+            click: (/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.toggleRetry(card, cx),
+          })
+        )
+    )
+  if (card.armed) body.child(label(`> ${card.armedNote}`, ctx.c['cyan'], 11.5).mt(6))
+  return body
+}
+
+/** @param {any} ctx @param {any} card */
 function master(ctx, card) {
   return v_flex()
     .child(top(ctx, card))
@@ -397,7 +385,9 @@ export function needsYou(ctx, needs) {
           ? batch(ctx, card)
           : card.kind === 'decision'
             ? decision(ctx, card)
-            : master(ctx, card)
+            : card.kind === 'held'
+              ? held(ctx, card)
+              : master(ctx, card)
     const last = i === needs.cards.length - 1
     items.push(
       frame()

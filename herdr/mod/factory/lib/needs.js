@@ -5,6 +5,7 @@
 //
 // The lines are the forms of `herdr/master.md`, "Lines from the mod", character for character.
 
+import { armedNote, retryLabel } from './actions.js'
 import { catFile } from './cat.js'
 import { parseGates } from './gates.js'
 import { parseDecision } from './decision.js'
@@ -58,6 +59,38 @@ export function laneWhy(comments, maintainer) {
       .filter((l) => l.trim() !== '' && !/^\s*(?:[-*]\s+)?lane:/i.test(l))
       .join(' ')
   )
+}
+
+/**
+ * The check an issue holds: the last line `held | <date> | #N | <gate> | <reason>` of the maintainer's login
+ * (`herdr/master.md`, "A held check"), unless a later gate comment of the same gate reports the rerun.
+ *
+ * @param {{ user?: { login?: string }, body?: string, created_at?: string, id?: number }[]} comments
+ * @param {string} maintainer
+ * @param {number} number the issue's number: a line that names another one is not this issue's
+ * @returns {{ gate: number, reason: string, at: number } | null}
+ */
+export function parseHeld(comments, maintainer, number) {
+  const own = comments
+    .filter((c) => c.user?.login === maintainer && typeof c.body === 'string')
+    .toSorted(
+      (a, b) => (toMs(a.created_at) ?? 0) - (toMs(b.created_at) ?? 0) || (a.id ?? 0) - (b.id ?? 0)
+    )
+  /** @type {{ gate: number, reason: string, at: number } | null} */
+  let held = null
+  for (const comment of own) {
+    const body = comment.body ?? ''
+    const at = toMs(comment.created_at) ?? 0
+    const line = /^held \| [^|]*\| #(\d+) \| G([2-6]) \| (.+)$/m.exec(body)
+    if (line !== null) {
+      held =
+        Number(line[1]) === number ? { gate: Number(line[2]), reason: line[3].trim(), at } : null
+      continue
+    }
+    const gate = /^gate (\d)\b/i.exec(firstLine(body))
+    if (held !== null && gate !== null && Number(gate[1]) === held.gate) held = null
+  }
+  return held
 }
 
 /**
@@ -137,6 +170,8 @@ export const emptyForm = () => ({
  * @param {Record<number, number>} [input.diffs] when the maintainer opened each issue's diff (by number)
  * @param {Record<number, string>} [input.commits] the subject of each issue's commit message
  * @param {Record<number, Partial<Form>>} [input.forms] the time forms
+ * @param {Record<string, boolean>} [input.armed] the retries the maintainer armed, by card key
+ * @param {number} [input.cores] the machine's thread count, for the load a retry waits for
  * @param {'dark' | 'light'} [input.theme]
  */
 export function buildNeeds({
@@ -148,6 +183,8 @@ export function buildNeeds({
   diffs = {},
   commits = {},
   forms = {},
+  armed = {},
+  cores = 0,
   theme = 'dark',
 }) {
   /** @type {any[]} */
@@ -213,6 +250,29 @@ export function buildNeeds({
           head: `${space.name}#${row.number} · G2 · r${Math.max(1, gates.round)}`,
           text: decision.question,
           options: decision.options,
+        })
+      }
+
+      // A check held by the load: its reason, and a retry the mod sends once.
+      const held = parseHeld(comments, raw.maintainer, row.number)
+      if (held !== null) {
+        const key = `held:${space.name}#${row.number}`
+        const on = armed[key] === true
+        cards.push({
+          key,
+          kind: 'held',
+          at: held.at,
+          age: Math.max(0, now - held.at),
+          space: badge,
+          number: row.number,
+          master: masterAt,
+          lane: row.lane,
+          cat: cat(inSpace.find((a) => a.issue === row.number)?.role ?? 'worker', 'held'),
+          head: `${space.name}#${row.number} · G${held.gate} · HELD`,
+          text: held.reason,
+          armed: on,
+          retryLabel: retryLabel(cores, on),
+          armedNote: on ? armedNote(cores) : null,
         })
       }
 

@@ -1,9 +1,11 @@
 // The factory panel of the Herdr desktop app: "Needs you", the machine, the slots, the leases, the milestones
 // and the stacks, docked on the right, the detail of an issue, an overlay of the same mod (`props().detail`),
 // and the Board, a tab of the same mod (`props().board`).
-// Its reads write nothing. The only thing it sends is a line to the master of an issue's space, after the
-// maintainer's click and a 10 s countdown that can be undone (`hc send`, `sendLine` below, ADR-0004); it
-// never writes to a worker's pane or to GitHub, and with `fixture` in its props it sends nothing at all.
+// Its reads write nothing. It sends a line to the master of an issue's space, after the maintainer's click
+// and a 10 s countdown that can be undone (`hc send`, `sendLine` below, ADR-0004), and `retry #N` to it once
+// the load falls, when the maintainer armed it; it never writes to a worker's pane or to GitHub. The buttons
+// of `lib/actions.js` act on the machine (the slot script, `docker compose down -v`, a process group), the
+// removals after a confirmation; with `fixture` in its props nothing is sent and nothing is run.
 // The facts are read by `adapters.js`, put together by `lib/` and drawn by `views/`.
 
 import { View } from 'gpui-kit'
@@ -25,6 +27,7 @@ import {
   theme,
 } from 'herdr'
 import { createAdapters, readConfig } from './adapters.js'
+import { createActions, createRetries } from './lib/actions.js'
 import { buildGithub, buildPanel, formatAge, parseStacks, pushLoad, SECTIONS } from './lib/panel.js'
 import { buildBoard, factoryShare } from './lib/board.js'
 import {
@@ -42,7 +45,7 @@ import { colours } from './lib/tokens.js'
 import { banners } from './views/banners.js'
 import { board } from './views/board.js'
 import { detail } from './views/detail.js'
-import { header } from './views/header.js'
+import { controls, header } from './views/header.js'
 import { leases } from './views/leases.js'
 import { machine } from './views/machine.js'
 import { milestones } from './views/milestones.js'
@@ -95,6 +98,24 @@ export default class Factory extends View {
     this.seen = null
     /** What the last send did, for one line under the cards. */
     this.sentNote = null
+    /** The machine's buttons: they run the slot script, `docker compose down -v` and `kill`. */
+    this.actions = createActions({
+      exec,
+      config: this.config,
+      facts: () => this.facts(),
+      disabled: this.config.fixture !== null,
+    })
+    /** The retries the maintainer armed, sent once when the load falls. */
+    this.retries = createRetries({
+      send: (target, text) => this.sendLine(target, text),
+      disabled: this.config.fixture !== null,
+    })
+    /** What the last click of the machine's buttons said, such as "no free slot". */
+    this.actionNote = null
+    /** The cores and age of the orphans the maintainer asked to see, by pid. */
+    this.processes = {}
+    /** When each unowned stack was created, by project. */
+    this.stackAges = {}
     this.outbox = createOutbox({ send: (target, text) => this.sendLine(target, text) })
     this.ui = {
       toggle: (name, cx) => {
@@ -114,6 +135,54 @@ export default class Factory extends View {
       lockedNote: LOCKED_NOTE,
       pending: null,
       sentNote: null,
+      actionNote: null,
+      confirmation: null,
+      processes: {},
+      togglePause: (cx) =>
+        this.act(cx, () =>
+          this.panel().header.pause.on ? this.actions.resume() : this.actions.pause()
+        ),
+      toggleReserve: (cx) =>
+        this.act(cx, () =>
+          this.panel().header.reserve.on ? this.actions.release() : this.actions.reserve()
+        ),
+      toggleRetry: (card, cx) => {
+        if (this.retries.isArmed(card.key)) this.retries.cancel(card.key)
+        else if (card.master !== null) this.retries.arm(card.key, card.number, card.master)
+        cx.notify()
+      },
+      askBringDown: (project, cx) => {
+        this.actionNote = this.actions.askBringDown(project).note
+        cx.notify()
+      },
+      askTerminate: (pid, cx) => {
+        this.actionNote = this.actions.askTerminate(pid).note
+        cx.notify()
+      },
+      cancel: (cx) => {
+        this.actions.cancel()
+        cx.notify()
+      },
+      confirm: (cx) => {
+        cx.spawn(async (cx) => {
+          this.actionNote = (await this.actions.confirm()).note
+          this.fast(cx)
+          cx.notify()
+        })
+        cx.notify()
+      },
+      showProcess: (pid, cx) => {
+        if (this.processes[pid] !== undefined) {
+          delete this.processes[pid]
+          cx.notify()
+          return
+        }
+        cx.spawn(async (cx) => {
+          const read = await this.adapters.readProcess(pid)
+          if (read !== null) this.processes[pid] = read
+          cx.notify()
+        })
+      },
       // "Go to master": focuses its pane.
       goTo: (address) => run('pane.focus', { terminal: address }),
       // The worktree's diff against its merge base, in a pane that only reads; it unlocks the sign-off.
@@ -181,6 +250,37 @@ export default class Factory extends View {
     cx.timer.every(SLOW_MS, (cx) => this.slow(cx))
     this.fast(cx)
     this.slow(cx)
+  }
+
+  /** What the machine's buttons check before a removal and when it is confirmed. */
+  facts() {
+    const agents = /** @type {import('./lib/agents.js').Agent[]} */ (
+      this.state?.sources['agents']?.value ?? []
+    )
+    const slots = /** @type {import('./lib/slots.js').Slots | null} */ (
+      this.state?.sources['slots']?.value ?? null
+    )
+    return {
+      agents,
+      leases: slots?.leases.leases ?? [],
+      orphans: slots?.orphans ?? [],
+      stacks: this.stacks.value,
+    }
+  }
+
+  /**
+   * A click of the slot script's buttons: runs it (nothing, with a fixture), shows what it said and reads the
+   * slots again.
+   *
+   * @param {any} cx
+   * @param {() => Promise<{ note: string | null }>} action
+   */
+  act(cx, action) {
+    cx.spawn(async (cx) => {
+      this.actionNote = (await action()).note
+      this.fast(cx)
+      cx.notify()
+    })
   }
 
   /** Opens `argv` in a pane beside the window, which stays open. @param {string[]} argv @param {string} [name] */
@@ -346,6 +446,8 @@ export default class Factory extends View {
       diffs: this.diffs,
       commits: this.commits,
       forms: this.forms,
+      armed: this.retries.armed(),
+      cores: this.state?.sources['machine']?.value?.cores ?? 0,
       theme: this.themeNow(),
     })
   }
@@ -438,6 +540,9 @@ export default class Factory extends View {
           }
         }
         const load = this.state.sources.machine.value?.load1 ?? null
+        const cores = this.state.sources.machine.value?.cores ?? 0
+        const sent = this.retries.check(load, cores)
+        if (sent.length > 0) this.sentNote = `Sent to the master: ${sent.join(' · ')}`
         if (!this.config.fixture) this.history = pushLoad(this.history, now, load)
         if ('error' in stacks) {
           this.stacks = { ...this.stacks, stale: true, error: stacks.error }
@@ -449,11 +554,26 @@ export default class Factory extends View {
             error: null,
           }
         }
+        await this.readStackAges()
+        this.retries.keep(new Set(this.needs().cards.map((c) => c.key)))
       } finally {
         this.busy.fast = false
       }
       cx.notify()
     })
+  }
+
+  /** The age of each stack nobody owns, read once; a stack that is gone is forgotten. */
+  async readStackAges() {
+    const rows = this.panel().sections.stacks.rows.filter((/** @type {any} */ r) => r.removable)
+    const names = new Set(rows.map((/** @type {any} */ r) => r.name))
+    for (const name of Object.keys(this.stackAges))
+      if (!names.has(name)) delete this.stackAges[name]
+    for (const name of names) {
+      if (this.stackAges[name] !== undefined) continue
+      const at = await this.adapters.readStackAge(name)
+      if (at !== null) this.stackAges[name] = at
+    }
   }
 
   /** The milestones of each space, from GitHub. */
@@ -593,6 +713,7 @@ export default class Factory extends View {
       state,
       github,
       stacks: this.stacks,
+      stackAges: this.stackAges,
       history: this.history,
       config: this.config,
       theme: this.themeNow(),
@@ -604,6 +725,9 @@ export default class Factory extends View {
     const appearance = this.themeNow()
     this.ui.pending = this.outbox.state(Date.now())
     this.ui.sentNote = this.sentNote
+    this.ui.actionNote = this.actionNote
+    this.ui.confirmation = this.actions.pending()
+    this.ui.processes = this.processes
     const ctx = {
       c: colours(theme(), appearance === 'dark'),
       theme: appearance,
@@ -634,7 +758,7 @@ export default class Factory extends View {
     }
     const p = this.panel()
     const s = p.sections
-    const shown = banners(ctx, p.banners)
+    const shown = banners(ctx, p.banners, controls(ctx, p.header))
     const needs = needsYou(ctx, this.needs())
     this.order = [...shown.map(() => ''), ...needs.keys, ...SECTIONS]
     return v_flex()
