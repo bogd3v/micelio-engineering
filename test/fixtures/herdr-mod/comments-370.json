@@ -1,0 +1,79 @@
+[
+  {
+    "id": 7024068599,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-19T22:32:28Z",
+    "updated_at": "2026-11-19T22:32:28Z",
+    "author_association": "MEMBER",
+    "body": "**Gate 1** · #370 · 2026-11-19 · pass (master, by hand)\n\nlane: full\n\nlint-lane reasons (paths that match no glob left out):\n- `template/.claude/agents/planner.md` matches contract: `template/`\n- `.claude/agents/planner.md` is normative\n- `docs/factory.md` is normative\n- `herdr/master.md` is normative\n- `packages/eslint-config/package.json` matches contract: `packages/*/package.json`\n- `AGENTS.md` is normative\n\n- `issue-ready`/`lint-issue bogd3v/micelio-engineering#370`: all 8 rules pass.\n- On Ready with `ready`; its dependency is closed.\n- Read by hand against G1.1-G1.5: passes. The premises were checked again on `main` at `524bd74` (the issue cites `0cba123`): they hold. Only the baseline counts on main moved (#371-#373 added tests); the worker records them on main.\n"
+  },
+  {
+    "id": 7024179467,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-19T22:38:01Z",
+    "updated_at": "2026-11-19T22:38:01Z",
+    "author_association": "MEMBER",
+    "body": "**Gate 2** · #370 · round 1 · pass\n\n- Draft has every section of G2.5; Tests rerun after the last edit (G2.6); lint-draft passes. Only the baseline-on-main logs predate the change (expected).\n- Changed lines:  3 files changed, 3 insertions(+), 3 deletions(-), under 400.\n- `lint-lane --diff <merge base> --lane full`: the diff fits the lane.\n- `docs-hits`: no hit.\n- `git status --short` lists only the files the draft names.\n"
+  },
+  {
+    "id": 7024435678,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-19T22:50:52Z",
+    "updated_at": "2026-11-19T22:50:52Z",
+    "author_association": "MEMBER",
+    "body": "**Gate 3, round 1 (g3-review-e370-plterm)** · 0 Blocking, 0 Important\n\n# Gate 3 review: bogd3v/micelio-engineering#370 (chore/factory-370)\n\nRead: issue body (no comments); `decisions.md` (\"None\"); the diff against merge base `524bd74` (three modified files, no untracked); `AGENTS.md`; `test/factory-steps.test.ts`, `test/factory-files.test.ts`; draft section \"Instructions that were wrong or missing\" only.\n\n## 1. Correctness and edge cases\n\nStep 3 of `template/.claude/agents/planner.md:15` now reads \"the Requirements name the tests the change makes false, with the fixtures and word caps it breaks, and say that each changes, and no criterion asks such a test to pass unchanged.\" The trailing parenthetical is gone and the term `the tests the change makes false` is now part of the rule, as S1 asked. The rule is the same as before: tests, fixtures and word caps are named, each is said to change, and no criterion asks it to pass unchanged. `git grep -n 'pass unchanged (the tests the change makes false)\\.'` on both files exits 1. No other sentence changes.\n\nS1. Suggestion: `template/.claude/agents/planner.md:15`: the old \"each one\" also covered the \"recordings\" that the earlier search clause lists, and the new list names only fixtures and word caps. This matches the issue (\"each test, fixture or word cap\"), so it is not a defect. If recordings should stay explicit, write \"with the fixtures, recordings and word caps it breaks\".\n\n## 2. Contracts and the version bump\n\n`packages/eslint-config/standard-hashes.json:48` is refreshed to `f61a276d…`, which matches `sha256sum template/.claude/agents/planner.md`. As the issue says, no version changes; the `z` raise goes in a later `chore(release)`. Nothing else found.\n\n## 3. Security and permissions\n\nNothing found (a prose change in a prompt).\n\n## 4. Tests that would fail without the change\n\n`git diff origin/main -- test/` is empty, so no existing test is changed, as the issue requires. The `factory-steps` row `'the tests the change makes false'` (`test/factory-steps.test.ts:182`) still matches the prompt. The planner prompt grows from 910 to 912 words (`wc -w`), below its budget of 950. The root copy `.claude/agents/planner.md` is byte-identical to the template (`cmp`). Nothing found.\n\n## 5. Documents the change made false\n\nNo other document quotes the old wording (`git grep` for \"makes false\" and \"name each one the change\"). `docs/factory.md` and `herdr/master.md` are untouched, as the issue requires. Nothing found.\n\n## 6. Scope\n\nThe diff touches only the sentence, its root copy and the hash. Nothing found.\n\n## Draft: \"Instructions that were wrong or missing\"\n\nOne line: `issue: the baseline check count of 675 tests is stale (main at 524bd74 has 680) - reported to the master`. It has the correct shape, and an issue ends `reported to the master`. Nothing found.\n\n## Verdict\n\n**Pass**: 0 Blocking, 0 Important, 1 Suggestion.\n"
+  },
+  {
+    "id": 7024436111,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-19T22:50:53Z",
+    "updated_at": "2026-11-19T22:50:53Z",
+    "author_association": "MEMBER",
+    "body": "**Gate 4, round 1 (g4-verify-e370-plterm)** · 0 mismatches\n\n# Gate 4 report: #370 (branch chore/factory-370, base 524bd74)\n\nClean copy: fresh clone at the merge base, diff applied (3 files, no untracked), `npm ci` fresh. Reviewer's findings not given. Decisions: \"None\".\n\n| Command | Number | Reported | Got |\n|---|---|---|---|\n| git grep old parenthetical | exit | 1, no output | 1, no output |\n| git diff origin/main -- test/factory-steps.test.ts | output | empty | empty |\n| npm run build | exit | 0 | 0 |\n| npx vitest run test/factory-steps.test.ts test/factory-files.test.ts | files / tests | 2 / 20 | 2 / 20 |\n| npx vitest run packages/eslint-config/test/standard.test.ts | files / tests | 1 / 33 | 1 / 33 |\n| factory-slot.sh run -- npm run check (also the check command) | exit; files; tests | 0; 30; 680 | 0; 30; 680 |\n| factory-slot.sh run -- npm run verify:template | exit | 0 | 0 |\n| factory-slot.sh run -- npm run verify:isolated | exit | 0 | 0 |\n| Baseline runs on main (draft's baseline line) | not rerun: they describe main before the edit; the logs exist | - | - |\n\nEvery command of the Tests section has a log in `logs/`. Revert proof: draft says \"no test: not code\", so no rerun.\n\n## Criteria\n- grep prints nothing, exits 1: pass.\n- factory-steps test unchanged (empty diff) and passes: pass.\n- factory-files budget and byte-identical tests, standard.test.ts hash test: pass (inside the 20 and 33 passes, and the 680-test check).\n- vitest steps+files passes with 20 tests: pass.\n- canary green on the branch: not tried: run by the master (the draft lists it as not verified).\n- check / verify:template / verify:isolated pass: pass. The issue's \"675 tests\" is stale; main has 680 (draft says so too, and I got 680).\n- Maintainer criterion: not tried.\n\n## Not verified\nCanary (M.2) and the maintainer's criterion: the master's and the maintainer's. Clean copy `git status --short` after the runs: clean.\n\n**Mismatches: 0.**\n"
+  },
+  {
+    "id": 7024750969,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-19T23:07:22Z",
+    "updated_at": "2026-11-19T23:07:22Z",
+    "author_association": "MEMBER",
+    "body": "**Gate 2** · #370 · after the rebase onto 1042634 (#365 and #369 merged) · pass\n\n- The patch applied cleanly; the worker reran `node scripts/synced-hashes.mjs` and every Tests command on the new base (logs overwritten, numbers updated; baseline and canary marked from 524bd74).\n- The added and removed lines are the same as round 1's diff, so gates 3 and 4 stand.\n- lint-draft passes; `docs-hits`: no hit; `lint-lane --diff <merge base> --lane full`: fits; status lists only the three files the draft names.\n"
+  },
+  {
+    "id": 7024800397,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-19T23:09:59Z",
+    "updated_at": "2026-11-19T23:09:59Z",
+    "author_association": "MEMBER",
+    "body": "Progress updated by the master:\n\n```diff\n--- /home/maintainer/Git/factory/packets/e370/progress-1795129793/before.md\t2026-11-19 18:09:53.987319762 -0500\n+++ /home/maintainer/Git/factory/packets/e370/progress-1795129793/after.md\t2026-11-19 18:09:54.485454666 -0500\n@@ -42,5 +42,4 @@\n \n ### Progress\n \n-Nothing yet.\n-\n+Pull request 377 (branch `chore/factory-370`): step 3 of the planner prompt names the tests the change makes false inside its rule, with no trailing parenthetical; the synced copy and hash are refreshed; `npm run check`, `verify:template` and `verify:isolated` pass; the canary is green. Gates 2 to 4 passed in round 1; waiting for the maintainer's review and merge.\n```\n"
+  },
+  {
+    "id": 7024890718,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-19T23:14:46Z",
+    "updated_at": "2026-11-19T23:14:46Z",
+    "author_association": "MEMBER",
+    "body": "Progress updated by the master:\n\n```diff\n--- /home/maintainer/Git/factory/packets/e370/progress-1795130081/before.md\t2026-11-19 18:14:41.941493654 -0500\n+++ /home/maintainer/Git/factory/packets/e370/progress-1795130081/after.md\t2026-11-19 18:14:42.480649921 -0500\n@@ -42,5 +42,4 @@\n \n ### Progress\n \n-Pull request 377 (branch `chore/factory-370`): step 3 of the planner prompt names the tests the change makes false inside its rule, with no trailing parenthetical; the synced copy and hash are refreshed; `npm run check`, `verify:template` and `verify:isolated` pass; the canary is green. Gates 2 to 4 passed in round 1; waiting for the maintainer's review and merge.\n-\n+Pull request #377 (branch `chore/factory-370`) merged: step 3 of the planner prompt names the tests the change makes false inside its rule, with no trailing parenthetical; the synced copy and hash are refreshed; the canary was green. Gates 2 to 4 passed in round 1.\n```\n"
+  }
+]
