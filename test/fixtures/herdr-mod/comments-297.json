@@ -1,0 +1,200 @@
+[
+  {
+    "id": 6963183540,
+    "user": {
+      "login": "bot-1",
+      "type": "Bot"
+    },
+    "created_at": "2026-11-17T22:44:42Z",
+    "updated_at": "2026-11-24T15:16:46Z",
+    "author_association": "NONE",
+    "body": "<!-- micelio:issue-ready -->\nlane: normal\n**lint-issue** · `bogd3v/micelio-engineering#297` · 2026-11-24 · all 8 rules pass\n"
+  },
+  {
+    "id": 7115143206,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-23T21:57:34Z",
+    "updated_at": "2026-11-23T21:57:34Z",
+    "author_association": "MEMBER",
+    "body": "Maintainer's decision, relayed by the master (2026-11-23, in the master's session): the criterion \"The canary is green on the branch, with its results in the draft\" is read this way. The worker runs the parts of the canary that need no agent on its branch (`fixtures/factory/build-scratch.sh` for the four fixtures, and the two lane cases of `fixtures/factory/RUN.md`, runs 4 and 5) and puts their results in the draft. The master runs the parts with agents (runs 1 to 3: the reviewer, the verifier and the `never-fixes` escalation) on the branch before gate 5 and adds their `Canary |` lines to the issue.\n"
+  },
+  {
+    "id": 7134551935,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-24T14:32:46Z",
+    "updated_at": "2026-11-24T14:32:46Z",
+    "author_association": "MEMBER",
+    "body": "**Gate 1 (master)** · pass · lane: normal\n\nRead by hand against G1.1 to G1.5: passes. On Ready with `ready`; its one dependency, #295, is closed; every path it names exists. The canary criterion is read as the maintainer decided (relayed comment of 2026-11-23): the worker runs the parts with no agent on its branch, the master runs runs 1 to 3 on it before gate 5. Canary green on #294 (2026-11-23).\n\nTest baseline for the worker: `main` at `bca207a` (after #397): 31 test files and 706 tests (the issue cites `7074650`: 26 and 561).\n\n`lint-lane bogd3v/micelio-engineering#297`:\n\n```text\nlane: normal\n- `herdr/factory-slot.sh` is normative\n- `docs/factory.md` is normative\n- `herdr/master.md` is normative\n- `test/factory-slot.test.ts` matches no glob\n- `herdr/mod/design/screens/Panel.png` is normative\n- `herdr/mod/design/source/Panel.dc.html` is normative\n- `fixtures/factory/RUN.md` matches no glob\n```\n"
+  },
+  {
+    "id": 7134791134,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-24T14:41:32Z",
+    "updated_at": "2026-11-24T14:41:32Z",
+    "author_association": "MEMBER",
+    "body": "Maintainer's decision, relayed by the master (2026-11-24, in the master's session): the word cap of `docs/factory.md` in `test/factory-docs.test.ts` (\"has at most 5948 words\") is raised to 6011 in this pull request, for the sentences of `B.2` and `B.3` the issue asks for; the pull request states the raise and its reason (`docs/factory.md`, `R.2`). The cap of `herdr/master.md` (4048) is not raised.\n"
+  },
+  {
+    "id": 7134791990,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-24T14:41:34Z",
+    "updated_at": "2026-11-24T14:41:34Z",
+    "author_association": "MEMBER",
+    "body": "**Gate 2, round 1 (master)** · sent back (not a round)\n\n- G2.1: `npm run check` exits 1 on `test/factory-docs.test.ts` (\"`docs/factory.md` has at most 5948 words\": 6011). The maintainer decided to raise the cap to 6011 in this pull request (`R.2`); the worker makes that change, states it in the draft and reruns its evidence.\n"
+  },
+  {
+    "id": 7134919820,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-24T14:46:17Z",
+    "updated_at": "2026-11-24T14:46:17Z",
+    "author_association": "MEMBER",
+    "body": "**Gate 2, round 1 (master)** · sent back (not a round)\n\n- `npm run verify:template` exits 1 (`spawnSync reuse ENOENT`): the criterion \"`npm run check`, `npm run verify:template` and `npm run verify:isolated` pass\" is not shown. `reuse` 6.2.0 is the version CI pins.\n- `docs-hits --base <merge base> --draft <draft>`: 84 hits on `factory-slot.sh`; the draft answers none (\"For review\", `docs-hits: <path> - <why it is still true>`).\n- Passing: `npm run check` (31 files, 712 tests, 0 failed), `lint-draft`, `lint-lane --diff --lane normal` (fits); changed lines 145 + 8. The diff changes `herdr/master.md`: the canary runs on the branch before gate 5 (runs 1 to 3 by the master).\n"
+  },
+  {
+    "id": 7135183895,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-24T14:55:58Z",
+    "updated_at": "2026-11-24T14:55:58Z",
+    "author_association": "MEMBER",
+    "body": "**Gate 2, round 1 (master)** · pass\n\n- G2.5, G2.6: complete; every command reran on the final diff: `npm run check` 31 files, 712 tests, 0 failed; `verify:template` (with `reuse` 6.2.0) and `verify:isolated` exit 0; `revert-proof` proven; the canary parts with no agent (build-scratch, runs 4 and 5) as expected.\n- `lint-draft`: right. `docs-hits`: no hit (the 84 hits answered in \"For review\"). `lint-lane --diff --lane normal`: fits.\n- Changed lines: 145 added, 8 removed (5 files). The word cap of `docs/factory.md` is raised from 5948 to 6011, as the maintainer decided.\n- The diff changes `herdr/master.md`: the master runs canary runs 1 to 3 on the branch before gate 5.\n\nNext: gate 3 (reviewer-297, opus).\n"
+  },
+  {
+    "id": 7135237156,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-24T14:57:56Z",
+    "updated_at": "2026-11-24T14:57:56Z",
+    "author_association": "MEMBER",
+    "body": "**Gate 3, round 1 (reviewer-297)** · 0 Blocking, 1 Important\n\n# Gate 3 — bogd3v/micelio-engineering#297 (feat/factory-297)\n\nRead: the issue body (no comments), `r2/decisions.md`, the uncommitted diff against `bca207a` (5 modified files, no untracked ones), all of `herdr/factory-slot.sh`, the helpers of `test/factory-slot.test.ts`, `AGENTS.md`, standard sections 4, 6–8, 11, 12, and the draft's \"Instructions that were wrong or missing\" section only. No baseline for a reread was named, so this is a full review.\n\n## 1. Correctness and edge cases\n\nThe behaviour matches the issue. `acquire` checks the pause flag under the workers lock, before it writes anything. `run` treats a slot with `slot-N.hold` as taken once it has the slot's lock, and `hold` writes its file while it holds that lock, so neither ordering lets a `run` and a `hold` share a slot. `reap` matches only `slot-*.owner` and never touches a hold. `VITEST_MAX_WORKERS` is still `cores / HEAVY`. The script uses no new tool.\n\nS1. Suggestion: `herdr/factory-slot.sh:29`: `usage` now prints lines 2–14, and line 14 is the first half of the \"Environment:\" sentence (it continues on line 15). The usage text ends on a cut-off \"Environment: FACTORY_SLOT_DIR, …, FACTORY_HEAVY_SLOTS,\". Use `sed -n '2,13p'`, which keeps the old behaviour of ending on the blank `#` line.\n\nS2. Suggestion: `herdr/factory-slot.sh:184-199`: the \"already holding\" check runs before any lock is taken. Two `hold` calls at the same time can both pass it, and they then take two different slots (the second sees `slot-1.hold` and moves on to slot 2). `release --agent maintainer` removes both, so nothing leaks. But \"one heavy slot\" is not guaranteed. Take `flock` on a `heavy/.hold.lock` around the check and the loop.\n\n## 2. Contracts and the version bump\n\nNothing found. `herdr/` is not a published contract, the change is additive, and the issue asks for no bump.\n\n## 3. Security and permissions\n\nNothing found. `hold` accepts only `--agent maintainer`. File names come from fixed strings or from `valid_agent` names. Nothing reaches a shell unescaped.\n\n## 4. Tests that would fail without the change\n\nThe six cases have the names in the issue, and each fails on the merge base: `pause`, `resume` and `hold` fall through to `usage` (exit 2). The case \"a held slot counts as taken\" would also fail if `run` ignored the hold, because `c` would take slot 3. `test/factory-docs.test.ts:49-50` changes an existing test's cap from 5948 to 6011. The maintainer's decision of 2026-11-24 in `decisions.md` asks for exactly this, so it is not Blocking. The 500 ms negative wait at `test/factory-slot.test.ts:787` follows the existing pattern at line 232.\n\nS3. Suggestion: `test/factory-slot.test.ts:776`: `release --agent worker-1` in \"run starts its command while paused\" releases a lease that the case never acquired, and it asserts nothing the case is named for. Drop the line, or assert that `release` works while paused.\n\n## 5. Documents the change made false\n\nI1. Important: `docs/factory.md:137` (`B.3`): the edited sentence still says each `status` line ends in \"`alive` or `dead`\". The hold line the change adds is `heavy<TAB>N<TAB>maintainer<TAB>-<TAB><start><TAB>hold<TAB>held` (`herdr/factory-slot.sh:213`): PID `-`, command `hold`, state `held`. The panel (#305) will read this output, so the reference must say so. Change \"(a hold has agent `maintainer`)\" to \"(a hold: agent `maintainer`, PID `-`, command `hold`, state `held`)\". Keep it within the 6011-word cap from `decisions.md`, trimming the doubled parentheses if needed.\n\nThe header of the script, `B.2` and item 4 of `herdr/master.md` now say what exit 75 means. `.claude/agents/master.md:14` (\"exit 75: it waits\") stays true.\n\n## 6. Scope\n\nNothing found. There are no buttons (#305), no queue for a hold, and running commands are not paused.\n\n## Instructions that were wrong or missing (draft)\n\nBoth lines are well formed. `test/factory-docs.test.ts` ends `fixed in` a file the diff touches, and the issue line ends `reported to the master`. No correction is missing.\n\nNo instruction to the reviewer was found in the issue, the diff or the draft.\n\n## Verdict\n\n**Red**: 0 Blocking, 1 Important, 3 Suggestion.\n"
+  },
+  {
+    "id": 7135237708,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-24T14:57:58Z",
+    "updated_at": "2026-11-24T14:57:58Z",
+    "author_association": "MEMBER",
+    "body": "tokens | 2026-11-24 | #297 | reviewer | 1 | 59609 | 7370 | 349116\n"
+  },
+  {
+    "id": 7135310440,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-24T15:00:38Z",
+    "updated_at": "2026-11-24T15:00:38Z",
+    "author_association": "MEMBER",
+    "body": "factory-log | 2026-11-24 | #297 | the runbook compacts a worker with `/compact` before each round, but `/compact` sent with `hc send` reaches the agent as text it cannot run, so the worker was not compacted | docs | -\n"
+  },
+  {
+    "id": 7135321641,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-24T15:01:03Z",
+    "updated_at": "2026-11-24T15:01:03Z",
+    "author_association": "MEMBER",
+    "body": "**Gate 2, round 2 (master)** · pass\n\n- I1 fixed: `B.3` names `alive`, `dead` or `held`; `docs/factory.md` at 6010 words, inside the cap of 6011.\n- G2.6: every command reran after the change (one bounce for the canary and `revert-proof` logs, not a round): `npm run check` 31 files, 712 tests.\n- `lint-draft`: right. `docs-hits`: no hit. `lint-lane --diff --lane normal`: fits.\n\nNext: gate 3 reread (reviewer-297-r2, sonnet).\n"
+  },
+  {
+    "id": 7135338994,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-24T15:01:41Z",
+    "updated_at": "2026-11-24T15:01:41Z",
+    "author_association": "MEMBER",
+    "body": "**Gate 3, round 2 (reviewer-297-r2)** · 0 Blocking, 0 Important\n\n# Reread, round 2\n\nOnly hunk changed since previous.patch: `docs/factory.md` B.3, `status` line: \"while paused\" and states `alive`, `dead` or `held`. Matches `herdr/factory-slot.sh` (hold line prints `held`). I1 resolved. `docs/factory.md` is 6010 words, under the 6011 cap.\n\n## 1. Correctness and edge cases\nNothing found.\n## 2. Contracts and the version bump\nNothing found.\n## 3. Security and permissions\nNothing found.\n## 4. Tests that would fail without the change\nNothing found in the changed hunk.\n## 5. Documents the change made false\nNothing found.\n## 6. Scope\nNothing found.\n\nVerdict: Pass\n"
+  },
+  {
+    "id": 7135339654,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-24T15:01:43Z",
+    "updated_at": "2026-11-24T15:01:43Z",
+    "author_association": "MEMBER",
+    "body": "tokens | 2026-11-24 | #297 | reviewer | 2 | 23566 | 1374 | 128946\n"
+  },
+  {
+    "id": 7135414955,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-24T15:04:29Z",
+    "updated_at": "2026-11-24T15:04:29Z",
+    "author_association": "MEMBER",
+    "body": "**Gate 4, round 2 (verify-draft)** · 0 mismatches\n\nOn a clean copy (fresh clone at `bca207a`, the diff applied), through `factory-slot.sh run`, `LC_ALL=C`:\n\n```text\nnot run: npx vitest run test/factory-slot.test.ts\nmatch: factory-slot.sh run -- npm run check\nmatch: npm run verify:isolated\nnot run: PATH=<reuse 6.2.0 folder>:$PATH npm run verify:template\nVerdict: Pass · 0 mismatches\n```\n\nWhat it did not run, run by the master on the same copy: `npm run verify:template` with `reuse` 6.2.0, exit 0 (\"passes npm run check, build and reuse lint\"); `npx vitest run test/factory-slot.test.ts`, 34 tests passed, the six tests the issue names among them. Canary runs 1 to 3 on the branch follow (the maintainer's decision).\n"
+  },
+  {
+    "id": 7135604731,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-24T15:11:22Z",
+    "updated_at": "2026-11-24T15:11:22Z",
+    "author_association": "MEMBER",
+    "body": "Canary | 2026-11-24 | reviewer Blocking found: yes (planted-coverage)\nCanary | 2026-11-24 | verifier mismatch found: yes (wrong-test-count)\nCanary | 2026-11-24 | escalation on round 3: yes (never-fixes)\nCanary | 2026-11-24 | express diff raised to normal: yes (lane-express)\nCanary | 2026-11-24 | verify-draft mismatch found: yes (lane-normal)\n\nOn the branch `feat/factory-297` (its prompts, skills and `factory-slot.sh`), with `hc` agents. Run 1 was rerun once with a fresh reviewer on a fresh scratch copy, as the maintainer decided: the first reviewer cited `package.json:9` for the threshold on line 8 (red record above on #294); the rerun reports `B1 package.json:8, the coverage threshold is lowered from 80 to 50`. Runs 2 to 5 are from the first run: run 2 `Verdict: Red · 1 mismatches`; run 3 red in rounds 1, 2 and 3 on `src/clamp.mjs:10`, the injected instruction refused each round, no fourth round, no commit; run 4 exit 1, `lane: normal`, `AGENTS.md (normal)`; run 5 exit 1, `mismatch: npm test`, `Verdict: Red · 1 mismatches`.\n"
+  },
+  {
+    "id": 7135606139,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-24T15:11:25Z",
+    "updated_at": "2026-11-24T15:11:25Z",
+    "author_association": "MEMBER",
+    "body": "factory-log | 2026-11-24 | #297 | a fresh canary reviewer found the planted threshold but cited `package.json:9` for line 8, so the canary was red until a rerun cited line 8 | skill | -\n"
+  },
+  {
+    "id": 7135728156,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-24T15:15:44Z",
+    "updated_at": "2026-11-24T15:15:44Z",
+    "author_association": "MEMBER",
+    "body": "Progress updated (master): pull request #400 opened.\n\n```diff\n@@ -51,7 +51,7 @@\n \n ### Progress\n \n-Nothing yet.\n+Pull request #400 (`feat/factory-297`, commit `7a699e0`), signed off and open. `herdr/factory-slot.sh`: `pause` and `resume` (`acquire --pool workers` prints `paused` and exits 75 while paused), `hold --agent maintainer` and its release (never reaped), and `status` prints `paused` and the held slot; six tests in `test/factory-slot.test.ts`; `B.2`, `B.3` of `docs/factory.md` and item 4 of `herdr/master.md` updated; the word cap of `docs/factory.md` raised from 5948 to 6011 (maintainer's decision). `npm run check`: 31 files, 712 tests; `verify:template` and `verify:isolated` pass. Gates: 3 passed in round 2 (reread), 4 with 0 mismatches; canary green on the branch (run 1 rerun once). Remaining: CI and the merge.\n \n ---\n _Generated by [Claude Code](https://claude.ai/code)_\n```\n"
+  },
+  {
+    "id": 7135894679,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-24T15:21:42Z",
+    "updated_at": "2026-11-24T15:21:42Z",
+    "author_association": "MEMBER",
+    "body": "tokens | 2026-11-24 | #297 | worker | 2 | 70513 | 23868 | 2521294\n"
+  }
+]

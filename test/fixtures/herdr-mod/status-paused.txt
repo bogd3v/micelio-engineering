@@ -1,0 +1,9 @@
+paused
+heavy	3	maintainer	-	2026-11-24T10:32:45-0500	hold	held
+heavy	1	verifier-792	1998149	2026-11-24T10:32:35-0500	sleep 600	alive
+heavy	2	worker-801	1998158	2026-11-24T10:32:35-0500	sleep 601	alive
+workers	reviewer-792	reviewer-792	-	2026-11-24T10:32:35-0500	-	-
+workers	worker-788	worker-788	-	2026-11-24T10:32:35-0500	-	-
+workers	worker-792	worker-792	-	2026-11-24T10:32:35-0500	-	-
+workers	worker-801	worker-801	-	2026-11-24T10:32:35-0500	-	-
+orphan	1998180	/srv/factory/tmp/orphan-job	sleep 602 

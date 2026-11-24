@@ -1,0 +1,90 @@
+[
+  {
+    "id": 6982137811,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-18T14:53:34Z",
+    "updated_at": "2026-11-18T14:53:34Z",
+    "author_association": "MEMBER",
+    "body": "**Gate 1 (master): pass**\n\nlane: express\n- `.github/project-fields.json` matches express: `.github/project-fields.json`\n\nRead by hand against G1.1 to G1.5: conventional title, the five parts, every criterion has a command, the fixed criterion of the lane, no dependency. 317 is not a multiple of 5, so this is not a calibration run.\n"
+  },
+  {
+    "id": 6982138601,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-18T14:53:35Z",
+    "updated_at": "2026-11-18T14:53:35Z",
+    "author_association": "MEMBER",
+    "body": "factory-log | 2026-11-18 | #317 | `factory-slot.sh reap` asks `hc get` whether an agent is alive, and agents started with `herdr agent start` are unknown to `hc`, so it killed a live heavy run and released the leases of live workers | test | -\n"
+  },
+  {
+    "id": 6982260984,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-18T14:58:17Z",
+    "updated_at": "2026-11-18T14:58:17Z",
+    "author_association": "MEMBER",
+    "body": "**Gate 2, round 1 (master): sent back**\n\n`lint-draft` found 3 problems in the section \"Instructions that were wrong or missing\" of the draft. `lint-lane --diff`: the diff fits `express`, 5 insertions and 1 deletion. This bounce is not one of the three rounds.\n"
+  },
+  {
+    "id": 6982357622,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-18T15:01:57Z",
+    "updated_at": "2026-11-18T15:01:57Z",
+    "author_association": "MEMBER",
+    "body": "**Gate 2, round 1 (master): pass** · lane: express\n\n- `lint-draft`: exit 0. `lint-lane --diff`: the diff fits `express`. Changed lines: 5 insertions, 1 deletion, in `.github/project-fields.json` only.\n- `npm run check` on a clean copy of `d721626` plus the diff, through `factory-slot.sh run` in `node:22`: exit 0, `Test Files  26 passed (26)`, `Tests  570 passed (570)`.\n- The express lane skips gates 3 and 4 (`G2.8`). Ready for gate 5: the maintainer reads the diff.\n"
+  },
+  {
+    "id": 6982451374,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-18T15:05:28Z",
+    "updated_at": "2026-11-18T15:05:28Z",
+    "author_association": "MEMBER",
+    "body": "Progress updated (master). Only the text under `### Progress` changed:\n\n```diff\n@@ -48,4 +48,4 @@\n \n ### Progress\n \n-The entry is written on the branch chore/project-fields-translation-credits, uncommitted.\n+Pull request: https://github.com/bogd3v/micelio-engineering/pull/320 (commit `80d665e`). The entry is written and checked on branch chore/project-fields-translation-credits: the `node -p`, `vitest` and `prettier` criteria pass, and `npm run check` passes (26 files, 570 tests). Waiting for the maintainer's reading of the diff and the merge.\n```\n"
+  },
+  {
+    "id": 6982994964,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-18T15:25:34Z",
+    "updated_at": "2026-11-18T15:25:34Z",
+    "author_association": "MEMBER",
+    "body": "factory-log | 2026-11-18 | #317 | `verify-draft` in CI read the sentence \"Runs: 1 killed of 2\" of a pull request body as a count of killed tests and failed the check, though the run it described was a rerun that passed | lint | -\n"
+  },
+  {
+    "id": 6983143148,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-18T15:31:04Z",
+    "updated_at": "2026-11-18T15:31:04Z",
+    "author_association": "MEMBER",
+    "body": "factory-log | 2026-11-18 | #317 | `verify-draft` treats any number followed by a word on a command line of the Tests section as a count, so the sentence \"ended with exit 143 and reported\" failed the check as a claim of 143 `and` | lint | -\n"
+  },
+  {
+    "id": 6983444394,
+    "user": {
+      "login": "ale9420",
+      "type": "User"
+    },
+    "created_at": "2026-11-18T15:42:14Z",
+    "updated_at": "2026-11-18T15:42:14Z",
+    "author_association": "MEMBER",
+    "body": "tokens | 2026-11-18 | #317 | worker | 1 | 19136 | 3872 | 198860\n"
+  }
+]
