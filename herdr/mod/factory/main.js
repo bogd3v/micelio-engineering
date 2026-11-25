@@ -43,6 +43,7 @@ import {
   buildPanel,
   formatAge,
   issueKey,
+  notLive,
   pairReads,
   parseStacks,
   pushLoad,
@@ -85,6 +86,16 @@ import {
   toggleAlert,
   toggleSection,
 } from './lib/settings.js'
+import {
+  createGate,
+  FAST_READ_MS,
+  FAST_STEP_MS,
+  limited,
+  readFast,
+  readSlow,
+  SLOW_READ_MS,
+  SLOW_STEP_MS,
+} from './lib/reads.js'
 import { buildState } from './lib/state.js'
 import { stopTimer } from './lib/time.js'
 import { colours } from './lib/tokens.js'
@@ -129,9 +140,10 @@ export default class Factory extends View {
     this.worktree = null
     this.seeded = false
     this.now = Date.now()
-    this.busy = { fast: false, slow: false }
     /** When GitHub was last read (the model's clock), for the slow pace. */
     this.githubAt = null
+    /** A read that hangs or whose task was cancelled holds its gate only for its limit (`lib/reads.js`). */
+    this.gates = { fast: createGate(FAST_READ_MS), slow: createGate(SLOW_READ_MS) }
     this.scroll = ScrollHandle.new()
     this.order = []
     this.open = this.load('open', {})
@@ -716,6 +728,7 @@ export default class Factory extends View {
       cores: this.state?.sources['machine']?.value?.cores ?? 0,
       timeForms: this.timeForms,
       theme: this.themeNow(),
+      agentsNote: notLive(this.state?.sources['agents']),
     })
   }
 
@@ -876,18 +889,18 @@ export default class Factory extends View {
 
   /** The slots, the machine, the agents and the stacks. */
   fast(cx) {
-    if (this.busy.fast) return
-    this.busy.fast = true
+    const generation = this.gates.fast.start(Date.now())
+    if (generation === null) return
+    const current = () => this.gates.fast.isCurrent(generation)
     cx.spawn(async (cx) => {
+      const sleep = (/** @type {number} */ ms) => cx.sleep(ms)
       try {
         const a = this.adapters
-        const [now, slots, machine, agents, stacks] = await Promise.all([
-          a.now(),
-          a.readSlots(),
-          a.readMachine(),
-          a.readAgents(),
-          a.readStacks(),
-        ])
+        const read = await readFast(a, { sleep })
+        // A read past its limit was replaced by a newer one: its late result is dropped.
+        if (!current()) return
+        const { slots, machine, agents, stacks } = read
+        const now = read.now ?? Date.now()
         this.now = now
         this.terminals = 'terminals' in agents ? agents.terminals : this.terminals
         this.state = buildState({ now, fetched: { slots, machine, agents }, previous: this.state })
@@ -900,15 +913,22 @@ export default class Factory extends View {
         }
         if (!this.seeded) {
           this.seeded = true
-          this.history = await a.readHistory()
+          // Each step has the same limit; one that does not answer seeds nothing and the read goes on.
+          const seed = (/** @type {string} */ name, /** @type {() => Promise<any>} */ run) =>
+            limited(FAST_STEP_MS, name, run, sleep)
+          const history = await seed('readHistory', () => a.readHistory())
+          const diffs = await seed('readDiffs', () => a.readDiffs())
+          const formsRead = await seed('readForms', () => a.readForms())
+          if (!current()) return
+          this.history = Array.isArray(history) ? history : []
           // A fixture says which diffs were opened, since nobody clicks in a recording.
           // Their keys are those of `issueKey`: a number, or `owner/repo#N`.
           const key = (/** @type {string} */ k) => (/^\d+$/.test(k) ? Number(k) : k)
-          for (const [number, minutes] of Object.entries(await a.readDiffs())) {
+          for (const [number, minutes] of Object.entries('error' in diffs ? {} : diffs)) {
             this.diffs[number] = now - Number(minutes) * 60_000
             this.makeForm(key(number))
           }
-          const forms = await a.readForms()
+          const forms = 'error' in formsRead ? { time: {}, log: null } : formsRead
           for (const [number, patch] of Object.entries(forms.time)) {
             this.setTimeForm(key(number), { open: true, ...patch }, cx)
             const form = this.timeForms[number]
@@ -946,25 +966,37 @@ export default class Factory extends View {
             error: null,
           }
         }
-        await this.readStackAges()
+        await this.readStackAges(sleep, current)
         this.retries.keep(new Set(this.needs().cards.map((c) => c.key)))
       } finally {
-        this.busy.fast = false
+        this.gates.fast.end(generation)
       }
       cx.notify()
     })
   }
 
-  /** The age of each stack nobody owns, read once; a stack that is gone is forgotten. */
-  async readStackAges() {
+  /**
+   * The age of each stack nobody owns, read once; a stack that is gone is forgotten. A read that does
+   * not answer in its limit leaves the stack with no age.
+   *
+   * @param {(ms: number) => Promise<unknown>} sleep
+   * @param {() => boolean} current whether the read that asks is still the newest
+   */
+  async readStackAges(sleep, current) {
     const rows = this.panel().sections.stacks.rows.filter((/** @type {any} */ r) => r.removable)
     const names = new Set(rows.map((/** @type {any} */ r) => r.name))
     for (const name of Object.keys(this.stackAges))
       if (!names.has(name)) delete this.stackAges[name]
     for (const name of names) {
       if (this.stackAges[name] !== undefined) continue
-      const at = await this.adapters.readStackAge(name)
-      if (at !== null) this.stackAges[name] = at
+      const at = await limited(
+        FAST_STEP_MS,
+        'readStackAge',
+        () => this.adapters.readStackAge(name),
+        sleep
+      )
+      if (!current()) return
+      if (typeof at === 'number') this.stackAges[name] = at
     }
   }
 
@@ -973,53 +1005,70 @@ export default class Factory extends View {
    * (`readsNow` of `lib/quota.js`): a skipped read is not a failure, and the local reads go on.
    */
   slow(cx) {
-    if (this.busy.slow) return
-    this.busy.slow = true
     cx.spawn(async (cx) => {
+      const sleep = (/** @type {number} */ ms) => cx.sleep(ms)
+      const clock = await limited(SLOW_STEP_MS, 'now', () => this.adapters.now(), sleep)
+      const now = typeof clock === 'number' ? clock : Date.now()
+      const remote =
+        this.config.fixture !== null ||
+        readsNow({
+          pace: paceOf(this.adapters.quota(), now),
+          lastAt: this.githubAt,
+          now,
+          visible: window()?.visible,
+        })
+      // The pace comes first: a read it skips takes no gate, since it asks GitHub for nothing.
+      const generation = remote ? this.gates.slow.start(Date.now()) : 0
+      if (generation === null) return
+      const current = () => !remote || this.gates.slow.isCurrent(generation)
       try {
-        const now = await this.adapters.now()
-        const remote =
-          this.config.fixture !== null ||
-          readsNow({
-            pace: paceOf(this.adapters.quota(), now),
-            lastAt: this.githubAt,
-            now,
-            visible: window()?.visible,
-          })
         /** @type {Record<string, unknown>} */
-        const reads = {}
+        let reads = {}
+        let at = now
         if (remote) {
           this.githubAt = now
-          for (const space of this.config.spaces) {
-            const read = await this.adapters.readGithub(space)
-            reads[space.name] =
-              'error' in read ? read : { ...read, pulls: await this.adapters.readPulls(space) }
-          }
+          const read = await readSlow(this.adapters, this.config.spaces, { sleep })
+          reads = read.reads
+          at = read.now ?? now
         }
+        if (!current()) return
         // A skipped read has no reads: the last ones stay and their ages are counted again from now.
         this.github = buildGithub({
-          now: await this.adapters.now(),
+          now: at,
           spaces: this.config.spaces,
           reads,
           previous: this.github,
         })
-        await this.readShare(remote)
-        await this.readWorktree()
-        await this.readCommits()
+        await this.readShare(remote, sleep, current)
+        await this.readWorktree(sleep, current)
+        await this.readCommits(sleep, current)
+        if (!current()) return
         this.notifyNew()
       } finally {
-        this.busy.slow = false
+        this.gates.slow.end(generation)
       }
       cx.notify()
     })
   }
 
-  /** The milestones of each repository (when `remote`) and the project fields; a failed read keeps the last one. @param {boolean} remote */
-  async readShare(remote) {
+  /** The milestones of each repository (when `remote`) and the project fields; a failed read keeps the last one. */
+  async readShare(
+    /** @type {boolean} */ remote,
+    /** @type {(ms: number) => Promise<unknown>} */ sleep,
+    /** @type {() => boolean} */ current
+  ) {
     const [milestones, fields] = await Promise.all([
-      remote ? this.adapters.readMilestones(this.config.spaces) : { error: 'not read' },
-      this.adapters.readProjectFields(),
+      remote
+        ? limited(
+            SLOW_STEP_MS,
+            'readMilestones',
+            () => this.adapters.readMilestones(this.config.spaces),
+            sleep
+          )
+        : { error: 'not read' },
+      limited(SLOW_STEP_MS, 'readProjectFields', () => this.adapters.readProjectFields(), sleep),
     ])
+    if (!current()) return
     this.share = {
       milestones: 'byRepo' in milestones ? milestones.byRepo : this.share.milestones,
       fields: 'fields' in fields ? fields.fields : this.share.fields,
@@ -1045,7 +1094,10 @@ export default class Factory extends View {
   }
 
   /** The subject of each open issue's commit message, from the packet its `### Progress` names, by key. */
-  async readCommits() {
+  async readCommits(
+    /** @type {(ms: number) => Promise<unknown>} */ sleep,
+    /** @type {() => boolean} */ current
+  ) {
     for (const space of this.config.spaces) {
       for (const { pair, raw } of pairReads(space, this.github?.spaces[space.name])) {
         for (const issue of raw.issues) {
@@ -1054,9 +1106,15 @@ export default class Factory extends View {
           if (packet === null) continue
           const dir = packet.startsWith('~/') ? `${home()}${packet.slice(1)}` : packet
           const key = issueKey(space, pair, issue.number)
-          const subject = await this.adapters.readCommit(issue.number, dir, pair.tag)
+          const subject = await limited(
+            SLOW_STEP_MS,
+            'readCommit',
+            () => this.adapters.readCommit(issue.number, dir, pair.tag),
+            sleep
+          )
+          if (!current()) return
           if (subject === null) delete this.commits[key]
-          else this.commits[key] = subject
+          else if (typeof subject === 'string') this.commits[key] = subject
         }
       }
     }
@@ -1078,16 +1136,26 @@ export default class Factory extends View {
   }
 
   /** The branch and the lines changed of the open issue's worktree, named in its `### Progress`. */
-  async readWorktree() {
+  async readWorktree(
+    /** @type {(ms: number) => Promise<unknown>} */ sleep,
+    /** @type {() => boolean} */ current
+  ) {
     const open = this.detail === null ? null : this.openIssue()
     if (open === null) return
     const path = parseProgress(open.issue.body).worktree
     if (path === null) return
-    const read = await this.adapters.readWorktree(
-      open.issue.number,
-      path.startsWith('~/') ? `${home()}${path.slice(1)}` : path,
-      open.pair.tag
+    const read = await limited(
+      SLOW_STEP_MS,
+      'readWorktree',
+      () =>
+        this.adapters.readWorktree(
+          open.issue.number,
+          path.startsWith('~/') ? `${home()}${path.slice(1)}` : path,
+          open.pair.tag
+        ),
+      sleep
     )
+    if (!current()) return
     if (!('error' in read)) this.worktree = read
   }
 

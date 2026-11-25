@@ -10,6 +10,7 @@ import { parseGates } from './gates.js'
 import {
   catState,
   formatAge,
+  hourUtc,
   loadBars,
   onPair,
   pairReads,
@@ -295,9 +296,21 @@ export function buildBoard({
   columns['merged']?.sort((a, b) => b.at - a.at)
 
   const stale = github !== null && Object.values(github.spaces).some((s) => s.stale)
+  // A local source whose read failed shows its last value: the note says since when.
+  const notLive = ['machine', 'slots', 'agents'].filter((n) => state.sources[n]?.stale === true)
+  const since = notLive
+    .map((n) => toMs(state.sources[n]?.at))
+    .filter((ms) => ms !== null)
+    .toSorted((a, b) => a - b)[0]
+  const notes = [
+    stale ? 'GitHub is stale: the cards are as of the last good read' : null,
+    notLive.length === 0
+      ? null
+      : `Not live since ${hourUtc(since === undefined ? null : new Date(since).toISOString())}: ${notLive.join(', ')}`,
+  ].filter((n) => n !== null)
   return {
     summary,
-    note: stale ? 'GitHub is stale: the cards are as of the last good read' : null,
+    note: notes.length === 0 ? null : notes.join(' · '),
     filters: {
       spaces: [
         {

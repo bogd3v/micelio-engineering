@@ -223,3 +223,19 @@ export function section(ctx, last = false) {
   const box = v_flex().w_full().px(16).py(14)
   return last ? box : box.border_b(1).border_color(ctx.c['line'])
 }
+
+/**
+ * The body of a section whose source is not live: the note in red, then the content at opacity 0.6, as
+ * Milestones does for a stale GitHub. A live section (`dim` false) is drawn as it is.
+ *
+ * @param {any} ctx
+ * @param {any} box the section, with its heading
+ * @param {{ dim?: boolean, note?: string | null }} m the section's model
+ * @param {any[]} content what the section shows below its heading
+ */
+export function liveOrDim(ctx, box, m, content) {
+  if (m.note !== null && m.note !== undefined)
+    box.child(label(`! ${m.note}`, ctx.c['red'], 11).mt(8))
+  if (m.dim !== true) return box.children(content)
+  return box.child(v_flex().opacity(0.6).children(content))
+}

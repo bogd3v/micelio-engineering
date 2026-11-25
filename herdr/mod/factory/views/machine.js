@@ -3,7 +3,7 @@
 
 import { div } from 'gpui-kit'
 import { h_flex, v_flex } from 'gpui-base'
-import { displayBold, heading, label, section } from './ui.js'
+import { displayBold, heading, label, liveOrDim, section } from './ui.js'
 
 /**
  * @param {any} ctx
@@ -16,15 +16,15 @@ export function machine(ctx, m) {
     : pill.border_1().border_color(ctx.c['cyan']).text_color(ctx.c['cyan'])
   const box = section(ctx).child(heading(ctx, 'machine', 'Machine', m.open, styled))
   if (!m.open) {
-    return box.child(
+    return liveOrDim(ctx, box, m, [
       h_flex()
         .mt(8)
         .gap(4)
         .text_size(12)
         .text_color(ctx.c['muted'])
         .child(div().font_bold().text_color(ctx.c['cyan']).child(m.load))
-        .child(`/ ${m.cores} · RAM ${m.ram} · ${m.temp} · ${m.agents} agents`)
-    )
+        .child(`/ ${m.cores} · RAM ${m.ram} · ${m.temp} · ${m.agents} agents`),
+    ])
   }
   const stat = (/** @type {string} */ name, /** @type {string} */ value) =>
     v_flex()
@@ -35,7 +35,7 @@ export function machine(ctx, m) {
       .border_color(ctx.c['cyan'])
       .child(label(name, ctx.c['muted'], 11))
       .child(div().font_bold().child(value))
-  return box
+  const content = v_flex()
     .child(
       h_flex()
         .items_baseline()
@@ -96,4 +96,5 @@ export function machine(ctx, m) {
         .child(stat('AGENTS', String(m.agents)))
         .child(stat('CPU TEMP', m.temp))
     )
+  return liveOrDim(ctx, box, m, [content])
 }

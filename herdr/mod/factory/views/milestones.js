@@ -22,12 +22,16 @@ export function milestones(ctx, m) {
     .tooltip('Open the Board in a tab')
     .on_click(() => ctx.ui.openBoard())
     .child('OPEN BOARD >')
+  // The cats come from the agents: a stale agents source dims them.
+  const dimmed = (/** @type {any} */ el) => (m.catsDim === true ? el.opacity(0.6) : el)
   // With the Board tab off in Customize the button is gone.
   const box = section(ctx).child(
     heading(ctx, 'milestones', 'Milestones', m.open, ctx.ui.boardOn === false ? div() : open)
   )
   if (!m.open) return box
   if (m.note !== null) box.child(label(`! ${m.note}`, ctx.c['red'], 11).mt(8))
+  if (m.catsNote !== null && m.catsNote !== undefined)
+    box.child(label(`! agents ${m.catsNote}`, ctx.c['red'], 11).mt(8))
   for (const space of m.spaces) {
     const issues = v_flex()
       .mt(12)
@@ -36,7 +40,7 @@ export function milestones(ctx, m) {
           .items_center()
           .gap(8)
           .child(badge(ctx, space.letter, space.colour, 18))
-          .child(cat(ctx, space.masterFile, 24, space.master ?? 'idle'))
+          .child(dimmed(cat(ctx, space.masterFile, 24, space.master ?? 'idle')))
           .child(div().flex_1().font_bold().child(space.name))
           .child(label(`PRs ${space.merged}`, ctx.c['muted'], 11))
       )
@@ -81,7 +85,9 @@ export function milestones(ctx, m) {
                 .mt(3)
                 .items_center()
                 .gap(6)
-                .children(issue.cats.map((/** @type {any} */ k) => cat(ctx, k.file, 16, k.state)))
+                .children(
+                  issue.cats.map((/** @type {any} */ k) => dimmed(cat(ctx, k.file, 16, k.state)))
+                )
                 .child(laneTag(ctx, issue.lane))
                 .child(label(issue.note, ctx.c['muted'], 11).flex_1().min_w(0).truncate())
             )

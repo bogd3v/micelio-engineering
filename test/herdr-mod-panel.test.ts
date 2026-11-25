@@ -199,6 +199,52 @@ describe('the panel', () => {
     expect(stale.header.sync.stale).toBe(true)
   })
 
+  it('a stale machine, slots or agents source dims its sections with the time of its last good read', async () => {
+    const live = await round(NORMAL)
+    expect(live.panel.sections.machine).toMatchObject({ dim: false, note: null })
+    expect(live.panel.sections.slots).toMatchObject({ dim: false, note: null })
+    expect(live.panel.sections.milestones).toMatchObject({ catsDim: false, catsNote: null })
+    const later = live.now + 7 * 60_000
+    const failed = (names: string[], previous = live.state) =>
+      buildPanel({
+        ...live,
+        now: later,
+        state: buildState({
+          now: later,
+          fetched: Object.fromEntries(names.map((n) => [n, { error: 'no answer' }])),
+          previous,
+        }),
+      }).sections
+    const note = 'as of 16:00 UTC · not live'
+    // The machine alone: its last load stays, dimmed; the slots and the workers are live.
+    const machine = failed(['machine'])
+    expect(machine.machine).toMatchObject({ dim: true, note, load: '0.7' })
+    expect(machine.slots).toMatchObject({ dim: false, note: null })
+    expect(machine.workers).toMatchObject({ dim: false, note: null })
+    expect(machine.orphans).toMatchObject({ dim: false, note: null })
+    // The slots: the slots, the workers and the orphans, not the machine.
+    const slots = failed(['slots'])
+    for (const name of ['slots', 'workers', 'orphans'])
+      expect(slots[name], name).toMatchObject({ dim: true, note })
+    expect(slots.machine).toMatchObject({ dim: false, note: null })
+    expect(slots.workers.count).toBe('4/6')
+    // The agents: the cats of Milestones.
+    const agents = failed(['agents'])
+    expect(agents.milestones).toMatchObject({ catsDim: true, catsNote: note, dim: false })
+    expect(agents.machine).toMatchObject({ dim: false, note: null })
+    expect(agents.slots).toMatchObject({ dim: false, note: null })
+  })
+
+  it("the header's sync age grows with the clock while no read lands", async () => {
+    const live = await round(NORMAL)
+    expect(live.panel.header.sync).toEqual({ text: 'sync 0 s', stale: false })
+    // The state of the last read is the same object; only `now` moves.
+    const at = (minutes: number) =>
+      buildPanel({ ...live, now: live.now + minutes * 60_000 }).header.sync
+    expect(at(1)).toEqual({ text: 'sync 1 min', stale: false })
+    expect(at(5)).toEqual({ text: 'sync 5 min', stale: false })
+  })
+
   it('an issue row has its track, gate label, lane tag and the cat file of each agent on it', async () => {
     const { panel } = await round(NORMAL)
     const rows = panel.sections.milestones.spaces[0].issues as {

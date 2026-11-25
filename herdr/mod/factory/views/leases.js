@@ -2,7 +2,7 @@
 
 import { div } from 'gpui-kit'
 import { h_flex } from 'gpui-base'
-import { displayBold, heading, label, section } from './ui.js'
+import { displayBold, heading, label, liveOrDim, section } from './ui.js'
 
 /**
  * @param {any} ctx
@@ -13,7 +13,7 @@ export function leases(ctx, w) {
     heading(ctx, 'workers', 'Worker leases', w.open, label(w.count, ctx.c['muted'], 11))
   )
   if (!w.open) return box
-  return box.child(
+  return liveOrDim(ctx, box, w, [
     h_flex()
       .gap(6)
       .mt(10)
@@ -45,6 +45,6 @@ export function leases(ctx, w) {
                 .tooltip(cell.title)
                 .child(cell.label)
         )
-      )
-  )
+      ),
+  ])
 }

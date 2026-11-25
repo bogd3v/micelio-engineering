@@ -227,12 +227,21 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
       ])
       if (loadavg === null || meminfo === null) return { error: 'cannot read /proc' }
       const hwmon = []
+      /** @param {string} path @returns {Promise<string | null>} */
+      const sensor = async (path) => {
+        try {
+          return await readTextFile(path)
+        } catch {
+          return null
+        }
+      }
       for (let i = 0; i < HWMON_FOLDERS; i += 1) {
-        const name = await readTextFile(`/sys/class/hwmon/hwmon${i}/name`)
+        // A sensor that fails to read is left out as if it were absent: the rest of the machine is read.
+        const name = await sensor(`/sys/class/hwmon/hwmon${i}/name`)
         if (name === null) continue
         hwmon.push({
           name: name.trim(),
-          temp1_input: await readTextFile(`/sys/class/hwmon/hwmon${i}/temp1_input`),
+          temp1_input: await sensor(`/sys/class/hwmon/hwmon${i}/temp1_input`),
         })
       }
       return { at, loadavg, meminfo, hwmon, cores: Number(cores.stdout.trim()) || 1 }
