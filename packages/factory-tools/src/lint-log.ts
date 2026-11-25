@@ -34,7 +34,9 @@ const FORMAT = 'factory-log | <date> | <issue> | <what> | <category> | <destinat
  * breaks it when its date is not a `YYYY-MM-DD` date, its issue or its what is empty, its category (the
  * field before the last) is not one of `LOG_CATEGORIES`, its last field is empty (`-` is the
  * destination until the retro gives one), or `parseLogLines` would not read the same date, issue,
- * category and destination because a `|` lacks a space on a side. A `|` inside the what is kept. Other lines are ignored.
+ * category and destination because a `|` lacks a space on a side, or because a field is empty
+ * between two `|` that share their spaces. A line of four fields after `factory-log |` is the older form without the
+ * destination and passes when its last field is a category. A `|` inside the what is kept. Other lines are ignored.
  *
  * @returns One problem per reason per line, in the order of the text; none when every line is right.
  */
@@ -51,20 +53,22 @@ export function lintLog(body: string): LogProblem[] {
     if (line.endsWith('|')) return add(`the last field is empty; write - for no destination`)
     // split on each `|`, not on ` | `: two neighbours share their spaces in `| |`
     const fields = line.split('|').map((part) => part.trim())
-    if (fields.length < 6) {
+    if (fields.length < 5) {
       return add(
-        `has ${fields.length - 1} fields after "factory-log |", at least 5 are needed (${FORMAT})`
+        `has ${fields.length - 1} fields after "factory-log |", at least 4 are needed (${FORMAT})`
       )
     }
     const [, date = '', issue = '', ...rest] = fields
-    const destination = rest.pop() ?? ''
+    // four fields: the older form, without the destination, where the last field is the category
+    const older = fields.length === 5
+    const destination = older ? '' : (rest.pop() ?? '')
     const category = rest.pop() ?? ''
     if (!isDate(date)) add(`the date "${date}" is not YYYY-MM-DD`)
     if (issue === '') add('the issue is empty')
     if (rest.every((part) => part === '')) add('the what is empty')
     if (!LOG_CATEGORIES.has(category)) {
       add(
-        `the category "${category}" is not one of ${[...LOG_CATEGORIES].join(', ')}; it is the field before the last`
+        `the category "${category}" is not one of ${[...LOG_CATEGORIES].join(', ')}; it is the ${older ? 'last field of a line without a destination' : 'field before the last'}`
       )
     }
     if (problems.length > before) return
@@ -76,7 +80,12 @@ export function lintLog(body: string): LogProblem[] {
       row.category !== category ||
       row.destination !== (destination === '-' ? '' : destination)
     ) {
-      add('the fields must be separated by " | " (a space on each side of every |)')
+      const spaced = !/[^ ]\||\|[^ ]/.test(line)
+      if (spaced && rest.at(-1) === '') {
+        add('a field between the what and the category is empty ("| |")')
+      } else {
+        add('the fields must be separated by " | " (a space on each side of every |)')
+      }
     }
   })
   return problems

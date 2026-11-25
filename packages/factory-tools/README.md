@@ -235,10 +235,10 @@ another category it folds that word into What, and the error shows up in the scr
 The scribe runs it on the text of the comments before it collects the lines.
 
 ```bash
-node <checkout>/packages/factory-tools/dist/cli.js lint-log --file <comment text>
+node <checkout>/packages/factory-tools/dist/cli.js lint-log --file <comment file>
 ```
 
-It reads the file as a comment body and checks each line that starts `factory-log |`; other lines
+It reads the file, which holds the comment's text, as a comment body and checks each line that starts `factory-log |`; other lines
 are ignored. The fields are separated by `|`, a space on each side: `factory-log | <date> |
 <issue> | <what> | <category> | <destination>`. A line breaks the format when:
 
@@ -248,9 +248,13 @@ are ignored. The fields are separated by `|`, a space on each side: `factory-log
 - its category, the field before the last, is not one of `lint`, `test`, `skill`, `standard`,
   `issue` or `docs` (`LOG_CATEGORIES` in `src/parse.ts`, the six of `docs/factory-log.md`);
 - its last field is empty (`-` is the destination until the retro gives one), or the line has
-  fewer than five fields after `factory-log |`;
-- `parseLogLines` would read another date, issue, category or destination from it, as when a `|`
-  has no space on a side.
+  fewer than four fields after `factory-log |`; a line of four fields is the older form without a
+  destination and passes when its last field is a category, and with another word there it fails
+  naming the category;
+- `parseLogLines` would read another date, issue, category or destination from it: when a `|`
+  has no space on a side the reason asks for the spaces, and when every `|` has them but a field is
+  empty (`| |`) the reason names the empty field, as `a field between the what and the category is
+empty ("| |")`.
 
 Exit 0 when every such line is right, or there is none. Exit 1 when one breaks the format; it
 prints each line with its number in the file and the reason. Exit 2 when the arguments are wrong
