@@ -30,6 +30,9 @@ export { parseDecision }
 /** What the locked sign-off says under its buttons. */
 export const LOCKED_NOTE = 'Time form and sign-off unlock after the diff.'
 
+/** What the sign-off says under its buttons when the issue's Progress names no worktree. */
+export const NO_WORKTREE_NOTE = "Open diff needs the worktree in the issue's Progress."
+
 /**
  * The first line of a comment without its markup.
  *
@@ -422,7 +425,7 @@ export function buildNeeds({
             `${row.lane === 'full' ? 'Full' : row.lane === 'normal' ? 'Normal' : 'Express'}: ${laneWhy(comments, raw.maintainer)}`.trim(),
           commit: commits[id.issue] ?? null,
           locked,
-          lockedNote: LOCKED_NOTE,
+          lockedNote: item.worktree === null ? NO_WORKTREE_NOTE : LOCKED_NOTE,
           form: locked
             ? null
             : {

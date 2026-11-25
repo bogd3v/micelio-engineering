@@ -46,7 +46,8 @@ export function parseNumstat(text) {
 }
 
 /**
- * The paths an issue's `### Progress` section names: the worktree, the packet directory, the draft
+ * The paths an issue's Progress section names (the first one headed `## Progress` or
+ * `### Progress`; it ends at the next heading of its own level or higher, or at a `---` line): the worktree, the packet directory, the draft
  * and the branch, each as a `code span` after its word (`worktree`, `packet directory`, `draft`,
  * `branch`). `null` for one it does not name.
  *
@@ -56,11 +57,14 @@ export function parseNumstat(text) {
 export function parseProgress(body) {
   const found = { worktree: null, packet: null, draft: null, branch: null }
   if (typeof body !== 'string') return found
-  const section = /^###\s+Progress\s*$([\s\S]*?)(?=^#{1,3}\s|^---\s*$|(?![\s\S]))/m.exec(body)
-  if (section === null) return found
+  const head = /^(#{2,3})\s+Progress\s*$/m.exec(body)
+  if (head === null) return found
+  const rest = body.slice(head.index + head[0].length)
+  const end = new RegExp(`^#{1,${(head[1] ?? '###').length}}\\s|^---\\s*$`, 'm').exec(rest)
+  const section = end === null ? rest : rest.slice(0, end.index)
   const word =
     /\b(worktree|packet(?: dir(?:ectory)?| folder)?|draft|branch)\b[^`\n]{0,40}?`([^`\n]+)`/gi
-  for (const match of (section[1] ?? '').matchAll(word)) {
+  for (const match of section.matchAll(word)) {
     const key = /** @type {string} */ (match[1]).toLowerCase().split(' ')[0]
     const value = (match[2] ?? '').trim()
     if (key === 'worktree' || key === 'packet' || key === 'draft' || key === 'branch') {

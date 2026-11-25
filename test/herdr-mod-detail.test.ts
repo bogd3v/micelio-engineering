@@ -269,6 +269,38 @@ describe('packet', () => {
     ])
   })
 
+  it('parseProgress reads a Progress section headed ## Progress as it reads one headed ### Progress', () => {
+    const text =
+      'Worktree `/w/wt-9`, packet directory `/p/9/`, branch `fix/factory-9`, draft `/d/draft.md`.'
+    const expected = {
+      worktree: '/w/wt-9',
+      packet: '/p/9/',
+      draft: '/d/draft.md',
+      branch: 'fix/factory-9',
+    }
+    expect(parseProgress(`## Why\n\nx\n\n## Progress\n\n${text}\n`)).toEqual(expected)
+    expect(parseProgress(`## Why\n\nx\n\n### Progress\n\n${text}\n`)).toEqual(expected)
+  })
+
+  it('a ## Progress section ends at the next heading of level 1 or 2, and a ### Progress section at the next heading of level 1 to 3', () => {
+    const none = { worktree: null, packet: null, draft: null, branch: null }
+    const after = 'worktree `/after`'
+    expect(parseProgress(`## Progress\n\nNothing.\n\n## Next\n\n${after}\n`)).toEqual(none)
+    expect(parseProgress(`## Progress\n\nNothing.\n\n# Next\n\n${after}\n`)).toEqual(none)
+    expect(parseProgress(`### Progress\n\nNothing.\n\n### Next\n\n${after}\n`)).toEqual(none)
+    expect(parseProgress(`### Progress\n\nNothing.\n\n## Next\n\n${after}\n`)).toEqual(none)
+    expect(parseProgress(`## Progress\n\nNothing.\n\n---\n\n${after}\n`)).toEqual(none)
+    // a deeper heading, and a ### one under ## Progress, stay inside the section
+    expect(parseProgress(`## Progress\n\n### Round 1\n\nworktree \`/in\`\n`).worktree).toBe('/in')
+    expect(parseProgress(`### Progress\n\n#### Round 1\n\nworktree \`/in\`\n`).worktree).toBe('/in')
+  })
+
+  it('a heading Progress of level 1 or 4 is not read', () => {
+    const none = { worktree: null, packet: null, draft: null, branch: null }
+    expect(parseProgress('# Progress\n\nworktree `/w`\n')).toEqual(none)
+    expect(parseProgress('#### Progress\n\nworktree `/w`\n')).toEqual(none)
+  })
+
   it('a Progress section that names no packet leaves its paths out, and one elsewhere in the body is not read', () => {
     expect(detailOf([], progress('Nothing yet.')).packet.map((p) => p.path)).toEqual([
       null,

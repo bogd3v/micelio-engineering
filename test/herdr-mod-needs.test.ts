@@ -9,6 +9,8 @@ import {
   parseDecision,
   answerLine,
   signOffMessage,
+  LOCKED_NOTE,
+  NO_WORKTREE_NOTE,
   // @ts-expect-error a plain JavaScript module of the mod, with no declarations
 } from '../herdr/mod/factory/lib/needs.js'
 // @ts-expect-error a plain JavaScript module of the mod, with no declarations
@@ -56,6 +58,7 @@ interface Issue {
   number: number
   title: string
   comments: Comment[]
+  body?: string
 }
 /** The panel's `github` for one space `micelio` with these open issues. */
 function github(issues: Issue[], space = 'micelio') {
@@ -69,7 +72,7 @@ function github(issues: Issue[], space = 'micelio') {
           number: i.number,
           title: i.title,
           state: 'open',
-          body: null,
+          body: i.body ?? null,
           created_at: iso(1000),
         })),
         comments: Object.fromEntries(issues.map((i) => [i.number, i.comments])),
@@ -151,6 +154,44 @@ describe('Needs you', () => {
     expect(cardMessages(open)).toEqual([
       { target: 'tfix-master', text: 'approved, sign off #389\ntime: 5m diff' },
     ])
+  })
+
+  it('a sign-off whose issue names its worktree under ## Progress has that worktree, so Open diff is enabled', () => {
+    const body = '## Why\n\nx\n\n## Progress\n\nWorktree `/w/wt-389`, branch `fix/factory-389`.\n'
+    const card = build([{ number: 389, title: 'cms', comments: atG5('full', 12), body }]).cards[0]
+    expect(card.worktree).toBe('/w/wt-389')
+    expect(card.lockedNote).toBe(LOCKED_NOTE)
+    const same = build([
+      {
+        number: 389,
+        title: 'cms',
+        comments: atG5('full', 12),
+        body: body.replace('## P', '### P'),
+      },
+    ]).cards[0]
+    expect(same.worktree).toBe('/w/wt-389')
+    expect(same.lockedNote).toBe(LOCKED_NOTE)
+  })
+
+  it('a sign-off whose Progress names no worktree has a null worktree and the note NO_WORKTREE_NOTE instead of LOCKED_NOTE', () => {
+    expect(NO_WORKTREE_NOTE).toBe("Open diff needs the worktree in the issue's Progress.")
+    for (const body of [undefined, '## Progress\n\nNot started.\n']) {
+      const card = build([{ number: 389, title: 'cms', comments: atG5('full', 12), body }]).cards[0]
+      expect(card.worktree).toBeNull()
+      expect(card.lockedNote).toBe(NO_WORKTREE_NOTE)
+    }
+  })
+
+  it('the items of an express card carry the worktree of a ## Progress section', () => {
+    const body = '## Progress\n\nWorktree `/w/wt-901`.\n'
+    const needs = build([
+      { number: 901, title: 'docs', comments: atG5('express', 5), body },
+      { number: 902, title: 'more docs', comments: atG5('express', 7) },
+    ])
+    const batch = needs.cards.find((c: { kind: string }) => c.kind === 'batch')
+    const of = (n: number) => batch.items.find((i: { number: number }) => i.number === n).worktree
+    expect(of(901)).toBe('/w/wt-901')
+    expect(of(902)).toBeNull()
   })
 
   it('an undo within 10 s sends nothing, and after 10 s exactly one message is sent', () => {
