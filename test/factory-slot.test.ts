@@ -378,6 +378,39 @@ describe('factory-slot.sh run signals', () => {
       )
     )
   })
+
+  it("run stops the command's process group and removes its TMPDIR after it, when the wrapper gets SIGHUP", async () => {
+    const termed = join(root, 'termed')
+    const go = join(root, 'a.go')
+    // On TERM the command stays until `a.go` exists, then dies of the signal. Both loops also end
+    // with the test's directory, so a failed run leaves no process behind.
+    const command =
+      `trap 'touch ${termed}; while [ -d ${root} ] && [ ! -e ${go} ]; do sleep 0.05; done; ` +
+      `trap - TERM; kill -TERM $$' TERM; touch ${upOf('a')}; while [ -d ${root} ]; do sleep 0.05; done`
+    const run = start(['run', '--', 'sh', '-c', command])
+    await until(() => existsSync(join(root, 'slots/heavy/slot-1.owner')), 'the owner file')
+    await until(() => existsSync(upOf('a')), 'the command')
+    const pgid = Number(owner()['pgid'])
+    const wrapper = run.child.pid as number
+    const dir = runTmpOf(wrapper)
+
+    process.kill(wrapper, 'SIGHUP')
+    await until(() => existsSync(termed), 'the command to get TERM')
+    // The command still runs: the wrapper waits for it, and its files stay.
+    expect(run.child.exitCode).toBe(null)
+    expect(run.child.signalCode).toBe(null)
+    expect(existsSync(dir)).toBe(true)
+    expect(existsSync(join(root, 'slots/heavy/slot-1.owner'))).toBe(true)
+
+    release('a')
+    expect(await run.exited).toBe(143)
+    expect(groupAlive(pgid)).toBe(false)
+    expect(existsSync(dir)).toBe(false)
+    expect(existsSync(join(root, 'slots/heavy/slot-1.owner'))).toBe(false)
+    expect(readFileSync(join(root, 'slots/run.log'), 'utf8')).toContain(
+      ` HUP wrapper=${String(wrapper)} pgid=${String(pgid)} `
+    )
+  })
 })
 
 describe('factory-slot.sh acquire and release', () => {
@@ -731,6 +764,57 @@ describe('factory-slot.sh reap', () => {
     expect(existsSync(dir)).toBe(false)
     expect(existsSync(otherName)).toBe(true)
     expect(existsSync(aFile)).toBe(true)
+  })
+
+  it('reap keeps the TMPDIR of a dead wrapper while its command runs', async () => {
+    const { run, pgid } = await startOwned('')
+    const wrapper = run.child.pid as number
+    const dir = runTmpOf(wrapper)
+    process.kill(wrapper, 'SIGKILL')
+    await run.exited
+    // Another dead wrapper's directory, which no owner file names.
+    const other = runTmpOf(spawnSync('true').pid)
+    mkdirSync(other)
+
+    const kept = slot(['reap'], {}, pathWith('', {}))
+    expect(kept.code).toBe(0)
+    expect(kept.out).toBe(`removed ${other}\n`)
+    expect(existsSync(dir)).toBe(true)
+    expect(existsSync(owned())).toBe(true)
+    expect(groupAlive(pgid)).toBe(true)
+
+    process.kill(-pgid, 'SIGKILL')
+    await until(() => !groupAlive(pgid), 'the command to die')
+    const r = slot(['reap'], {}, pathWith('', {}))
+    expect(r.out).toContain(`removed ${dir}`)
+    expect(existsSync(dir)).toBe(false)
+  })
+
+  it('reap removes the TMPDIR of a dead wrapper whose command is dead, though its owner file stays', () => {
+    // The command can die after reap has looked at its owner file. An `rm` that keeps owner files
+    // leaves the one of a dead PID in place, as that order does.
+    const bin = mkdtempSync(join(root, 'bin-'))
+    const real = join(linkedTools(), 'rm')
+    writeFileSync(
+      join(bin, 'rm'),
+      `#!/bin/sh\ncase "$*" in *.owner) exit 0 ;; esac\nexec ${real} "$@"\n`
+    )
+    chmodSync(join(bin, 'rm'), 0o755)
+    const wrapper = spawnSync('true').pid
+    const pid = spawnSync('true').pid
+    mkdirSync(join(root, 'slots/heavy'), { recursive: true })
+    writeFileSync(
+      owned(),
+      `pid=${String(pid)}\npgid=${String(pid)}\nwrapper=${String(wrapper)}\nagent=\nstart=0\ncommand=x\n`
+    )
+    const dir = runTmpOf(wrapper)
+    mkdirSync(dir, { recursive: true })
+
+    const r = slot(['reap'], {}, `${bin}:${linkedTools()}`)
+    expect(r.code).toBe(0)
+    expect(existsSync(owned())).toBe(true)
+    expect(r.out).toContain(`removed ${dir}`)
+    expect(existsSync(dir)).toBe(false)
   })
 
   it('reap keeps a slot younger than the grace period, though neither herdr nor hc lists its agent', async () => {

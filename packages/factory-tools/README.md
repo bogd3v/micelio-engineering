@@ -352,7 +352,7 @@ later. The entry is a mismatch, `timed out after <n> min`, its output so far is 
 and the next entry runs. In a `k failed of n` figure the same holds: the first run that times out
 makes the entry that mismatch, and its other runs do not run.
 Because a run's group is not `verify-draft`'s own, a signal sent to `verify-draft`'s group (as
-`herdr/factory-slot.sh run` does on `INT` and `TERM`) would not reach it: so `verify-draft` passes a
+`herdr/factory-slot.sh run` does on `INT`, `TERM` and `HUP`) would not reach it: so `verify-draft` passes a
 `SIGINT`, `SIGTERM` or `SIGHUP` it gets on to the group of the run in progress (`SIGKILL` 10 s later
 if the group is still there), starts no other run, and then ends on that signal. A process a
 command leaves running in its group after the command ends gets `SIGKILL` when `verify-draft` exits.
