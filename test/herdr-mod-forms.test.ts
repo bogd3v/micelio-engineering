@@ -434,3 +434,76 @@ describe('Log a correction', () => {
     expect(sent).toEqual([['tfix-master', 'log #792 | ran a \\| b and c\\|d | test']])
   })
 })
+
+describe('an issue of another repository of the space', () => {
+  it('the time note and the correction of an issue of another repository name it as owner/repo#N', () => {
+    const spaces = readConfig({
+      spaces: [
+        { name: 'micelio', repo: 'bogd3v/micelio-engineering', milestone: 1 },
+        { name: 'micelio', repo: 'bogd3v/micelio-cms', milestone: 12, tag: 'c' },
+      ],
+    }).spaces
+    const gate1 = [
+      {
+        user: { login: ME },
+        body: '**Gate 1 (master): pass**\n\nlane: normal\n',
+        created_at: iso(300),
+        id: 1,
+      },
+    ]
+    const issue = { number: 410, title: 'x', state: 'open', body: null, created_at: iso(1000) }
+    const github = buildGithub({
+      now: NOW,
+      spaces,
+      reads: {
+        micelio: {
+          at: new Date(NOW).toISOString(),
+          issues: [issue],
+          comments: { 410: gate1 },
+          maintainer: ME,
+          // `readPulls` marks a pull request of the other repository with it.
+          pulls: [{ ...pull(77, 'Closes #410'), repo: 'bogd3v/micelio-cms' }],
+          others: [{ issues: [issue], comments: { 410: gate1 } }],
+        },
+      },
+    })
+    const form = { open: true, read: 'diff', readMin: '6' }
+    const cards = timeCards(
+      buildNeeds({
+        now: NOW,
+        config: { spaces },
+        github,
+        agents,
+        timeForms: { 'bogd3v/micelio-cms#410': form },
+      })
+    )
+    // One card, for the issue of the pull request's own repository; #410 of the space's has none.
+    expect(cards.map((c) => [c.key, c.head])).toEqual([
+      ['time:micelio bogd3v/micelio-cms#410', 'micelio bogd3v/micelio-cms#410 · PR open · G6'],
+    ])
+    expect(cardMessages(cards[0])).toEqual([
+      { target: 'tfix-master', text: 'time bogd3v/micelio-cms#410: time: 6m diff' },
+    ])
+    expect(timeMessage(410, 'time: 1m diff')).toBe('time #410: time: 1m diff')
+    // The correction form takes `owner/repo#N` as well as `#N`, and names the issue as it came.
+    const line = correctionLine(
+      { issue: 'bogd3v/micelio-cms#410', what: 'the draft was wrong', category: 'docs' },
+      NOW
+    )
+    expect(line).toMatchObject({
+      number: 410,
+      repo: 'bogd3v/micelio-cms',
+      send: 'log bogd3v/micelio-cms#410 | the draft was wrong | docs',
+      posted: 'factory-log | 2026-11-24 | bogd3v/micelio-cms#410 | the draft was wrong | docs | -',
+      error: null,
+    })
+    expect(correctionLine({ issue: '#410', what: 'x', category: 'docs' }, NOW)).toMatchObject({
+      repo: null,
+      send: 'log #410 | x | docs',
+    })
+    expect(emptyLogForm('bogd3v/micelio-cms#410').issue).toBe('bogd3v/micelio-cms#410')
+    expect(
+      correctionLine({ issue: 'micelio-cms#410', what: 'x', category: 'docs' }, NOW).error
+    ).toBe('Issue: #n.')
+  })
+})

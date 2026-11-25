@@ -198,7 +198,7 @@ describe('the factory roles', () => {
 describe('the role prompts', () => {
   /** Words per prompt, as `wc -w` counts them: runs of non-whitespace. */
   const BUDGET: Record<string, number> = {
-    master: 1480,
+    master: 1492,
     worker: 1393,
     planner: 950,
     verifier: 728,

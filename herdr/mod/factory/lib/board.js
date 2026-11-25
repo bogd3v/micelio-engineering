@@ -7,7 +7,16 @@
 import { catFile } from './cat.js'
 import { dependsOn } from './issues.js'
 import { parseGates } from './gates.js'
-import { catState, formatAge, loadBars, SPACE_COLOURS } from './panel.js'
+import {
+  catState,
+  formatAge,
+  loadBars,
+  onPair,
+  pairReads,
+  pairsOf,
+  refOf,
+  SPACE_COLOURS,
+} from './panel.js'
 import { toMs } from './time.js'
 
 /** The seven columns of the design, left to right. */
@@ -51,21 +60,21 @@ export function columnOf(gates) {
 
 /**
  * The factory's share of a release line: the issues of the milestones whose front is `Foundations`
- * over the issues of every milestone of the same line, in the repositories of the spaces. A milestone's
- * issues are its `open_issues` and `closed_issues` as REST returns them. The line is that of the first
- * space whose milestone is in `.github/project-fields.json`; the front of a repository named in
- * `frontByRepository` is that one's.
+ * over the issues of every milestone of the same line, in the repositories of every pair of the spaces. A
+ * milestone's issues are its `open_issues` and `closed_issues` as REST returns them. The line is that of the
+ * first pair whose milestone is in `.github/project-fields.json`, the spaces and their pairs in order; the
+ * front of a repository named in `frontByRepository` is that one's.
  *
  * @param {object} input
  * @param {Record<string, { releaseLine?: string, front?: string, frontByRepository?: Record<string, string> }>} input.fields `.github/project-fields.json`, by milestone title
  * @param {Record<string, { number: number, title: string, open_issues: number, closed_issues: number }[]>} input.milestones each repository's milestones, `owner/name` to its list
- * @param {{ repo: string, milestone: number }[]} input.spaces
- * @returns {{ line: string, foundations: number, total: number, percent: number } | null} `null` when no space's milestone gives a line
+ * @param {{ repo: string, milestone: number, pairs?: import('./panel.js').Pair[] }[]} input.spaces
+ * @returns {{ line: string, foundations: number, total: number, percent: number } | null} `null` when no pair's milestone gives a line
  */
 export function factoryShare({ fields, milestones, spaces }) {
   let line = null
-  for (const space of spaces) {
-    const own = milestones[space.repo]?.find((m) => m.number === space.milestone)
+  for (const pair of spaces.flatMap((space) => pairsOf(space))) {
+    const own = milestones[pair.repo]?.find((m) => m.number === pair.milestone)
     const found = own === undefined ? undefined : fields[own.title]?.releaseLine
     if (found !== undefined) {
       line = found
@@ -172,108 +181,113 @@ export function buildBoard({
   config.spaces.forEach((space, at) => {
     const letter = (space.name[0] ?? '?').toUpperCase()
     const colour = SPACE_COLOURS[at % SPACE_COLOURS.length] ?? 'muted'
-    const raw = github?.spaces[space.name]?.raw ?? null
+    const reads = pairReads(space, github?.spaces[space.name])
     const inSpace = agents.filter((a) => a.space?.name === space.name)
     const master = inSpace.find((a) => a.role === 'master') ?? null
-    const issues = raw?.issues ?? []
-    const open = new Set(issues.filter((i) => i.state !== 'closed').map((i) => i.number))
-    const closed = issues.length - open.size
+    const all = reads.flatMap((r) => r.raw.issues)
+    const closed = all.filter((i) => i.state === 'closed').length
     spaceFilters.push({
       key: space.name,
       label: space.name.toUpperCase(),
       letter,
       colour,
-      merged: raw === null ? '—' : `${closed}/${issues.length}`,
+      merged: reads.length === 0 ? '—' : `${closed}/${all.length}`,
     })
     if (filter.space !== 'all' && filter.space !== space.name) return
-    for (const issue of issues) {
-      const isClosed = issue.state === 'closed'
-      const gates = parseGates({
-        comments: raw?.comments[issue.number] ?? [],
-        maintainer: raw?.maintainer ?? '',
-        closed: isClosed,
-        needsYou: inSpace.some((a) => a.needsYou && a.issue === issue.number),
-      })
-      const lane = gates.lane.toUpperCase()
-      if (filter.lane !== 'all' && filter.lane !== lane) continue
-      const base = {
-        space: space.name,
-        letter,
-        colour,
-        number: issue.number,
-        id: `#${issue.number}`,
-        lane,
-      }
-      if (isClosed) {
-        const closedAt = toMs(/** @type {{ closed_at?: string }} */ (issue).closed_at)
-        if (closedAt === null || dayOf(closedAt) !== dayOf(now)) continue
-        columns['merged']?.push({
-          ...base,
-          round: '',
-          text: 'Merged today',
-          agent: null,
-          cat: null,
-          state: null,
-          time: `${new Date(closedAt).toISOString().slice(11, 16)}`,
-          at: closedAt,
-          mark: null,
+    for (const { pair, raw } of reads) {
+      const ofPair = inSpace.filter((a) => onPair(a, pair))
+      const issues = raw.issues
+      const open = new Set(issues.filter((i) => i.state !== 'closed').map((i) => i.number))
+      for (const issue of issues) {
+        const isClosed = issue.state === 'closed'
+        const gates = parseGates({
+          comments: raw.comments[issue.number] ?? [],
+          maintainer: raw.maintainer,
+          closed: isClosed,
+          needsYou: ofPair.some((a) => a.needsYou && a.issue === issue.number),
         })
-        continue
-      }
-      const labels = /** @type {{ labels?: { name?: string }[] }} */ (issue).labels ?? []
-      const column = columnOf(gates)
-      // Status Ready is the `ready` label that `issue-ready` sets with it; an open issue with no gate comment and no label is still Todo.
-      if (column === 'ready' && !labels.some((l) => l.name === 'ready')) continue
-      const onIt = inSpace.filter((a) => a.issue === issue.number && a.role !== null)
-      const wanted = COLUMN_ROLE[/** @type {keyof typeof COLUMN_ROLE} */ (column)]
-      const agent =
-        onIt.find((a) => a.role === wanted) ??
-        (wanted === 'master' ? master : null) ??
-        (column === 'ready' ? null : (onIt[0] ?? null))
-      const blockedBy = dependsOn(issue.body).filter((n) => open.has(n) && n !== issue.number)
-      const needs = gates.marks.includes('needs') || onIt.some((a) => a.needsYou)
-      const held = gates.marks.includes('held')
-      const red = gates.marks.includes('red') || (column === 'ready' && gates.rounds.length > 0)
-      const mark = red ? 'red' : needs ? 'needs' : held ? 'held' : null
-      const since = gates.since ?? toMs(issue.created_at)
-      const age = since === null ? null : Math.max(0, now - since)
-      const last = gates.rounds.at(-1)
-      const text =
-        blockedBy.length > 0 && gates.rounds.length === 0
-          ? `Blocked by ${blockedBy.map((n) => `#${n}`).join(', ')}`
-          : onIt.some((a) => a.needsYou)
-            ? `${onIt.find((a) => a.needsYou)?.role} is blocked: it may need you`
-            : column === 'g5'
-              ? 'Waits for your sign-off'
-              : mark === 'red' && last?.summary
-                ? last.summary
-                : (issue.title ?? '')
-      const state =
-        agent === null
-          ? 'idle'
-          : mark === 'needs'
-            ? 'needs'
-            : mark === 'held'
-              ? 'held'
-              : mark === 'red'
-                ? 'red'
-                : catState(agent.status)
-      const lead = mark === 'needs' ? 'waiting ' : mark === 'held' ? 'held ' : ''
-      columns[column]?.push({
-        ...base,
-        round: gates.round > 0 ? `r${gates.round}${mark === 'held' ? ' · HELD' : ''}` : '',
-        text,
-        agent:
+        const lane = gates.lane.toUpperCase()
+        if (filter.lane !== 'all' && filter.lane !== lane) continue
+        const base = {
+          space: space.name,
+          letter,
+          colour,
+          number: issue.number,
+          id: refOf(space, pair, issue.number),
+          repo: pair.repo,
+          lane,
+        }
+        if (isClosed) {
+          const closedAt = toMs(/** @type {{ closed_at?: string }} */ (issue).closed_at)
+          if (closedAt === null || dayOf(closedAt) !== dayOf(now)) continue
+          columns['merged']?.push({
+            ...base,
+            round: '',
+            text: 'Merged today',
+            agent: null,
+            cat: null,
+            state: null,
+            time: `${new Date(closedAt).toISOString().slice(11, 16)}`,
+            at: closedAt,
+            mark: null,
+          })
+          continue
+        }
+        const labels = /** @type {{ labels?: { name?: string }[] }} */ (issue).labels ?? []
+        const column = columnOf(gates)
+        // Status Ready is the `ready` label that `issue-ready` sets with it; an open issue with no gate comment and no label is still Todo.
+        if (column === 'ready' && !labels.some((l) => l.name === 'ready')) continue
+        const onIt = ofPair.filter((a) => a.issue === issue.number && a.role !== null)
+        const wanted = COLUMN_ROLE[/** @type {keyof typeof COLUMN_ROLE} */ (column)]
+        const agent =
+          onIt.find((a) => a.role === wanted) ??
+          (wanted === 'master' ? master : null) ??
+          (column === 'ready' ? null : (onIt[0] ?? null))
+        const blockedBy = dependsOn(issue.body).filter((n) => open.has(n) && n !== issue.number)
+        const needs = gates.marks.includes('needs') || onIt.some((a) => a.needsYou)
+        const held = gates.marks.includes('held')
+        const red = gates.marks.includes('red') || (column === 'ready' && gates.rounds.length > 0)
+        const mark = red ? 'red' : needs ? 'needs' : held ? 'held' : null
+        const since = gates.since ?? toMs(issue.created_at)
+        const age = since === null ? null : Math.max(0, now - since)
+        const last = gates.rounds.at(-1)
+        const text =
+          blockedBy.length > 0 && gates.rounds.length === 0
+            ? `Blocked by ${blockedBy.map((n) => refOf(space, pair, n)).join(', ')}`
+            : onIt.some((a) => a.needsYou)
+              ? `${onIt.find((a) => a.needsYou)?.role} is blocked: it may need you`
+              : column === 'g5'
+                ? 'Waits for your sign-off'
+                : mark === 'red' && last?.summary
+                  ? last.summary
+                  : (issue.title ?? '')
+        const state =
           agent === null
-            ? null
-            : (agent.name ?? (agent.role === 'master' ? 'master' : agent.address)),
-        cat: agent === null ? null : (catFile(agent.role, state, 16, theme) ?? null),
-        role: agent?.role ?? null,
-        state,
-        time: age === null ? '—' : `${lead}${formatAge(age)}`,
-        at: age ?? 0,
-        mark,
-      })
+            ? 'idle'
+            : mark === 'needs'
+              ? 'needs'
+              : mark === 'held'
+                ? 'held'
+                : mark === 'red'
+                  ? 'red'
+                  : catState(agent.status)
+        const lead = mark === 'needs' ? 'waiting ' : mark === 'held' ? 'held ' : ''
+        columns[column]?.push({
+          ...base,
+          round: gates.round > 0 ? `r${gates.round}${mark === 'held' ? ' · HELD' : ''}` : '',
+          text,
+          agent:
+            agent === null
+              ? null
+              : (agent.name ?? (agent.role === 'master' ? 'master' : agent.address)),
+          cat: agent === null ? null : (catFile(agent.role, state, 16, theme) ?? null),
+          role: agent?.role ?? null,
+          state,
+          time: age === null ? '—' : `${lead}${formatAge(age)}`,
+          at: age ?? 0,
+          mark,
+        })
+      }
     }
   })
   // The oldest wait of the maintainer first, the newest merge first, the rest by space and number.

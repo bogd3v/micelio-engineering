@@ -80,13 +80,22 @@ export function timeLine({ read, readMin = '', hand = 'none', handMin = '', rema
 }
 
 /**
- * The line the log form sends: `time #N: <the time line>`.
+ * How a line names an issue: `#N` for a number, the reference itself (`#N` or `owner/repo#N`) for a string.
  *
- * @param {number} number the issue the pull request closes
+ * @param {number | string} issue
+ * @returns {string}
+ */
+export const refText = (issue) => (typeof issue === 'number' ? `#${issue}` : issue)
+
+/**
+ * The line the log form sends: `time #N: <the time line>` (`time owner/repo#N: …` for an issue of
+ * another repository of the space).
+ *
+ * @param {number | string} issue the issue the pull request closes: its number, or its reference
  * @param {string} line a line `time: …`
  * @returns {string}
  */
-export const timeMessage = (number, line) => `time #${number}: ${line}`
+export const timeMessage = (issue, line) => `time ${refText(issue)}: ${line}`
 
 /**
  * The whole minutes a hands-on timer ran, added to what the field held, never below 1 for a run.

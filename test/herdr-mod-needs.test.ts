@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   buildNeeds,
@@ -6,10 +8,15 @@ import {
   notificationFor,
   parseDecision,
   answerLine,
+  signOffMessage,
   // @ts-expect-error a plain JavaScript module of the mod, with no declarations
 } from '../herdr/mod/factory/lib/needs.js'
 // @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { buildGithub } from '../herdr/mod/factory/lib/panel.js'
+// @ts-expect-error a plain JavaScript module of the mod, with no declarations
+import { createAdapters, readConfig } from '../herdr/mod/factory/adapters.js'
+// @ts-expect-error a plain JavaScript module of the mod, with no declarations
+import { buildState } from '../herdr/mod/factory/lib/state.js'
 // @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { parseAgents } from '../herdr/mod/factory/lib/agents.js'
 // @ts-expect-error a plain JavaScript module of the mod, with no declarations
@@ -326,5 +333,191 @@ describe('Needs you', () => {
       say("**Maintainer's decision, relayed by the master**: #792 option A", 1),
     ]
     expect(parseDecision(answered, ME)).toBeNull()
+  })
+})
+
+describe('a space of two repositories', () => {
+  const ROOT = fileURLToPath(new URL('../', import.meta.url))
+  const PAIRS = [
+    { name: 'fixture-space', repo: 'bogd3v/fixture', milestone: 1 },
+    { name: 'fixture-space', repo: 'bogd3v/fixture-two', milestone: 3, tag: 'tw' },
+  ]
+  const two = readConfig({ spaces: PAIRS }) as { spaces: { name: string }[] }
+  const issue = (number: number) => ({
+    number,
+    title: `issue ${number}`,
+    state: 'open',
+    body: null,
+    created_at: iso(1000),
+  })
+  /** The `github` of one space whose two pairs each have these issues, with these comments. */
+  const githubOf = (own: Issue[], other: Issue[]) =>
+    buildGithub({
+      now: NOW,
+      spaces: two.spaces,
+      reads: {
+        'fixture-space': {
+          at: iso(0),
+          issues: own.map((i) => issue(i.number)),
+          comments: Object.fromEntries(own.map((i) => [i.number, i.comments])),
+          maintainer: ME,
+          others: [
+            {
+              issues: other.map((i) => issue(i.number)),
+              comments: Object.fromEntries(other.map((i) => [i.number, i.comments])),
+            },
+          ],
+        },
+      },
+    })
+  const master = parseAgents([
+    {
+      address: 'tfix-master',
+      name: null,
+      parent: null,
+      status: 'idle',
+      foreground: { argv: ['claude', '--agent', 'master'] },
+      labels: { 'herdr.space': 'sp-fixture', where: 'fixture-space / 1' },
+    },
+  ])
+  const signOffs = (needs: { cards: { kind: string }[] }) =>
+    needs.cards.filter((c) => c.kind === 'signoff') as unknown as {
+      key: string
+      head: string
+      ref: string
+      locked: boolean
+      master: string
+    }[]
+
+  /** "Needs you" of the `spaces/` recordings, read as `main.js` reads them. */
+  async function fixtureNeeds() {
+    const config = readConfig({
+      checkout: ROOT.replace(/\/$/, ''),
+      maintainer: ME,
+      fixture: ['test/fixtures/herdr-mod/spaces', 'test/fixtures/herdr-mod'],
+      spaces: PAIRS,
+    })
+    const a = createAdapters({
+      exec: () => Promise.reject(new Error('a fixture runs no program')),
+      readTextFile: async (path: string) => {
+        try {
+          return await readFile(path, 'utf8')
+        } catch {
+          return null
+        }
+      },
+      terminals: () => [],
+      config,
+    })
+    const now: number = await a.now()
+    const state = buildState({ now, fetched: { agents: await a.readAgents() } })
+    const reads: Record<string, unknown> = {}
+    for (const space of config.spaces) {
+      reads[space.name] = { ...(await a.readGithub(space)), pulls: await a.readPulls(space) }
+    }
+    const diffs = Object.fromEntries(
+      Object.entries(await a.readDiffs()).map(([k, minutes]) => [k, now - Number(minutes) * MIN])
+    )
+    return buildNeeds({
+      now,
+      config,
+      github: buildGithub({ now, spaces: config.spaces, reads }),
+      agents: state.sources.agents.value,
+      diffs,
+    })
+  }
+
+  it("the sign-off of an issue of another repository of the space is approved, sign off bogd3v/fixture-two#N, sent to the space's master", () => {
+    const needs = buildNeeds({
+      now: NOW,
+      config: two,
+      github: githubOf([], [{ number: 7, title: 'x', comments: atG5('normal', 20) }]),
+      agents: master,
+      diffs: { 'bogd3v/fixture-two#7': NOW - 4 * MIN },
+    })
+    const [card] = signOffs(needs)
+    expect(card).toMatchObject({
+      key: 'signoff:fixture-space bogd3v/fixture-two#7',
+      head: 'fixture-space bogd3v/fixture-two#7 · G5',
+      ref: 'bogd3v/fixture-two#7',
+      repo: 'bogd3v/fixture-two',
+      locked: false,
+    })
+    expect(cardMessages(card)).toEqual([
+      { target: 'tfix-master', text: 'approved, sign off bogd3v/fixture-two#7\ntime: 4m diff' },
+    ])
+    expect(signOffMessage('bogd3v/fixture-two#7')).toBe('approved, sign off bogd3v/fixture-two#7')
+    expect(signOffMessage(7)).toBe('approved, sign off #7')
+  })
+
+  it('opening the diff of #5 does not unlock the sign-off of bogd3v/fixture-two#5', () => {
+    const both = githubOf(
+      [{ number: 5, title: 'x', comments: atG5('normal', 20) }],
+      [{ number: 5, title: 'y', comments: atG5('normal', 30) }]
+    )
+    const cards = signOffs(
+      buildNeeds({ now: NOW, config: two, github: both, agents: master, diffs: { 5: NOW - MIN } })
+    )
+    expect(cards.map((c) => [c.ref, c.locked])).toEqual([
+      ['bogd3v/fixture-two#5', true],
+      ['#5', false],
+    ])
+    expect(cards.flatMap((c) => cardMessages(c))).toEqual([
+      { target: 'tfix-master', text: 'approved, sign off #5\ntime: 1m diff' },
+    ])
+    // The other way round: only the issue of the other repository is unlocked.
+    const other = signOffs(
+      buildNeeds({
+        now: NOW,
+        config: two,
+        github: both,
+        agents: master,
+        diffs: { 'bogd3v/fixture-two#5': NOW - MIN },
+      })
+    )
+    expect(other.map((c) => [c.ref, c.locked])).toEqual([
+      ['bogd3v/fixture-two#5', false],
+      ['#5', true],
+    ])
+  })
+
+  it('an answer to the decision on bogd3v/fixture-two#5 is answer bogd3v/fixture-two#5: A', async () => {
+    const needs = await fixtureNeeds()
+    const card = needs.cards.find((c: { kind: string }) => c.kind === 'decision')
+    expect(card).toMatchObject({
+      key: 'decision:fixture-space bogd3v/fixture-two#5',
+      head: 'fixture-space bogd3v/fixture-two#5 · G2 · r1',
+      ref: 'bogd3v/fixture-two#5',
+      master: 'tfix-master',
+      text: 'Which schema does the block keep?',
+    })
+    // worker-tw5 is the one that waits, not worker-5.
+    expect(card.cat.state).toBe('needs')
+    expect(answerLine(card.ref, 'A')).toBe('answer bogd3v/fixture-two#5: A')
+    expect(answerLine(card.ref, 'B', 'a new one')).toBe(
+      'answer bogd3v/fixture-two#5: B — a new one'
+    )
+    const sent: [string, string][] = []
+    const outbox = createOutbox({ send: (t: string, x: string) => sent.push([t, x]) })
+    outbox.start(0, `answer ${card.ref}`, [
+      { target: card.master, text: answerLine(card.ref, 'A') },
+    ])
+    outbox.tick(10_000)
+    expect(sent).toEqual([['tfix-master', 'answer bogd3v/fixture-two#5: A']])
+  })
+
+  it("the express card of a space of two repositories signs off #6 and bogd3v/fixture-two#6 in one message to the space's master", async () => {
+    const needs = await fixtureNeeds()
+    const batches = needs.cards.filter((c: { kind: string }) => c.kind === 'batch')
+    expect(batches).toHaveLength(1)
+    const [batch] = batches
+    expect(batch.key).toBe('express:fixture-space')
+    expect(batch.items.map((i: { label: string }) => i.label)).toEqual([
+      'fixture-space#6',
+      'fixture-space bogd3v/fixture-two#6',
+    ])
+    expect(cardMessages(batch)).toEqual([
+      { target: 'tfix-master', text: 'approved, sign off #6 bogd3v/fixture-two#6' },
+    ])
   })
 })

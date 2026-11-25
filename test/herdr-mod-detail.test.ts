@@ -347,3 +347,80 @@ describe('header and the closing sentence', () => {
     expect(await a.readWorktree(1, '/x')).toEqual({ error: 'no worktree-1.json in the fixture' })
   })
 })
+
+describe('an issue of another repository of the space', () => {
+  it('the detail of an issue of another repository names that repository and reads its tagged worktree and comments', async () => {
+    const config = readConfig({
+      checkout: ROOT.replace(/\/$/, ''),
+      maintainer: 'ale9420',
+      fixture: ['test/fixtures/herdr-mod/spaces', 'test/fixtures/herdr-mod'],
+      spaces: [
+        { name: 'fixture-space', repo: 'bogd3v/fixture', milestone: 1 },
+        { name: 'fixture-space', repo: 'bogd3v/fixture-two', milestone: 3, tag: 'tw' },
+      ],
+    })
+    const a = createAdapters({
+      exec: () => Promise.reject(new Error('a fixture runs no program')),
+      readTextFile,
+      terminals: () => [],
+      config,
+    })
+    const github = await a.readGithub(config.spaces[0])
+    const [other] = github.others
+    const issue = other.issues.find((i: { number: number }) => i.number === 5)
+    const read = await a.readAgents()
+    const detail = buildDetail({
+      issue,
+      comments: other.comments[5],
+      maintainer: github.maintainer,
+      space: {
+        repo: 'bogd3v/fixture-two',
+        letter: 'F',
+        colour: 'space-m',
+        name: 'fixture-space',
+        tag: 'tw',
+        ref: 'bogd3v/fixture-two#5',
+        tags: ['tw'],
+      },
+      agents: parseAgents(read.terminals),
+      terminals: read.terminals,
+      stacks: [{ name: 'wt-5' }, { name: 'wt-tw5' }],
+      worktree: await a.readWorktree(5, '~/Git/fixture-two/wt-tw5', 'tw'),
+      theme: 'dark',
+      now: Date.parse('2026-11-24T16:00:00Z'),
+    }) as Detail & { decision: { ref: string; question: string } }
+    expect(detail.header).toEqual({
+      letter: 'F',
+      colour: 'space-m',
+      lane: 'FULL',
+      id: 'bogd3v/fixture-two#5',
+      branch: 'feat/factory-tw5',
+      stack: 'stack up: wt-tw5',
+      added: 40,
+      removed: 3,
+    })
+    // Its comments are those of `comments-tw5.json`: the open decision, answered by its reference.
+    expect(detail.decision).toMatchObject({
+      ref: 'bogd3v/fixture-two#5',
+      question: 'Which schema does the block keep?',
+    })
+    // Its agents are the master and worker-tw5, not worker-5 of the space's repository.
+    expect(detail.agents.map((r) => r.name)).toEqual(['master', 'worker-tw5'])
+    expect(await a.readWorktree(5, '/x')).toEqual({ error: 'no worktree-5.json in the fixture' })
+  })
+
+  it('the commit subject of an issue of another repository is read from commit-<tag><n>.txt', async () => {
+    const a = createAdapters({
+      exec: () => Promise.reject(new Error('a fixture runs no program')),
+      readTextFile,
+      terminals: () => [],
+      config: readConfig({
+        checkout: ROOT.replace(/\/$/, ''),
+        fixture: ['test/fixtures/herdr-mod/spaces'],
+        spaces: [],
+      }),
+    })
+    expect(await a.readCommit(5, '/x', 'tw')).toBe('feat(two): the issue of the other repository')
+    expect(await a.readCommit(5, '/x')).toBeNull()
+  })
+})

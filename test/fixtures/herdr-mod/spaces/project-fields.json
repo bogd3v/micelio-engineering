@@ -1,0 +1,10 @@
+{
+  "Fixture · Catalogue": {
+    "releaseLine": "0.9",
+    "front": "Foundations"
+  },
+  "Fixture · Plugins": {
+    "releaseLine": "0.9",
+    "front": "Plugin core"
+  }
+}

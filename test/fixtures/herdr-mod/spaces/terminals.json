@@ -1,0 +1,51 @@
+[
+  {
+    "address": "tfix-master",
+    "name": null,
+    "parent": null,
+    "status": "idle",
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "master"
+      ]
+    },
+    "labels": {
+      "herdr.space": "sp-fixture",
+      "where": "fixture-space / 1"
+    }
+  },
+  {
+    "address": "tfix-w5",
+    "name": "worker-5",
+    "parent": "tfix-master",
+    "status": "working",
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "worker",
+        "--model",
+        "sonnet"
+      ]
+    },
+    "labels": {}
+  },
+  {
+    "address": "tfix-wtw5",
+    "name": "worker-tw5",
+    "parent": "tfix-master",
+    "status": "blocked",
+    "foreground": {
+      "argv": [
+        "claude",
+        "--agent",
+        "worker",
+        "--model",
+        "sonnet"
+      ]
+    },
+    "labels": {}
+  }
+]

@@ -127,6 +127,28 @@ describe('install.sh', () => {
     expect(dockerHost(without)).toBe(`unix:///run/user/${uid}/podman/podman.sock`)
   })
 
+  it('install.sh writes a spaces file whose entries share a name into the layout as it is', () => {
+    const spaces = [
+      { name: 'micelio', repo: 'bogd3v/micelio', milestone: 18, epic: 872 },
+      { name: 'micelio', repo: 'bogd3v/micelio-cms', milestone: 12, tag: 'c' },
+      { name: 'micelio', repo: 'bogd3v/micelio-plugin-core', milestone: 8, tag: 'pc' },
+      { name: 'micelio-engineering', repo: 'bogd3v/micelio-engineering', milestone: 12 },
+    ]
+    const dir = mkdtempSync(join(tmpdir(), 'spaces-'))
+    try {
+      const file = join(dir, 'spaces.json')
+      writeFileSync(file, JSON.stringify(spaces))
+      expect(install('--maintainer', 'someone', '--spaces', file).status).toBe(0)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+    type Node = { id?: string; content?: { props?: { spaces?: unknown } }; children?: Node[] }
+    const find = (n: Node): Node | undefined =>
+      n.id === 'factory' ? n : (n.children ?? []).map(find).find(Boolean)
+    const layout = JSON.parse(readFileSync(join(app, 'layouts/factory.json'), 'utf8')) as Node
+    expect(find(layout)?.content?.props?.spaces).toEqual(spaces)
+  })
+
   it('install.sh refuses an option it does not know', () => {
     const run = install('--theme', 'sepia')
     expect(run.status).toBe(2)

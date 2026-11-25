@@ -74,10 +74,10 @@ function cardOf(ctx, card) {
         .child(label(card.time, ctx.c['muted'], 11).whitespace_nowrap())
     )
   return frame(ctx, card, body)
-    .id(`board-${card.space}-${card.number}`)
+    .id(`board-${card.space}-${card.id}`)
     .cursor_pointer()
     .tooltip('Open the issue')
-    .on_click(() => ctx.ui.openDetail(card.space, card.number))
+    .on_click(() => ctx.ui.openDetail(card.space, card.number, card.repo))
 }
 
 /**

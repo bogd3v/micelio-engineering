@@ -53,12 +53,12 @@ export function milestones(ctx, m) {
                 .gap(10)
                 .child(
                   label(issue.id, ctx.c['cyan'], 12)
-                    .id(`issue-${space.name}-${issue.number}`)
+                    .id(`issue-${space.name}-${issue.id}`)
                     .cursor_pointer()
                     .w(62)
                     .flex_none()
                     .tooltip('Open the issue')
-                    .on_click(() => ctx.ui.openDetail(space.name, issue.number))
+                    .on_click(() => ctx.ui.openDetail(space.name, issue.number, issue.repo))
                 )
                 .child(
                   h_flex()
