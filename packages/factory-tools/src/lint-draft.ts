@@ -143,13 +143,25 @@ function isWordsFlag(arg: string): boolean {
 
 /**
  * Whether `line` runs `wc` with its `-w` flag, wherever the flag is among the arguments. Quoted text
- * is ignored; the line is split on `|`, `;`, `&` and `$(`; each part skips leading `VAR=value` words
- * and `env`; the command is `wc`, bare or with a path. It does not look inside `docker run`, `xargs`
- * or `sh -c` (`packages/factory-tools/README.md`).
+ * is ignored, except the quoted argument of `sh -c` or `bash -c`, which is read as a line of its own;
+ * the words from the first one that starts with `#` are a shell comment and are dropped; the line is
+ * split on `|`, `;`, `&` and `$(`; each part skips leading `VAR=value` words and `env`. The command
+ * is `wc`, bare or with a path; or `xargs`, or `docker` or `podman` followed by `run` or `exec`,
+ * with a later word that is `wc` followed by the flag. Every other part is read as is
+ * (`packages/factory-tools/README.md`).
  */
 function runsWordCount(line: string): boolean {
-  const unquoted = line.replace(/"[^"]*"|'[^']*'/g, '""')
-  return unquoted.split(COMMAND_BREAK).some((part) => {
+  const quoted: string[] = []
+  const unquoted = line.replace(
+    /"([^"]*)"|'([^']*)'/g,
+    (_all, double?: string, single?: string) => {
+      quoted.push(double ?? single ?? '')
+      return `"Q${quoted.length - 1}"`
+    }
+  )
+  const comment = /(^|\s)#/.exec(unquoted)
+  const code = comment === null ? unquoted : unquoted.slice(0, comment.index + comment[1]!.length)
+  return code.split(COMMAND_BREAK).some((part) => {
     const words = (part.split('`')[part.startsWith('`') ? 1 : 0] ?? '')
       .replace(/^\s*\$\s+/, '')
       .replace(/\)+\s*$/, '')
@@ -158,7 +170,21 @@ function runsWordCount(line: string): boolean {
     let i = 0
     while (i < words.length && (words[i] === 'env' || /^[A-Za-z_]\w*=/.test(words[i] ?? ''))) i++
     const command = words[i]?.split('/').at(-1)
-    return command === 'wc' && words.slice(i + 1).some(isWordsFlag)
+    const rest = words.slice(i + 1)
+    if (command === 'wc') return rest.some(isWordsFlag)
+    const wrapper =
+      command === 'xargs' ||
+      ((command === 'docker' || command === 'podman') && (rest[0] === 'run' || rest[0] === 'exec'))
+    if (wrapper) {
+      const at = rest.findIndex((word) => word.split('/').at(-1) === 'wc')
+      return at !== -1 && rest.slice(at + 1).some(isWordsFlag)
+    }
+    if (command === 'sh' || command === 'bash') {
+      const flag = rest.findIndex((word) => /^-[a-zA-Z]*c$/.test(word))
+      const text = /^"Q(\d+)"$/.exec(rest[flag + 1] ?? '')?.[1]
+      return flag !== -1 && text !== undefined && runsWordCount(quoted[Number(text)] ?? '')
+    }
+    return false
   })
 }
 

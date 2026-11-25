@@ -208,12 +208,35 @@ describe('lint-draft', () => {
     expect(lintDraft(withTests('```', 'LC_ALL=C wc -l a.md', '```'), context([]))).toEqual([])
   })
 
-  it('does not look inside docker run, xargs or sh -c: the documented limits', () => {
+  it('looks inside docker run, xargs and sh -c', () => {
     for (const line of [
       'docker run --rm node:22 wc -w a.md',
       'ls | xargs wc -w',
       "sh -c 'wc -w a.md'",
       'sh -c "wc -w a.md"',
+    ]) {
+      expect(lintDraft(withTests('```', line, '```'), context([]))).toHaveLength(1)
+    }
+  })
+
+  it('looks inside podman exec and bash -c, and reads a path to wc', () => {
+    for (const line of [
+      'podman exec c /usr/bin/wc -lw a.md',
+      "bash -c 'cat a.md | wc --words'",
+      '- `find docs -name "*.md" | xargs wc -w`: exit 0',
+    ]) {
+      expect(lintDraft(withTests('```', line, '```'), context([]))).toHaveLength(1)
+    }
+  })
+
+  it('passes a wc whose -w is only in a shell comment', () => {
+    for (const line of [
+      'wc -l a.md # not -w',
+      'ls | wc -l # wc -w is not run',
+      'docker run --rm node:22 wc -l a.md',
+      'ls | xargs wc -l',
+      "sh -c 'wc -l a.md'",
+      "sh -c 'echo hi' wc -w",
     ]) {
       expect(lintDraft(withTests('```', line, '```'), context([]))).toEqual([])
     }
