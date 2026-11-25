@@ -2,7 +2,8 @@
 // something waits (`herdr/mod/design/screens/Panel.png`, `TimeForm.png`). A click here never reaches a
 // worker: a button opens a pane that only reads, or starts the 10 s countdown of a line for the master.
 // `ctx.ui` gives `goTo(address)`, `openDiff(card)`, `openReports(card)`, `readDiffs(card, cx)`,
-// `openDetail(space, number)`, `setForm(number, patch, cx)`, `inputs(number)`, `send(card, cx)`,
+// `openDetail(space, number)`, `setForm(number, patch, cx)`, `inputs(number)`, `timeInputs(number)`, `setTimeForm(number, patch, cx)`,
+// `toggleTimer(number, cx)`, `send(card, cx)`,
 // `undo(cx)` and `pending` (the countdown, `null` when none runs).
 
 import { div } from 'gpui-kit'
@@ -121,13 +122,16 @@ function countdown(/** @type {any} */ ctx, /** @type {any} */ pending) {
     )
 }
 
-/** The time form of an unlocked sign-off (`TimeForm.png`). */
-function timeForm(/** @type {any} */ ctx, /** @type {any} */ card) {
+/**
+ * The time form of an unlocked sign-off (`TimeForm.png`) or, with `log`, the one of an open pull request
+ * (`TimeLog.png`: Noted, Diff or Reports, a timer for the hands-on check, "Posted on the PR").
+ */
+function timeForm(/** @type {any} */ ctx, /** @type {any} */ card, log = false) {
   const f = card.form
   const n = card.number
-  const inputs = ctx.ui.inputs(n)
+  const inputs = log ? ctx.ui.timeInputs(n) : ctx.ui.inputs(n)
   const set = (/** @type {any} */ patch) => (/** @type {any} */ _e, /** @type {any} */ cx) =>
-    ctx.ui.setForm(n, patch, cx)
+    log ? ctx.ui.setTimeForm(n, patch, cx) : ctx.ui.setForm(n, patch, cx)
   const minutes = (/** @type {any} */ state) => div().w(64).flex_none().child(Input.new(state))
   const box = v_flex()
     .mt(10)
@@ -136,7 +140,12 @@ function timeForm(/** @type {any} */ ctx, /** @type {any} */ card) {
     .bg(ctx.c['surface2'])
     .border_1()
     .border_color(ctx.c['line'])
-  box.child(displayBold(div()).text_size(13).text_color(ctx.c['cyan']).child(`// TIME FOR #${n}`))
+  box.child(
+    displayBold(div())
+      .text_size(13)
+      .text_color(ctx.c['cyan'])
+      .child(log ? `// LOG TIME · PR OF #${n}` : `// TIME FOR #${n}`)
+  )
   box.child(
     v_flex()
       .child(legend(ctx, 'Read first'))
@@ -144,6 +153,11 @@ function timeForm(/** @type {any} */ ctx, /** @type {any} */ card) {
         h_flex()
           .gap(6)
           .items_center()
+          .children(
+            log
+              ? [pill(ctx, `read-none-${n}`, 'Noted', f.read === 'none', set({ read: 'none' }))]
+              : []
+          )
           .child(pill(ctx, `read-diff-${n}`, 'Diff', f.read === 'diff', set({ read: 'diff' })))
           .child(
             pill(ctx, `read-report-${n}`, 'Reports', f.read === 'report', set({ read: 'report' }))
@@ -153,9 +167,11 @@ function timeForm(/** @type {any} */ ctx, /** @type {any} */ card) {
       )
       .child(
         label(
-          f.read === 'diff'
-            ? `Tracked ${f.tracked} min since you opened the diff.`
-            : 'Reports first, before any diff.',
+          log
+            ? 'Only if not noted yet; a later note keeps it.'
+            : f.read === 'diff'
+              ? `Tracked ${f.tracked} min since you opened the diff.`
+              : 'Reports first, before any diff.',
           ctx.c['muted'],
           11
         ).mt(4)
@@ -172,6 +188,23 @@ function timeForm(/** @type {any} */ ctx, /** @type {any} */ card) {
     }
     if (f.hand !== 'none' && inputs !== null) {
       row.child(minutes(inputs.handMin)).child(label('min', ctx.c['muted'], 12))
+    }
+    if (f.hand !== 'none' && log) {
+      row.child(
+        displayBold(div())
+          .id(`timer-${n}`)
+          .min_h(32)
+          .px(10)
+          .flex()
+          .items_center()
+          .text_size(12)
+          .cursor_pointer()
+          .text_color(ctx.c['magenta'])
+          .border_1()
+          .border_color(ctx.c['magenta'])
+          .on_click((/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.toggleTimer(n, cx))
+          .child(f.timer)
+      )
     }
     box.child(v_flex().child(legend(ctx, 'Hands-on check')).child(row))
   } else {
@@ -190,7 +223,7 @@ function timeForm(/** @type {any} */ ctx, /** @type {any} */ card) {
   )
   box.child(
     v_flex()
-      .child(legend(ctx, '> sent to ' + card.space.name + ' · master'))
+      .child(legend(ctx, log ? '> posted on the PR' : '> sent to ' + card.space.name + ' · master'))
       .child(
         div()
           .p(8)
@@ -199,7 +232,7 @@ function timeForm(/** @type {any} */ ctx, /** @type {any} */ card) {
           .border_color(ctx.c['cyan'])
           .text_size(11.5)
           .text_color(ctx.c['cyan'])
-          .child(card.lines ?? '…')
+          .child((log ? card.posted : card.lines) ?? '…')
       )
       .child(f.error === null ? div() : label(`! ${f.error}`, ctx.c['red'], 11.5).mt(4))
   )
@@ -299,6 +332,33 @@ function batch(ctx, card) {
   )
 }
 
+/** An open pull request with no `time:` note of the maintainer (`Panel.png`, f3-main; `TimeLog.png`). @param {any} ctx @param {any} card */
+function timeCard(ctx, card) {
+  const pending = ctx.ui.pending
+  const mine = pending !== null && pending.key === card.key
+  const body = v_flex()
+    .child(top(ctx, card))
+    .child(displayBold(div()).mt(8).text_size(14).child(card.text))
+  if (card.form === null) {
+    return body.child(
+      button(ctx, `log-time-${card.number}`, 'LOG TIME', {
+        tone: 'fg',
+        click: (/** @type {any} */ _e, /** @type {any} */ cx) =>
+          ctx.ui.setTimeForm(card.number, { open: true }, cx),
+      }).mt(10)
+    )
+  }
+  body.child(timeForm(ctx, card, true))
+  if (mine) return body.child(countdown(ctx, pending))
+  return body.child(
+    button(ctx, `post-time-${card.number}`, 'POST TIME NOTE', {
+      primary: true,
+      disabled: card.lines === null || card.master === null || pending !== null,
+      click: (/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.send(card, cx),
+    }).mt(10)
+  )
+}
+
 /** @param {any} ctx @param {any} card */
 function decision(ctx, card) {
   return v_flex()
@@ -387,7 +447,9 @@ export function needsYou(ctx, needs) {
             ? decision(ctx, card)
             : card.kind === 'held'
               ? held(ctx, card)
-              : master(ctx, card)
+              : card.kind === 'time'
+                ? timeCard(ctx, card)
+                : master(ctx, card)
     const last = i === needs.cards.length - 1
     items.push(
       frame()

@@ -139,6 +139,17 @@ export function parseStacks(text) {
 }
 
 /**
+ * An open pull request with what the maintainer wrote on it.
+ *
+ * @typedef {object} OpenPull
+ * @property {number} number
+ * @property {string | null} [body]
+ * @property {string} created_at
+ * @property {{ user?: { login?: string }, body?: string | null }[]} comments the conversation's comments
+ * @property {{ user?: { login?: string }, body?: string | null }[]} reviews
+ */
+
+/**
  * What GitHub gave for each space, as rows. A space whose read failed keeps its last rows, stale.
  *
  * @typedef {object} SpaceConfig
@@ -148,7 +159,7 @@ export function parseStacks(text) {
  * @property {number | null} [epic] the epic's number, left out of the rows
  *
  * @typedef {object} SpaceMilestone
- * @property {{ issues: Parameters<typeof buildIssues>[0]['issues'], comments: Parameters<typeof buildIssues>[0]['comments'], maintainer: string } | null} raw the last good read, the epic and the pull requests left out; turned into rows by `milestoneRows` with the agents of the moment
+ * @property {{ issues: Parameters<typeof buildIssues>[0]['issues'], comments: Parameters<typeof buildIssues>[0]['comments'], maintainer: string, pulls: OpenPull[] } | null} raw the last good read, the epic and the pull requests left out; turned into rows by `milestoneRows` with the agents of the moment
  * @property {string | null} at when the last good read was made
  * @property {number | null} ageMs
  * @property {boolean} stale
@@ -161,7 +172,7 @@ export function parseStacks(text) {
  * @param {object} input
  * @param {number} input.now
  * @param {SpaceConfig[]} input.spaces
- * @param {Record<string, { at: string, issues: Parameters<typeof buildIssues>[0]['issues'], comments: Parameters<typeof buildIssues>[0]['comments'], maintainer: string } | { error: string }>} input.reads
+ * @param {Record<string, { at: string, issues: Parameters<typeof buildIssues>[0]['issues'], comments: Parameters<typeof buildIssues>[0]['comments'], maintainer: string, pulls?: OpenPull[] } | { error: string }>} input.reads
  * @param {Github | null} [input.previous]
  * @returns {Github}
  */
@@ -189,7 +200,12 @@ export function buildGithub({ now, spaces, reads, previous = null }) {
         const own = read.issues.filter(
           (i) => (i.pull_request ?? null) === null && i.number !== space.epic
         )
-        entry.raw = { issues: own, comments: read.comments, maintainer: read.maintainer }
+        entry.raw = {
+          issues: own,
+          comments: read.comments,
+          maintainer: read.maintainer,
+          pulls: read.pulls ?? [],
+        }
         entry.at = read.at
         entry.stale = false
         entry.error = null

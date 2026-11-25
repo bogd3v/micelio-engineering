@@ -36,17 +36,21 @@ import {
   cardMessages,
   createOutbox,
   emptyForm,
+  emptyTimeLogForm,
   LOCKED_NOTE,
   notificationFor,
 } from './lib/needs.js'
 import { buildDetail, parseProgress } from './lib/detail.js'
+import { CATEGORIES, correctionLine, emptyLogForm } from './lib/log.js'
 import { buildState } from './lib/state.js'
+import { stopTimer } from './lib/time.js'
 import { colours } from './lib/tokens.js'
 import { banners } from './views/banners.js'
 import { board } from './views/board.js'
-import { detail } from './views/detail.js'
+import { detail, logForm } from './views/detail.js'
 import { controls, header } from './views/header.js'
 import { leases } from './views/leases.js'
+import { footer } from './views/legend.js'
 import { machine } from './views/machine.js'
 import { milestones } from './views/milestones.js'
 import { needsYou } from './views/needs.js'
@@ -94,6 +98,34 @@ export default class Factory extends View {
     /** The time forms, and the text inputs of each, by issue number. */
     this.forms = {}
     this.formInputs = {}
+    /** The forms of "Log time" on an open pull request, and their inputs, by issue number. */
+    this.timeForms = {}
+    this.timeInputs = {}
+    /** `{ space, number }` in the overlay of the correction form (`props().log`), `null` elsewhere. */
+    this.logOpen = props()?.log ?? null
+    /** What the correction form holds, and its inputs: made in the overlay only, where the form is drawn. */
+    this.logState =
+      this.logOpen === null
+        ? null
+        : {
+            form: emptyLogForm(this.logOpen.number),
+            inputs: {
+              issue: InputState.new({ placeholder: '#792' }),
+              what: TextareaState.new({ placeholder: 'What was wrong, in one line.', rows: 3 }),
+            },
+          }
+    if (this.logState !== null) {
+      const { form, inputs } = this.logState
+      inputs.issue.set_value(form.issue)
+      inputs.issue.on('change', (_e, cx) => {
+        form.issue = inputs.issue.value()
+        cx.notify()
+      })
+      inputs.what.on('change', (_e, cx) => {
+        form.what = inputs.what.value()
+        cx.notify()
+      })
+    }
     /** The keys of the cards the maintainer has seen, `null` before the first read. */
     this.seen = null
     /** What the last send did, for one line under the cards. */
@@ -206,6 +238,20 @@ export default class Factory extends View {
         ),
       inputs: (number) => this.formInputs[number] ?? null,
       setForm: (number, patch, cx) => this.setForm(number, patch, cx),
+      timeInputs: (number) => this.timeInputs[number] ?? null,
+      setTimeForm: (number, patch, cx) => this.setTimeForm(number, patch, cx),
+      toggleTimer: (number, cx) => this.toggleTimer(number, cx),
+      openLog: (space, number) => this.openLog(space, number),
+      openLogFromDetail: () =>
+        this.openLog(this.detail?.space ?? null, this.detail?.number ?? null),
+      logForm: {
+        inputs: this.logState?.inputs ?? null,
+        choose: (category, cx) => {
+          if (this.logState !== null) this.logState.form.category = category
+          cx.notify()
+        },
+        send: (cx) => this.startLogSend(cx),
+      },
       send: (card, cx) => this.startSend(card, cx),
       undo: (cx) => {
         this.outbox.undo()
@@ -336,6 +382,54 @@ export default class Factory extends View {
     this.formInputs[number] = { readMin, handMin, remark }
   }
 
+  /**
+   * The form of "Log time" on an open pull request. Its inputs are made when it first opens (where an
+   * event handler runs, never in `render`).
+   *
+   * @param {number} number @param {Record<string, unknown>} patch @param {any} cx
+   */
+  setTimeForm(number, patch, cx) {
+    const form = (this.timeForms[number] ??= emptyTimeLogForm())
+    if (patch['open'] === true && this.timeInputs[number] === undefined) {
+      const readMin = InputState.new({ placeholder: 'min' })
+      const handMin = InputState.new({ placeholder: 'min' })
+      const remark = InputState.new({ placeholder: 'the admin page, headed Chromium' })
+      readMin.on('change', (_e, cx) => {
+        this.timeForms[number].readMin = readMin.value().trim()
+        cx.notify()
+      })
+      handMin.on('change', (_e, cx) => {
+        this.timeForms[number].handMin = handMin.value().trim()
+        cx.notify()
+      })
+      remark.on('change', (_e, cx) => {
+        this.timeForms[number].remark = remark.value()
+        cx.notify()
+      })
+      this.timeInputs[number] = { readMin, handMin, remark }
+    }
+    Object.assign(form, patch)
+    if (patch['read'] === 'none') {
+      form.readMin = ''
+      this.timeInputs[number]?.readMin.set_value('')
+    }
+    cx.notify()
+  }
+
+  /** Starts the hands-on timer, or stops it and adds its minutes to the field. @param {number} number @param {any} cx */
+  toggleTimer(number, cx) {
+    const form = this.timeForms[number]
+    if (form === undefined) return
+    if (form.timerAt === null) {
+      form.timerAt = this.now
+    } else {
+      form.handMin = stopTimer(form.handMin, form.timerAt, this.now)
+      form.timerAt = null
+      this.timeInputs[number]?.handMin.set_value(form.handMin)
+    }
+    cx.notify()
+  }
+
   /** @param {number} number @param {Record<string, unknown>} patch @param {any} cx */
   setForm(number, patch, cx) {
     const form = this.forms[number]
@@ -352,6 +446,7 @@ export default class Factory extends View {
 
   /** Every second: the countdown, the tracked minutes of an open form. @param {any} cx */
   tick(cx) {
+    if (this.config.fixture === null) this.now = Date.now()
     const sent = this.outbox.tick(Date.now())
     if (sent !== null)
       this.sentNote = `Sent to the master: ${sent.map((m) => m.text.split('\n')[0]).join(' · ')}`
@@ -386,10 +481,66 @@ export default class Factory extends View {
       )
     } else {
       const messages = cardMessages(card)
-      const label = card.kind === 'batch' ? 'the shared sign-off' : `sign-off #${card.number}`
+      const label =
+        card.kind === 'batch'
+          ? 'the shared sign-off'
+          : card.kind === 'time'
+            ? `time note #${card.number}`
+            : `sign-off #${card.number}`
       this.outbox.start(Date.now(), label, messages, card.key)
     }
     cx.notify()
+  }
+
+  /**
+   * The master of the space of the correction form: the space whose milestone holds the issue it names,
+   * else the space it was opened from, else the first.
+   */
+  logTarget() {
+    const { number } = correctionLine(this.logState.form, this.now)
+    const space =
+      this.config.spaces.find((s) =>
+        this.github?.spaces[s.name]?.raw?.issues.some((i) => i.number === number)
+      ) ??
+      this.config.spaces.find((s) => s.name === this.logOpen?.space) ??
+      this.config.spaces[0]
+    const agents = /** @type {import('./lib/agents.js').Agent[]} */ (
+      this.state?.sources['agents']?.value ?? []
+    )
+    const master = agents.find((a) => a.space?.name === space?.name && a.role === 'master')
+    return { masterName: space?.name ?? 'the', master: master?.address ?? null }
+  }
+
+  /** What the correction form shows now. */
+  logModel() {
+    const form = this.logState.form
+    return { categories: CATEGORIES, form, ...correctionLine(form, this.now), ...this.logTarget() }
+  }
+
+  /** Starts the 10 s countdown of `log #N | <what> | <category>`, for the master of the issue's space. @param {any} cx */
+  startLogSend(cx) {
+    this.sentNote = null
+    const { send, number, master } = this.logModel()
+    if (send !== null && master !== null) {
+      this.outbox.start(
+        Date.now(),
+        `correction #${number}`,
+        [{ target: master, text: send }],
+        'log'
+      )
+    }
+    cx.notify()
+  }
+
+  /** Opens the correction form: this mod with `log` in its props. @param {string | null} space @param {number | null} number */
+  openLog(space, number) {
+    openOverlay({
+      mod: 'factory',
+      kind: 'dialog',
+      width: 380,
+      height: 0.9,
+      props: { ...props(), log: { space, number } },
+    })
   }
 
   /**
@@ -419,7 +570,13 @@ export default class Factory extends View {
 
   /** Posts a notification for each card that was not there at the last look. */
   notifyNew() {
-    if (this.detail !== null || this.board || this.config.fixture !== null || this.github === null)
+    if (
+      this.detail !== null ||
+      this.logOpen !== null ||
+      this.board ||
+      this.config.fixture !== null ||
+      this.github === null
+    )
       return
     const { cards } = this.needs()
     const keys = new Set(cards.map((c) => c.key))
@@ -448,6 +605,7 @@ export default class Factory extends View {
       forms: this.forms,
       armed: this.retries.armed(),
       cores: this.state?.sources['machine']?.value?.cores ?? 0,
+      timeForms: this.timeForms,
       theme: this.themeNow(),
     })
   }
@@ -477,13 +635,21 @@ export default class Factory extends View {
   /**
    * A command of the panel (`herdr-app do factory.<command>`, or a key bound to it): `top` scrolls to the
    * start, `reveal:<section>` (`needs`, `card-<n>` for the nth card of Needs you, `machine`, `slots`, `workers`, `milestones`, `stacks`, `orphans`) scrolls
-   * until that section is in view, `detail:<number>` opens the overlay of that issue. They move the view
+   * until that section is in view, `detail:<number>` opens the overlay of that issue, `log` or `log:<number>` the correction form. They move the view
    * or open a window; nothing is sent.
    *
    * @param {string} command
    */
   command(command) {
     const [name, argument] = command.split(':')
+    if (name === 'log') {
+      const number = Number(argument)
+      const space = this.config.spaces.find((s) =>
+        this.github?.spaces[s.name]?.raw?.issues.some((i) => i.number === number)
+      )
+      this.openLog(space?.name ?? null, Number.isNaN(number) ? null : number)
+      return
+    }
     if (name === 'detail') {
       const number = Number(argument)
       const space = this.config.spaces.find((s) =>
@@ -538,6 +704,20 @@ export default class Factory extends View {
             this.diffs[number] = now - Number(minutes) * 60_000
             this.makeForm(Number(number))
           }
+          const forms = await a.readForms()
+          for (const [number, patch] of Object.entries(forms.time)) {
+            this.setTimeForm(Number(number), { open: true, ...patch }, cx)
+            const form = this.timeForms[number]
+            this.timeInputs[number].readMin.set_value(form.readMin)
+            this.timeInputs[number].handMin.set_value(form.handMin)
+            this.timeInputs[number].remark.set_value(form.remark)
+          }
+          if (this.logState !== null && forms.log !== null) {
+            const { form, inputs } = this.logState
+            Object.assign(form, forms.log)
+            inputs.issue.set_value(form.issue)
+            inputs.what.set_value(form.what)
+          }
         }
         const load = this.state.sources.machine.value?.load1 ?? null
         const cores = this.state.sources.machine.value?.cores ?? 0
@@ -584,8 +764,11 @@ export default class Factory extends View {
       try {
         /** @type {Record<string, unknown>} */
         const reads = {}
-        for (const space of this.config.spaces)
-          reads[space.name] = await this.adapters.readGithub(space)
+        for (const space of this.config.spaces) {
+          const read = await this.adapters.readGithub(space)
+          reads[space.name] =
+            'error' in read ? read : { ...read, pulls: await this.adapters.readPulls(space) }
+        }
         const now = await this.adapters.now()
         this.github = buildGithub({
           now,
@@ -734,6 +917,17 @@ export default class Factory extends View {
       dark: appearance === 'dark',
       ui: this.ui,
     }
+    if (this.logOpen !== null) {
+      return v_flex()
+        .id('factory-log')
+        .size_full()
+        .bg(ctx.c.bg)
+        .text_color(ctx.c.fg)
+        .font_family(MONO)
+        .text_size(12)
+        .overflow_y_scrollbar()
+        .child(logForm(ctx, this.logModel()))
+    }
     if (this.detail !== null) {
       return v_flex()
         .id('factory-detail')
@@ -785,6 +979,7 @@ export default class Factory extends View {
             milestones(ctx, s.milestones),
             stacks(ctx, s.stacks),
             orphans(ctx, s.orphans),
+            footer(ctx),
           ])
       )
   }
