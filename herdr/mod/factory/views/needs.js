@@ -419,9 +419,10 @@ function master(ctx, card) {
  *
  * @param {any} ctx
  * @param {any} needs `buildNeeds`
+ * @param {boolean} [collapsed] hidden in Customize: the heading and the count, no cards
  * @returns {{ items: any[], keys: string[] }} empty when nothing waits
  */
-export function needsYou(ctx, needs) {
+export function needsYou(ctx, needs, collapsed = false) {
   if (needs.count === 0) return { items: [], keys: [] }
   const frame = () => v_flex().w_full().px(16).bg(ctx.c['magenta-bg'])
   const head = frame()
@@ -437,6 +438,11 @@ export function needsYou(ctx, needs) {
   if (ctx.ui.sentNote !== null) head.child(label(ctx.ui.sentNote, ctx.c['cyan'], 11.5).mt(6))
   const items = [head.id('needs')]
   const keys = ['needs']
+  // Hidden in Customize while something waits: the heading and its count, no cards.
+  if (collapsed) {
+    items[0] = items[0].pb(14).border_b(1).border_color(ctx.c['line'])
+    return { items, keys }
+  }
   needs.cards.forEach((/** @type {any} */ card, /** @type {number} */ i) => {
     const inner =
       card.kind === 'signoff'

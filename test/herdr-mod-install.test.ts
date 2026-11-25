@@ -132,4 +132,58 @@ describe('install.sh', () => {
     expect(run.status).toBe(2)
     expect(walk(app)).toEqual([])
   })
+
+  /** The ids of the children of `work-body` in the installed layout, and the side prop of the factory block. */
+  const sideOf = () => {
+    interface Node {
+      id: string
+      children?: Node[]
+      content?: { props: { side: string } }
+    }
+    const find = (n: Node, id: string): Node | undefined =>
+      n.id === id ? n : (n.children ?? []).map((c) => find(c, id)).find(Boolean)
+    const layout = JSON.parse(readFileSync(join(app, 'layouts/factory.json'), 'utf8')) as Node
+    return {
+      ids: (find(layout, 'work-body')?.children ?? []).map((c) => c.id),
+      side: find(layout, 'factory')?.content?.props.side,
+    }
+  }
+
+  it('install.sh --side left puts the factory block first in work-body, and right last', () => {
+    expect(install('--side', 'left').status).toBe(0)
+    expect(sideOf()).toEqual({ ids: ['factory', 'main', 'panel'], side: 'left' })
+    // Run again: it replaces what it wrote, and the default is the right.
+    expect(install('--side', 'right').status).toBe(0)
+    expect(sideOf()).toEqual({ ids: ['main', 'panel', 'factory'], side: 'right' })
+    expect(install('--side', 'left').status).toBe(0)
+    expect(install().status).toBe(0)
+    expect(sideOf()).toEqual({ ids: ['main', 'panel', 'factory'], side: 'right' })
+    // Any other side writes nothing.
+    const bad = install('--side', 'top')
+    expect(bad.status).toBe(2)
+    expect(bad.stderr).toContain('--side')
+  })
+
+  it('install.sh writes no keys.json and nothing outside mods/factory, layouts/factory.json and its record', () => {
+    // A keys.json that is the person's stays as it is, byte for byte, and none is made when there is none.
+    expect(install('--side', 'left', '--fixture', 'test/fixtures/herdr-mod/normal').status).toBe(0)
+    expect(existsSync(join(app, 'keys.json'))).toBe(false)
+    const mine = '{ "mod:factory": { "alt-n": "factory.next" } }\n'
+    writeFileSync(join(app, 'keys.json'), mine)
+    writeFileSync(join(app, 'shared.json'), '{"factory.settings":{"panel":false}}\n')
+    expect(install().status).toBe(0)
+    expect(readFileSync(join(app, 'keys.json'), 'utf8')).toBe(mine)
+    expect(readFileSync(join(app, 'shared.json'), 'utf8')).toBe(
+      '{"factory.settings":{"panel":false}}\n'
+    )
+    const written = walk(app).filter((f) => f !== 'keys.json' && f !== 'shared.json')
+    expect(
+      written.filter(
+        (f) =>
+          !f.startsWith('mods/factory/') &&
+          f !== 'layouts/factory.json' &&
+          f !== 'factory-mod-install.json'
+      )
+    ).toEqual([])
+  })
 })

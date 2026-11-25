@@ -1,7 +1,11 @@
 // The factory panel of the Herdr desktop app: "Needs you", the machine, the slots, the leases, the milestones
 // and the stacks, docked on the right, the detail of an issue, an overlay of the same mod (`props().detail`),
 // and the Board, a tab of the same mod (`props().board`).
-// Its reads write nothing. It sends a line to the master of an issue's space, after the maintainer's click
+// Its reads write nothing. Its settings (where it shows, the order and visibility of the sections, the alerts)
+// are `shared("factory.settings")`, written with `setShared`, and Customize, an overlay of the same mod
+// (`props().customize`), changes them (`lib/settings.js`); the side panel is shown and hidden with
+// `layout.show` and `layout.hide`, the Board with `tab.new`, `pane.rename` and `tab.close`; with `fixture` in its props
+// Customize keeps its changes in memory and runs none of them. It sends a line to the master of an issue's space, after the maintainer's click
 // and a 10 s countdown that can be undone (`hc send`, `sendLine` below, ADR-0004), and `retry #N` to it once
 // the load falls, when the maintainer armed it; it never writes to a worker's pane or to GitHub. The buttons
 // of `lib/actions.js` act on the machine (the slot script, `docker compose down -v`, a process group), the
@@ -18,11 +22,16 @@ import {
   home,
   nextCommand,
   notify,
+  keys,
   openOverlay,
+  panes,
+  playSound,
   props,
   readTextFile,
   run,
+  setShared,
   settings,
+  shared,
   terminals,
   theme,
 } from 'herdr'
@@ -42,12 +51,34 @@ import {
 } from './lib/needs.js'
 import { buildDetail, parseProgress } from './lib/detail.js'
 import { CATEGORIES, correctionLine, emptyLogForm } from './lib/log.js'
+import {
+  baseProps,
+  createCustomize,
+  createLook,
+  createPoster,
+  createSaturation,
+  headerRed,
+  heldOrRed,
+  keyAction,
+  keyMap,
+  moveSection,
+  openBoardTab,
+  panelSections,
+  SECTION_INFO,
+  ALERTS,
+  SETTINGS_KEY,
+  shownCount,
+  signOffCard,
+  toggleAlert,
+  toggleSection,
+} from './lib/settings.js'
 import { buildState } from './lib/state.js'
 import { stopTimer } from './lib/time.js'
 import { colours } from './lib/tokens.js'
 import { banners } from './views/banners.js'
 import { board } from './views/board.js'
 import { detail, logForm } from './views/detail.js'
+import { customize } from './views/customize.js'
 import { controls, header } from './views/header.js'
 import { leases } from './views/leases.js'
 import { footer } from './views/legend.js'
@@ -101,6 +132,24 @@ export default class Factory extends View {
     /** The forms of "Log time" on an open pull request, and their inputs, by issue number. */
     this.timeForms = {}
     this.timeInputs = {}
+    /** True in the overlay of Customize (`props().customize`). */
+    this.customizing = props()?.customize === true
+    /** The panel's keyboard: it handles N, S, P, R, L and B only while it has it. */
+    this.handle = cx.focus_handle()
+    /** The next card `N` reveals. */
+    this.nextCard = 0
+    /** What Customize's switches call; with `fixture` it keeps its changes in memory and calls nothing. */
+    this.customizer = createCustomize({
+      run,
+      setShared,
+      panes,
+      props: () => baseProps(props()),
+      shared: () => shared(SETTINGS_KEY),
+      fixture: this.config.fixture !== null,
+    })
+    this.post = createPoster({ notify, playSound })
+    this.saturation = createSaturation()
+    this.look = createLook()
     /** `{ space, number }` in the overlay of the correction form (`props().log`), `null` elsewhere. */
     this.logOpen = props()?.log ?? null
     /** What the correction form holds, and its inputs: made in the overlay only, where the form is drawn. */
@@ -159,6 +208,34 @@ export default class Factory extends View {
       },
       openDetail: (space, number) => this.openDetail(space, number),
       openBoard: () => this.openBoard(),
+      openCustomize: () => this.openCustomize(),
+      boardOn: true,
+      customize: {
+        panel: (on, cx) => {
+          this.customizer.panel(on)
+          cx.notify()
+        },
+        board: (on, cx) => {
+          this.customizer.board(on)
+          cx.notify()
+        },
+        move: (name, by, cx) => {
+          this.customizer.change((s) => moveSection(s, name, by))
+          cx.notify()
+        },
+        toggleSection: (name, cx) => {
+          this.customizer.change((s) => toggleSection(s, name))
+          cx.notify()
+        },
+        toggleAlert: (name, cx) => {
+          this.customizer.change((s) => toggleAlert(s, name))
+          cx.notify()
+        },
+        restore: (cx) => {
+          this.customizer.restore()
+          cx.notify()
+        },
+      },
       setBoardFilter: (kind, key, cx) => {
         this.boardFilter = { ...this.boardFilter, [kind]: key }
         cx.notify()
@@ -568,25 +645,30 @@ export default class Factory extends View {
     }
   }
 
-  /** Posts a notification for each card that was not there at the last look. */
+  /**
+   * Posts a notification for each card that was not there at the last look, and one for each held check or
+   * red gate that the last look did not have, each when its alert is on (`lib/settings.js`).
+   */
   notifyNew() {
-    if (
-      this.detail !== null ||
-      this.logOpen !== null ||
-      this.board ||
-      this.config.fixture !== null ||
-      this.github === null
-    )
-      return
+    if (!this.isPanel() || this.config.fixture !== null || this.github === null) return
+    const settings = this.customizer.settings()
     const { cards } = this.needs()
     const keys = new Set(cards.map((c) => c.key))
     if (this.seen !== null) {
       for (const card of cards) {
         if (this.seen.has(card.key)) continue
-        notify(notificationFor(card))
+        this.post(settings, 'needs', notificationFor(card))
       }
     }
     this.seen = keys
+    for (const key of this.look(heldOrRed(cards, this.panel().sections))) {
+      this.post(settings, 'held', {
+        title: 'Held or red gate',
+        body: key.startsWith('held:') ? 'A check was held.' : `A gate turned red: ${key.slice(4)}`,
+        level: /** @type {const} */ ('warning'),
+        action: { name: 'factory.reveal:needs' },
+      })
+    }
   }
 
   /** The cards of "Needs you" now. */
@@ -616,9 +698,89 @@ export default class Factory extends View {
     closeOverlay(props()?.overlay)
   }
 
+  /** Opens Customize: this mod with `customize` in its props. */
+  openCustomize() {
+    openOverlay({
+      mod: 'factory',
+      kind: 'dialog',
+      width: 420,
+      height: 0.9,
+      props: { ...baseProps(props()), customize: true },
+    })
+  }
+
+  /** What Customize shows now. */
+  customizeModel() {
+    const s = this.customizer.settings()
+    const map = keyMap(keys())
+    return {
+      shown: shownCount(s),
+      side: this.config.side,
+      panel: s.panel,
+      board: s.board,
+      sections: s.order.map((name, i) => ({
+        name,
+        title: SECTION_INFO[name][0],
+        desc: SECTION_INFO[name][1],
+        on: !s.hidden.includes(name),
+        first: i === 0,
+        last: i === s.order.length - 1,
+      })),
+      alerts: ALERTS.map(([name, title, desc]) => ({
+        name,
+        title,
+        desc,
+        on: s.alerts[name],
+      })),
+      keys: map,
+      note: this.config.fixture !== null ? '> fixture: kept in memory' : null,
+    }
+  }
+
+  /** Whether this copy is the docked panel: the Board, the overlays and the shot's copies are not. */
+  isPanel() {
+    return this.detail === null && this.logOpen === null && !this.board && !this.customizing
+  }
+
+  /**
+   * A key of the focused panel. N, L and B are the commands `factory.next`, `factory.log` and
+   * `factory.board` too; S, P and R are keys only, the click of a button by hand.
+   *
+   * @param {{ key: string, modifiers?: Record<string, boolean> }} event
+   * @param {any} cx
+   */
+  keyDown(event, cx) {
+    const m = event.modifiers ?? {}
+    const action = keyAction(
+      { key: event.key, ctrl: m['control'], alt: m['alt'], meta: m['platform'] },
+      keyMap(keys())
+    )
+    if (action === null) return
+    if (action === 'next') this.revealNext()
+    else if (action === 'log') this.openLog(null, null)
+    else if (action === 'board') this.openBoard()
+    else if (action === 'pause') this.ui.togglePause(cx)
+    else if (action === 'reserve') this.ui.toggleReserve(cx)
+    else if (action === 'sign') {
+      const card = signOffCard(this.needs().cards)
+      if (card !== null) this.startSend(card, cx)
+    }
+  }
+
+  /** Scrolls to the next card of Needs you, the first after the last. */
+  revealNext() {
+    const count = this.needs().cards.length
+    if (count === 0) return
+    this.nextCard = this.nextCard % count
+    const at = this.order.indexOf(`card-${this.nextCard}`)
+    if (at >= 0) this.scroll.scroll_to_item(at)
+    this.nextCard = (this.nextCard + 1) % count
+  }
+
   /** Opens the Board as a tab of its own: this mod with `board` in its props. */
   openBoard() {
-    run('tab.new', { name: 'Board', mod: 'factory', props: { ...props(), board: true } })
+    if (!this.customizer.settings().board) return
+    openBoardTab(run, props, panes)
   }
 
   /** Opens the overlay of an issue: the same mod with `detail` in its props. @param {string} space @param {number} number */
@@ -634,7 +796,8 @@ export default class Factory extends View {
 
   /**
    * A command of the panel (`herdr-app do factory.<command>`, or a key bound to it): `top` scrolls to the
-   * start, `reveal:<section>` (`needs`, `card-<n>` for the nth card of Needs you, `machine`, `slots`, `workers`, `milestones`, `stacks`, `orphans`) scrolls
+   * start, `next` the next card of Needs you, `board` opens the Board tab, `customize` opens Customize, `focus` gives the
+   * panel the keyboard (`pane.go`), `reveal:<section>` (`needs`, `card-<n>` for the nth card of Needs you, `machine`, `slots`, `workers`, `milestones`, `stacks`, `orphans`) scrolls
    * until that section is in view, `detail:<number>` opens the overlay of that issue, `log` or `log:<number>` the correction form. They move the view
    * or open a window; nothing is sent.
    *
@@ -642,6 +805,13 @@ export default class Factory extends View {
    */
   command(command) {
     const [name, argument] = command.split(':')
+    if (name === 'focus') {
+      this.handle.focus()
+      return
+    }
+    if (name === 'next') return this.revealNext()
+    if (name === 'board') return this.openBoard()
+    if (name === 'customize') return this.openCustomize()
     if (name === 'log') {
       const number = Number(argument)
       const space = this.config.spaces.find((s) =>
@@ -721,6 +891,14 @@ export default class Factory extends View {
         }
         const load = this.state.sources.machine.value?.load1 ?? null
         const cores = this.state.sources.machine.value?.cores ?? 0
+        if (this.isPanel() && this.config.fixture === null && this.saturation(load, cores, now)) {
+          this.post(this.customizer.settings(), 'saturated', {
+            title: 'Machine saturated',
+            body: `Load ${load?.toFixed(0)} / ${cores} threads for a minute.`,
+            level: /** @type {const} */ ('warning'),
+            action: { name: 'factory.reveal:machine' },
+          })
+        }
         const sent = this.retries.check(load, cores)
         if (sent.length > 0) this.sentNote = `Sent to the master: ${sent.join(' · ')}`
         if (!this.config.fixture) this.history = pushLoad(this.history, now, load)
@@ -906,6 +1084,8 @@ export default class Factory extends View {
 
   render() {
     const appearance = this.themeNow()
+    const settings = this.customizer.settings()
+    this.ui.boardOn = settings.board
     this.ui.pending = this.outbox.state(Date.now())
     this.ui.sentNote = this.sentNote
     this.ui.actionNote = this.actionNote
@@ -916,6 +1096,17 @@ export default class Factory extends View {
       theme: appearance,
       dark: appearance === 'dark',
       ui: this.ui,
+    }
+    if (this.customizing) {
+      return v_flex()
+        .id('factory-customize')
+        .size_full()
+        .bg(ctx.c.bg)
+        .text_color(ctx.c.fg)
+        .font_family(MONO)
+        .text_size(12.5)
+        .overflow_y_scrollbar()
+        .child(customize(ctx, this.customizeModel()))
     }
     if (this.logOpen !== null) {
       return v_flex()
@@ -952,9 +1143,27 @@ export default class Factory extends View {
     }
     const p = this.panel()
     const s = p.sections
+    const needsNow = this.needs()
+    const header_ = { ...p.header, red: headerRed(settings, s) }
     const shown = banners(ctx, p.banners, controls(ctx, p.header))
-    const needs = needsYou(ctx, this.needs())
-    this.order = [...shown.map(() => ''), ...needs.keys, ...SECTIONS]
+    const needs = needsYou(ctx, needsNow, settings.hidden.includes('needs'))
+    /** @type {Record<string, any[]>} */
+    const drawn = {
+      needs: needs.items,
+      machine: [machine(ctx, s.machine)],
+      slots: [slots(ctx, s.slots)],
+      workers: [leases(ctx, s.workers)],
+      milestones: [milestones(ctx, s.milestones)],
+      stacks: [stacks(ctx, s.stacks)],
+      orphans: [orphans(ctx, s.orphans)],
+    }
+    const chosen = panelSections(settings, needsNow.count)
+    this.order = [
+      ...shown.map(() => ''),
+      ...chosen.flatMap(({ name }) =>
+        name === 'needs' ? needs.keys : drawn[name].map(() => name)
+      ),
+    ]
     return v_flex()
       .id('factory')
       .size_full()
@@ -962,7 +1171,10 @@ export default class Factory extends View {
       .text_color(ctx.c.fg)
       .font_family(MONO)
       .text_size(12.5)
-      .child(header(ctx, p.header, strip(ctx, p.strip)))
+      .track_focus(this.handle)
+      .on_key_down((e, cx) => this.keyDown(e, cx))
+      .on_mouse_down('left', () => this.handle.focus())
+      .child(header(ctx, header_, strip(ctx, p.strip)))
       .child(
         v_flex()
           .id('factory-scroll')
@@ -972,14 +1184,8 @@ export default class Factory extends View {
           .track_scroll(this.scroll)
           .children([
             ...shown,
-            ...needs.items,
-            machine(ctx, s.machine),
-            slots(ctx, s.slots),
-            leases(ctx, s.workers),
-            milestones(ctx, s.milestones),
-            stacks(ctx, s.stacks),
-            orphans(ctx, s.orphans),
-            footer(ctx),
+            ...chosen.flatMap(({ name }) => drawn[name]),
+            footer(ctx, keyMap(keys())),
           ])
       )
   }

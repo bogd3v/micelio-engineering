@@ -31,21 +31,39 @@ export function legend(ctx) {
     )
 }
 
-/** @param {any} ctx */
-export function footer(ctx) {
+/**
+ * The footer: the keys of the panel (`Panel.png`) and "log a correction", which opens the correction form.
+ * `keys` are the entries of `keyMap` (`lib/settings.js`): the key that acts, and what it does.
+ *
+ * @param {any} ctx
+ * @param {{ id: string, shown: string, label: string }[]} [keys]
+ */
+export function footer(ctx, keys = []) {
   return h_flex()
     .w_full()
+    .flex_wrap()
     .px(16)
     .py(14)
     .gap(6)
     .text_size(11)
-    .child(
-      div()
-        .id('log-correction')
-        .cursor_pointer()
-        .text_color(ctx.c['cyan'])
-        .on_click(() => ctx.ui.openLog(null, null))
-        .child('log a correction')
+    .text_color(ctx.c['muted'])
+    .children(
+      keys.map((k) => {
+        // As `Panel.png`: the text of [L] is the link that opens the correction form, not a second one.
+        const text =
+          k.id === 'log'
+            ? div()
+                .id('log-correction')
+                .cursor_pointer()
+                .text_color(ctx.c['cyan'])
+                .on_click(() => ctx.ui.openLog(null, null))
+                .child(k.label)
+            : div().child(k.label)
+        return h_flex()
+          .gap(4)
+          .child(div().text_color(ctx.c['fg']).child(`[${k.shown.toUpperCase()}]`))
+          .child(text)
+      })
     )
 }
 
