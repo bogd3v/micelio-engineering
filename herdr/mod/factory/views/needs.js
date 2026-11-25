@@ -436,6 +436,8 @@ export function needsYou(ctx, needs, collapsed = false) {
         .child(label(`[${needs.count}] oldest first`, ctx.c['magenta'], 11))
     )
   if (ctx.ui.sentNote !== null) head.child(label(ctx.ui.sentNote, ctx.c['cyan'], 11.5).mt(6))
+  if (needs.note !== null && needs.note !== undefined)
+    head.child(label(`! ${needs.note}`, ctx.c['red'], 11).mt(6))
   const items = [head.id('needs')]
   const keys = ['needs']
   // Hidden in Customize while something waits: the heading and its count, no cards.
@@ -457,19 +459,18 @@ export function needsYou(ctx, needs, collapsed = false) {
                 ? timeCard(ctx, card)
                 : master(ctx, card)
     const last = i === needs.cards.length - 1
+    const body = div()
+      .id(`card-${card.key}`)
+      .p(12)
+      .bg(ctx.c['surface'])
+      .border_1()
+      .border_color(ctx.c['magenta'])
+      .child(inner)
     items.push(
       frame()
         .id(`card-${i}`)
         .pb(last ? 14 : 12)
-        .child(
-          div()
-            .id(`card-${card.key}`)
-            .p(12)
-            .bg(ctx.c['surface'])
-            .border_1()
-            .border_color(ctx.c['magenta'])
-            .child(inner)
-        )
+        .child(card.dim === true ? body.opacity(0.6) : body)
     )
     keys.push(`card-${i}`)
   })

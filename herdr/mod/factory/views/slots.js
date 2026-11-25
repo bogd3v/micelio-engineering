@@ -2,7 +2,7 @@
 
 import { div } from 'gpui-kit'
 import { h_flex, v_flex } from 'gpui-base'
-import { badge, cat, heading, label, section } from './ui.js'
+import { badge, cat, heading, label, liveOrDim, section } from './ui.js'
 import { catFile } from '../lib/cat.js'
 
 /**
@@ -14,7 +14,7 @@ export function slots(ctx, s) {
     heading(ctx, 'slots', 'Heavy slots', s.open, label(s.count, ctx.c['muted'], 11))
   )
   if (!s.open) return box
-  return box
+  const content = v_flex()
     .child(
       v_flex()
         .gap(6)
@@ -94,4 +94,5 @@ export function slots(ctx, s) {
           .child(label(q.wait, ctx.c['magenta'], 12))
       )
     )
+  return liveOrDim(ctx, box, s, [content])
 }

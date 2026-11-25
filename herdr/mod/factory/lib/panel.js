@@ -79,7 +79,7 @@ export function formatClock(ms) {
  * @param {string | null} at
  * @returns {string}
  */
-function hourUtc(at) {
+export function hourUtc(at) {
   const ms = toMs(at)
   return ms === null ? '—' : `${new Date(ms).toISOString().slice(11, 16)} UTC`
 }
@@ -403,6 +403,16 @@ export function spaceRows(space, read, now, agents) {
 /** @typedef {{ value: unknown, at: string | null, ageMs: number | null, stale: boolean, error: string | null }} Source */
 
 /**
+ * The note of a local source (the machine, the slots or the agents) whose latest read failed: the
+ * same text as Milestones gives a stale GitHub. `null` while it is live.
+ *
+ * @param {Source | undefined} source
+ * @returns {string | null}
+ */
+export const notLive = (source) =>
+  source?.stale === true ? `as of ${hourUtc(source.at)} · not live` : null
+
+/**
  * @param {Source | undefined} source
  * @returns {Source}
  */
@@ -541,6 +551,9 @@ export function buildPanel({
   /** @param {string} name */
   const agentNamed = (name) => agents.find((a) => a.name === name)
 
+  const machineNote = notLive(state.sources['machine'])
+  const slotsNote = notLive(state.sources['slots'])
+  const agentsNote = notLive(state.sources['agents'])
   const saturated = machine?.saturated === true
   const cores = machine?.cores ?? 0
   const heavyUsed = slots?.heavy.used ?? 0
@@ -617,8 +630,9 @@ export function buildPanel({
   ]
 
   // The header.
+  // The age of each source is made from `now` and its `at` here, so that the label grows while no read lands.
   const fresh = Object.values(state.sources)
-    .map((s) => s.ageMs)
+    .map((s) => ageMs(now, s.at))
     .filter((n) => n !== null)
   const reserved = slots?.heavy.slots.some((s) => s.held) === true
   const header = {
@@ -660,6 +674,8 @@ export function buildPanel({
     kb == null ? '—' : String(Math.round(kb / 1_048_576))
   const machineModel = {
     open: machineOpen,
+    dim: machineNote !== null,
+    note: machineNote,
     saturated,
     pill: saturated ? 'SATURATED' : 'NOMINAL',
     load: machine?.load1 == null ? '—' : machine.load1.toFixed(1),
@@ -821,6 +837,8 @@ export function buildPanel({
       machine: machineModel,
       slots: {
         open: open['slots'] ?? true,
+        dim: slotsNote !== null,
+        note: slotsNote,
         count: `${heavyUsed}/${heavyTotal}`,
         rows: slotRows,
         queueTitle: queue.length > 0 ? 'queue, arrival order' : 'queue empty',
@@ -828,6 +846,8 @@ export function buildPanel({
       },
       workers: {
         open: open['workers'] ?? true,
+        dim: slotsNote !== null,
+        note: slotsNote,
         count: `${leasesUsed}/${leasesTotal}${leasesUsed >= leasesTotal && leasesTotal > 0 ? ' · next worker waits' : ''}${paused ? ' · PAUSED' : ''}`,
         cells: leaseCells,
         paused,
@@ -836,6 +856,9 @@ export function buildPanel({
         open: open['milestones'] ?? true,
         dim,
         note: dim ? `as of ${hourUtc(staleSince)} · not live` : null,
+        // The cats come from the agents: a stale agents source dims them.
+        catsDim: agentsNote !== null,
+        catsNote: agentsNote,
         spaces,
       },
       stacks: {
@@ -847,6 +870,8 @@ export function buildPanel({
       },
       orphans: {
         open: open['orphans'] ?? true,
+        dim: slotsNote !== null,
+        note: slotsNote,
         count: String(orphans.length),
         rows: orphans,
       },

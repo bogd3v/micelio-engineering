@@ -86,6 +86,49 @@ async function round(filter = { space: 'all', lane: 'all' }) {
 const ids = (column: Column) => column.cards.map((c) => `${c.space}#${c.id.slice(1)}`)
 
 describe('the board', () => {
+  it("the Board's note names the stale machine, slots or agents source and the time of its last good read", async () => {
+    const { board: live, github, config } = await round()
+    expect(live.note).toBeNull()
+    // Each source read at a different time, then three failed rounds: the oldest `at` is named.
+    const a = createAdapters({ exec: noExec, readTextFile, terminals: () => [], config })
+    const fetched = {
+      slots: { ...(await a.readSlots()), at: '2026-11-24T15:50:00.000Z' },
+      machine: { ...(await a.readMachine()), at: '2026-11-24T15:55:00.000Z' },
+      agents: { ...(await a.readAgents()), at: '2026-11-24T15:58:00.000Z' },
+    }
+    const now = Date.parse('2026-11-24T16:00:00Z')
+    const previous = buildState({ now, fetched })
+    const noteOf = (names: string[], gh = github) =>
+      buildBoard({
+        now,
+        state: buildState({
+          now,
+          fetched: Object.fromEntries(names.map((n) => [n, { error: 'no answer' }])),
+          previous,
+        }),
+        github: gh,
+        config,
+      }).note
+    expect(noteOf([])).toBeNull()
+    expect(noteOf(['machine'])).toBe('Not live since 15:55 UTC: machine')
+    expect(noteOf(['agents', 'slots'])).toBe('Not live since 15:50 UTC: slots, agents')
+    expect(noteOf(['machine', 'slots', 'agents'])).toBe(
+      'Not live since 15:50 UTC: machine, slots, agents'
+    )
+    // With GitHub stale as well, the two notes are joined.
+    const stale = buildGithub({
+      now,
+      spaces: config.spaces,
+      reads: Object.fromEntries(
+        config.spaces.map((s: { name: string }) => [s.name, { error: 'gh' }])
+      ),
+      previous: github,
+    })
+    expect(noteOf(['machine'], stale)).toBe(
+      'GitHub is stale: the cards are as of the last good read · Not live since 15:55 UTC: machine'
+    )
+  })
+
   it('each issue of the fixture is in one column, the one of its last gate comment', async () => {
     const { board } = await round()
     const byColumn = Object.fromEntries((board.columns as Column[]).map((c) => [c.key, ids(c)]))

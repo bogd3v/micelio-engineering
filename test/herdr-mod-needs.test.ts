@@ -104,6 +104,34 @@ const build = (issues: Issue[], extra: Record<string, unknown> = {}) =>
   })
 
 describe('Needs you', () => {
+  it('a stale agents source dims the cards that come from the agents, with one note', () => {
+    const issues = [
+      { number: 389, title: 'cms', comments: atG5('full', 12) },
+      {
+        number: 792,
+        title: 'tab order',
+        comments: [
+          say('**Gate 2, round 1 (worker-792)** · draft ok', 70),
+          say('**Decision needed** · #792\nWhich?\n- A: one\n- B: two', 8),
+        ],
+      },
+    ]
+    const note = 'as of 15:57 UTC · not live'
+    const live = build(issues, {})
+    expect(live.note).toBeNull()
+    expect(live.cards.some((c: { dim?: boolean }) => c.dim === true)).toBe(false)
+    const stale = build(issues, { agentsNote: note })
+    expect(stale.note).toBe(note)
+    expect(
+      stale.cards.map((c: { kind: string; dim?: boolean }) => [c.kind, c.dim ?? false])
+    ).toEqual([
+      ['signoff', false],
+      ['decision', true],
+    ])
+    // With no card from the agents there is nothing to dim, and no note.
+    expect(build(issues.slice(0, 1), { agentsNote: note }).note).toBeNull()
+  })
+
   it('the cards are ordered oldest first, each with its age', () => {
     const needs = build(
       [

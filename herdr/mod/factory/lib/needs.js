@@ -219,6 +219,7 @@ export function pullIssue(body) {
  * @param {number} [input.cores] the machine's thread count, for the load a retry waits for
  * @param {Record<string, Partial<TimeLogForm>>} [input.timeForms] the forms of "Log time", by key
  * @param {'dark' | 'light'} [input.theme]
+ * @param {string | null} [input.agentsNote] the note of a stale agents source (`notLive` of `panel.js`): the cards that come from the agents are dimmed
  */
 export function buildNeeds({
   now,
@@ -233,6 +234,7 @@ export function buildNeeds({
   cores = 0,
   timeForms = {},
   theme = 'dark',
+  agentsNote = null,
 }) {
   /** @type {any[]} */
   const cards = []
@@ -469,7 +471,14 @@ export function buildNeeds({
   }
 
   cards.sort((a, b) => a.at - b.at || a.key.localeCompare(b.key))
-  return { count: cards.length, cards }
+  // The cards that show an agent's cat come from the agents: a stale source dims them, with one note.
+  let dimmed = false
+  for (const card of cards) {
+    if (agentsNote === null || !['master', 'decision', 'held'].includes(card.kind)) continue
+    card.dim = true
+    dimmed = true
+  }
+  return { count: cards.length, cards, note: dimmed ? agentsNote : null }
 }
 
 /**

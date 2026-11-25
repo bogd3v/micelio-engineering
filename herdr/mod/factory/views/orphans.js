@@ -4,7 +4,7 @@
 
 import { div } from 'gpui-kit'
 import { h_flex, v_flex } from 'gpui-base'
-import { button, heading, label, section } from './ui.js'
+import { button, heading, label, liveOrDim, section } from './ui.js'
 import { confirmation } from './stacks.js'
 
 /**
@@ -23,7 +23,10 @@ export function orphans(ctx, o) {
     )
   )
   if (!o.open) return box
-  return box.children(
+  return liveOrDim(
+    ctx,
+    box,
+    o,
     o.rows.map((/** @type {any} */ row) =>
       v_flex()
         .mt(10)
