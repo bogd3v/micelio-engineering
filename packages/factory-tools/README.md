@@ -7,7 +7,7 @@ script), [`lint-log`](#lint-log) (a `factory-log |` line checked before it is po
 [`metrics`](#metrics) (the factory's numbers for a milestone), [`lint-draft`](#lint-draft) (the
 shape of a draft's section "Instructions that were wrong or missing", and its "For review" answers
 for the existing tests the diff edits, and the check command in its Tests section),
-[`docs-hits`](#docs-hits) (the Markdown files that still name a term a diff removed),
+[`docs-hits`](#docs-hits) (the Markdown files that still name a term a diff removed or a file it changes, and the header comment of that file),
 [`lint-lane`](#lint-lane) (an issue's lane, and a diff checked against it),
 [`revert-proof`](#revert-proof) (a test run on the merge base's production code, to show it fails there) and
 [`verify-draft`](#verify-draft) (gate 4 of the `normal` lane: a draft's commands rerun and their
@@ -573,10 +573,17 @@ lists each line of a tracked Markdown file that names one, with no word characte
 the arguments are wrong or git or a file fails. `--cwd <worktree>` (default the current directory)
 is where git runs and where a relative `--draft` is read.
 
-- A Markdown file the diff touches (a new one included) is not listed: the worker read it.
+- A Markdown file the diff touches (a new one included) is not listed for a term: the worker read it.
+- A second kind of hit comes from each file the diff changes that is neither Markdown nor a test: each
+  line of a tracked Markdown file that names it by its path from the root, or by its path from that
+  Markdown file's directory, is listed as `<path>:<line>: names <changed file>`, also in a Markdown
+  file the diff touches; and, when the diff does not touch its leading comment block (the comment
+  lines before its first line of code), `<changed file>:<line>: header comment`, the line being the
+  first of the block. Both kinds count in the verdict's `<n> hit(s)`.
 - `--draft <file>`: a line of its "For review" section, `docs-hits: <path> - <why it is still
 true>` (a bullet and a `:<line>` after the path are ignored), answers every hit of that file, and
-  it is not listed.
+  it is not listed. The path of a changed file answers its header comment, and the path of a
+  document the lines of it that name a changed file.
 - It does not subtract the lines the diff adds: a term the new code names too is still a hit.
   Three rules give no term where the diff only moved text: a removed line whose text, without
   leading and trailing whitespace, equals a line the diff adds to the same file (it was reindented
@@ -585,8 +592,9 @@ true>` (a bullet and a `:<line>` after the path are ignored), answers every hit 
   `packages/eslint-config/standard-hashes.json`, and another repository marks its own files); and a
   capitals token that starts inside a word (`fooBAR_BAZ` gives no term, `BAR_BAZ`).
 
-It only reads. It does not catch a changed number, a behaviour described in other words, a table row
-that should gain an entry, a term in a source comment or a file that is not Markdown, nor a
+It only reads. It does not catch a changed number, a behaviour described in other words (when the
+document does not name the file), a table row that should gain an entry, a term in a source comment
+other than the header comment of a changed file, a file that is not Markdown, nor a
 hit in a file it lists that is true; the reviewer's check 5 stays the net for those.
 
 ## `lint-lane`

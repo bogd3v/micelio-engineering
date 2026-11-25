@@ -205,4 +205,77 @@ describe('docs-hits', () => {
     expect(result.code).toBe(2)
     expect(existsSync(out)).toBe(false)
   })
+
+  it('a document that names a changed file by its path is a hit', async () => {
+    const repo = await repository({
+      'src/view.ts': '// View.\nexport const A = 1\n',
+      'docs/a.md':
+        'Nothing here.\nIt is `src/view.ts` that renders.\nAnd ../src/view.ts too.\nNot xsrc/view.ts.\n',
+      'src/README.md': 'See view.ts here and ./view.ts there.\n',
+    })
+    await writeFile(join(repo, 'src/view.ts'), '// View.\nexport const A = 2\n')
+    const result = await hits(repo)
+    expect(result.code).toBe(1)
+    expect(result.stdout).toContain('docs/a.md:2: names src/view.ts\n')
+    expect(result.stdout).toContain('docs/a.md:3: names src/view.ts\n')
+    expect(result.stdout).not.toContain('docs/a.md:4')
+    expect(result.stdout).toContain('src/README.md:1: names src/view.ts\n')
+    expect(result.stdout).toContain('src/view.ts:1: header comment\n')
+    expect(result.stdout).toContain('4 hit(s)')
+  })
+
+  it('a document the diff touches that names a changed file is a hit', async () => {
+    const repo = await repository({
+      'src/view.ts': '// View.\nexport const A = 1\n',
+      'README.md': 'It runs src/view.ts.\n',
+    })
+    await writeFile(join(repo, 'src/view.ts'), '// View.\nexport const A = 2\n')
+    await writeFile(join(repo, 'README.md'), 'It runs src/view.ts, edited.\n')
+    const result = await hits(repo)
+    expect(result.code).toBe(1)
+    expect(result.stdout).toContain('README.md:1: names src/view.ts\n')
+  })
+
+  it('the header comment of a changed file the diff leaves alone is a hit', async () => {
+    const source = '#!/bin/sh\n\n/** Reads\n * nothing.\n */\n\nexport const A = 1\n'
+    const repo = await repository({ 'src/view.ts': source })
+    await writeFile(join(repo, 'src/view.ts'), source.replace('= 1', '= 2'))
+    const result = await hits(repo)
+    expect(result.code).toBe(1)
+    expect(result.stdout).toContain('src/view.ts:3: header comment\n')
+    const edited = await repository({ 'src/view.ts': source })
+    await writeFile(join(edited, 'src/view.ts'), source.replace('nothing', 'a file'))
+    expect(await hits(edited)).toMatchObject({ code: 0 })
+    const bare = await repository({ 'src/view.ts': 'export const A = 1\n' })
+    await writeFile(join(bare, 'src/view.ts'), 'export const A = 2\n')
+    expect(await hits(bare)).toMatchObject({ code: 0 })
+  })
+
+  it('one answer in For review answers a changed file and its header comment', async () => {
+    const repo = await repository({
+      'src/view.ts': '// View.\nexport const A = 1\n',
+      'docs/a.md': 'It is `src/view.ts`.\n',
+    })
+    await writeFile(join(repo, 'src/view.ts'), '// View.\nexport const A = 2\n')
+    const answer = async (...paths: string[]): ReturnType<typeof runDocsHits> => {
+      const draft = join(tempDir('docs-hits-draft-'), 'draft.md')
+      const lines = paths.map((path) => `- docs-hits: ${path} - still true\n`).join('')
+      await writeFile(draft, `## For review\n\n${lines}`)
+      return hits(repo, '--draft', draft)
+    }
+    const before = await hits(repo)
+    expect(before.stdout).toContain('src/view.ts:1: header comment\n')
+    expect(before.stdout).toContain('docs/a.md:1: names src/view.ts\n')
+    expect(before.stdout).toContain('2 hit(s)')
+    const file = await answer('src/view.ts')
+    expect(file.stdout).not.toContain('header comment')
+    expect(file.stdout).toContain('docs/a.md:1: names src/view.ts\n')
+    const document = await answer('docs/a.md')
+    expect(document.stdout).toContain('src/view.ts:1: header comment\n')
+    expect(document.stdout).not.toContain('names')
+    expect(await answer('src/view.ts', 'docs/a.md')).toMatchObject({
+      code: 0,
+      stdout: 'docs-hits · base HEAD · no hit\n',
+    })
+  })
 })
