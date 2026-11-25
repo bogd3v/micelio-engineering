@@ -11,7 +11,8 @@ The rules shared by every Micelio repository live in [`docs/engineering-standard
 ```bash
 install: npm ci
 test: npm test
-check: npm run check            # typecheck, lint, format:check, test, lint:licenses, lint:standard and lint:ee
+check: npm run check            # typecheck, lint, format:check, test:coverage, lint:licenses, lint:standard and lint:ee
+npm run test:coverage    # the tests, failing below the coverage floor in the thresholds of vitest.config.ts
 npm run build            # compiles src/ to dist/
 ```
 

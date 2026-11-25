@@ -111,7 +111,7 @@ describe('the repository template', () => {
     for (const name of names) expect(pkg.scripts, name).toHaveProperty(name)
     // check runs the fast checks of section 15 in the order CI does
     expect(pkg.scripts.check).toBe(
-      'npm run typecheck && npm run lint && npm run format:check && npm run test && npm run lint:licenses && npm run lint:standard && npm run lint:ee'
+      'npm run typecheck && npm run lint && npm run format:check && npm run test:coverage && npm run lint:licenses && npm run lint:standard && npm run lint:ee'
     )
   })
 

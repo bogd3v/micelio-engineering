@@ -24,7 +24,9 @@ jobs:
       contents: read
     uses: ./.github/workflows/check.yml
     with:
-      # lint:licenses, lint:standard and reuse lint run.
+      # The tests run with the coverage floor of vitest.config.ts; lint:licenses, lint:standard and
+      # reuse lint run.
+      test-script: test:coverage
       licenses: true
       standard: true
       reuse: true

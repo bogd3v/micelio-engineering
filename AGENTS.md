@@ -11,7 +11,8 @@ The rules shared by every Micelio repository live in [`docs/engineering-standard
 ```bash
 install: npm ci
 test: npm test
-check: npm run check            # typecheck, lint, format:check, test, lint:licenses and lint:standard
+check: npm run check            # typecheck, lint, format:check, test:coverage, lint:licenses and lint:standard
+npm run test:coverage    # the tests, failing below the coverage floor in the thresholds of vitest.config.ts
 npm run build            # compiles the packages (typecheck, lint and test run it first; a vitest run builds first too, so npx vitest run <file> is a valid targeted run on a clean copy)
 npm run template -- <dir> # creates a repository from template/ (docs/template.md); --profile rust --license <id> --copyright <holder> uses template-rust/
 npm run verify:template  # creates one, installs the packed packages and runs its checks (needs the registry)
