@@ -1,0 +1,10 @@
+{
+  "time": {
+    "389": { "read": "none", "hand": "stack", "handMin": "4", "remark": "the demo site" }
+  },
+  "log": {
+    "issue": "#792",
+    "what": "The draft reported 3147 tests from a copy with a theme pulled; a clean copy runs 3143",
+    "category": "test"
+  }
+}

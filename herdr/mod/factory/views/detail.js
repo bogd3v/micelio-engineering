@@ -5,12 +5,12 @@
 // after a 10 s countdown that can be undone (closing the overlay cancels it). A packet path opens the
 // file in a pane (`less`), an agent's name opens a pane that only shows its last lines (`watch` over
 // `hc read`), and neither focuses a worker for typing.
-// `ctx` is as in `views/ui.js`, with `ctx.ui.openFile(path)`, `ctx.ui.watchAgent(target)`,
+// `ctx` is as in `views/ui.js`, with `ctx.ui.openLogFromDetail()` (the correction form of this issue), `ctx.ui.openFile(path)`, `ctx.ui.watchAgent(target)`,
 // `ctx.ui.close(cx)` and, for the decision, `ctx.ui.answer` (`option`,
 // `note`, `choose(letter, cx)`), `ctx.ui.send(model, cx)`, `ctx.ui.undo(cx)` and `ctx.ui.pending`.
 
 import { div } from 'gpui-kit'
-import { h_flex, Textarea, v_flex } from 'gpui-base'
+import { h_flex, Input, Textarea, v_flex } from 'gpui-base'
 import { badge, cat, display, displayBold, label, laneTag } from './ui.js'
 
 /** The title of a section: `// NAME`, cyan. */
@@ -105,9 +105,14 @@ function top(ctx, model) {
         .child(displayBold(div()).text_size(22).text_color(ctx.c['fg']).child(model.title))
     )
     .child(
-      button('detail-close', 'CLOSE', (/** @type {any} */ _e, /** @type {any} */ cx) =>
-        ctx.ui.close(cx)
-      )
+      h_flex()
+        .gap(8)
+        .child(button('detail-log', 'LOG A CORRECTION', () => ctx.ui.openLogFromDetail()))
+        .child(
+          button('detail-close', 'CLOSE', (/** @type {any} */ _e, /** @type {any} */ cx) =>
+            ctx.ui.close(cx)
+          )
+        )
     )
 }
 
@@ -394,4 +399,187 @@ export function detail(ctx, model) {
     .children(model.decision == null ? [] : [decision(ctx, model.decision)])
     .child(agents(ctx, model))
     .child(packet(ctx, model))
+}
+
+// The correction form (`herdr/mod/design/screens/LogForm.png`), the overlay opened with `log` in the props.
+// "Log a correction" (`herdr/mod/design/screens/LogForm.png`): the issue, what was wrong, one of the six
+// categories, the line the master will post and a button that starts the 10 s countdown of
+// `log #N | <what> | <category>`, a line for the master of the issue's space. It opens from the issue detail
+// and from the panel's footer, as an overlay of this mod (`props().log`); nothing is posted on GitHub.
+// `ctx.ui.logForm` gives `model` (`lib/log.js`, `correctionLine`, with `masterName`, `master`, `form`),
+// `inputs` (`issue`, `what`), `choose(category, cx)`, `send(cx)`, `undo(cx)`, `close()` and `pending`.
+
+const logLegend = (/** @type {any} */ ctx, /** @type {string} */ text) =>
+  displayBold(div()).text_size(11).text_color(ctx.c['muted']).mb(6).child(text.toUpperCase())
+
+/** A category of the correction form: filled cyan when chosen. */
+function categoryPill(
+  /** @type {any} */ ctx,
+  /** @type {string} */ name,
+  /** @type {boolean} */ on
+) {
+  const el = displayBold(div())
+    .id(`category-${name}`)
+    .flex_1()
+    .min_w(0)
+    .min_h(36)
+    .flex()
+    .items_center()
+    .justify_center()
+    .text_size(12)
+    .cursor_pointer()
+    .on_click((/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.logForm.choose(name, cx))
+    .child(name)
+  return on
+    ? el.bg(ctx.c['cyan']).text_color(ctx.c['badge-fg']).border_1().border_color(ctx.c['cyan'])
+    : el.text_color(ctx.c['fg']).border_1().border_color(ctx.c['line'])
+}
+
+/**
+ * @param {any} ctx
+ * @param {{ categories: readonly string[], form: any, posted: string, error: string | null, send: string | null, masterName: string, master: string | null }} model
+ */
+export function logForm(ctx, model) {
+  const f = ctx.ui.logForm
+  const pending = ctx.ui.pending
+  const box = v_flex().w_full().p(16).gap(14)
+  box.child(
+    h_flex()
+      .items_center()
+      .gap(8)
+      .child(
+        displayBold(div())
+          .flex_1()
+          .text_size(13)
+          .text_color(ctx.c['cyan'])
+          .child('// LOG A CORRECTION')
+      )
+      .child(
+        displayBold(div())
+          .id('log-close')
+          .text_size(11)
+          .text_color(ctx.c['cyan'])
+          .cursor_pointer()
+          .on_click(() => ctx.ui.close())
+          .child('CLOSE')
+      )
+  )
+  box.child(
+    label(
+      'One line each time you send work back. The retro turns the ones that repeat into a test, a skill or a rule.',
+      ctx.c['muted'],
+      11.5
+    )
+  )
+  box.child(
+    v_flex()
+      .child(logLegend(ctx, 'Issue'))
+      .child(div().w(120).child(Input.new(f.inputs.issue)))
+  )
+  box.child(
+    v_flex()
+      .child(
+        div()
+          .mb(6)
+          .child(logLegend(ctx, 'What was wrong').mb(0).child(' '))
+          .child(label('(not how it was fixed)', ctx.c['muted'], 11))
+      )
+      .child(div().h(72).child(Textarea.new(f.inputs.what)))
+  )
+  box.child(
+    v_flex()
+      .child(logLegend(ctx, 'Category'))
+      .child(
+        v_flex()
+          .gap(6)
+          .child(
+            h_flex()
+              .gap(6)
+              .children(
+                model.categories
+                  .slice(0, 3)
+                  .map((c) => categoryPill(ctx, c, model.form.category === c))
+              )
+          )
+          .child(
+            h_flex()
+              .gap(6)
+              .children(
+                model.categories
+                  .slice(3)
+                  .map((c) => categoryPill(ctx, c, model.form.category === c))
+              )
+          )
+      )
+  )
+  box.child(
+    v_flex()
+      .child(logLegend(ctx, '> the master posts on the issue'))
+      .child(
+        div()
+          .p(8)
+          .bg(ctx.c['bg'])
+          .border_l(2)
+          .border_color(ctx.c['cyan'])
+          .text_size(11.5)
+          .text_color(ctx.c['cyan'])
+          .child(model.posted)
+      )
+      .child(label('Destination stays “-” until the retro gives one.', ctx.c['muted'], 11).mt(4))
+      .child(model.error === null ? div() : label(`! ${model.error}`, ctx.c['red'], 11.5).mt(4))
+  )
+  if (pending !== null) {
+    box.child(
+      h_flex()
+        .items_center()
+        .gap(8)
+        .p(8)
+        .bg(ctx.c['surface'])
+        .border_1()
+        .border_dashed()
+        .border_color(ctx.c['magenta'])
+        .child(
+          div()
+            .flex_1()
+            .text_size(12)
+            .child(
+              `Sending ${pending.label} in ${pending.secondsLeft} s. Closing this window cancels it.`
+            )
+        )
+        .child(
+          displayBold(div())
+            .id('log-undo')
+            .min_h(32)
+            .px(10)
+            .flex()
+            .items_center()
+            .cursor_pointer()
+            .text_size(12)
+            .text_color(ctx.c['magenta'])
+            .border_1()
+            .border_color(ctx.c['magenta'])
+            .on_click((/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.undo(cx))
+            .child('UNDO')
+        )
+    )
+  } else {
+    const ready = model.send !== null && model.master !== null
+    const send = displayBold(div())
+      .id('log-send')
+      .min_h(42)
+      .px(14)
+      .flex()
+      .items_center()
+      .justify_center()
+      .text_size(13)
+      .bg(ready ? ctx.c['btn-bg'] : ctx.c['track'])
+      .text_color(ready ? ctx.c['btn-fg'] : ctx.c['muted'])
+      .child(`SEND TO ${model.masterName.toUpperCase()} · MASTER`)
+    if (ready) {
+      send.cursor_pointer().on_click((/** @type {any} */ _e, /** @type {any} */ cx) => f.send(cx))
+    }
+    box.child(send)
+  }
+  if (ctx.ui.sentNote !== null) box.child(label(ctx.ui.sentNote, ctx.c['cyan'], 11.5))
+  return box
 }

@@ -7,7 +7,7 @@
 // giving it), everything is read from there and not from the machine, so a screen can be reproduced:
 // `status.txt`, `loadavg`, `meminfo`, `hwmon.json`, `cores`, `terminals.json`, `issues.json`
 // (`issues-<space>.json` first), `comments-<n>.json`, `docker-compose-ls.json`, `process-<pid>.json` (an orphan's cores and minutes), `stack-ages.json` (the minutes before `now.txt` each stack was created), `loadhistory.json`,
-// `milestones-<space>.json` (`milestones.json`) and `project-fields.json` (the factory's share), `diffs.json` (the minutes before `now.txt` each issue's diff was opened), `commit-<n>.txt` (the commit message of an issue's packet), `worktree-<n>.json` (the branch and the lines changed of an issue's worktree), `now.txt` for the clock, `github-at.txt` for the time of the GitHub reads that work and
+// `milestones-<space>.json` (`milestones.json`) and `project-fields.json` (the factory's share), `diffs.json` (the minutes before `now.txt` each issue's diff was opened), `forms.json` (what the "Log time" and correction forms hold), `pulls-<space>.json` (the open pull requests, with their comments and reviews), `commit-<n>.txt` (the commit message of an issue's packet), `worktree-<n>.json` (the branch and the lines changed of an issue's worktree), `now.txt` for the clock, `github-at.txt` for the time of the GitHub reads that work and
 // `github-error.txt`: with it, the first GitHub read of each space works and every later one fails with
 // its text, as a `gh` that stops answering does.
 
@@ -286,6 +286,41 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
   }
 
   /**
+   * The open pull requests of a space's repository, each with its comments and its reviews, so that
+   * "Needs you" can tell which has no `time:` note of the maintainer. A failed read of the pull requests
+   * is no pull requests: it never fails the read of the milestone.
+   *
+   * @param {import('./lib/panel.js').SpaceConfig} space
+   * @returns {Promise<import('./lib/panel.js').OpenPull[]>}
+   */
+  async function readPulls(space) {
+    try {
+      if (dirs !== null) {
+        const found = await fixtureJson(`pulls-${space.name}.json`)
+        return Array.isArray(found) ? found : []
+      }
+      const open = await gh(`repos/${space.repo}/pulls?state=open&per_page=100`)
+      if (!Array.isArray(open)) return []
+      const out = []
+      for (let i = 0; i < open.length; i += GH_AT_ONCE) {
+        const got = await Promise.all(
+          open.slice(i, i + GH_AT_ONCE).map(async (pull) => ({
+            number: pull.number,
+            body: pull.body ?? null,
+            created_at: pull.created_at,
+            comments: await gh(`repos/${space.repo}/issues/${pull.number}/comments?per_page=100`),
+            reviews: await gh(`repos/${space.repo}/pulls/${pull.number}/reviews?per_page=100`),
+          }))
+        )
+        out.push(...got)
+      }
+      return out
+    } catch {
+      return []
+    }
+  }
+
+  /**
    * The milestones of each space's repository, for the factory's share: `gh api repos/<repo>/milestones`
    * (`milestones-<space>.json`, then `milestones.json`, in a fixture), one read for each repository.
    *
@@ -477,14 +512,29 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
       : {}
   }
 
+  /**
+   * With a fixture, what the forms hold, since nobody types in a recording: `forms.json`,
+   * `{ "time": { "<issue>": <the fields of the "Log time" form> }, "log": { "issue", "what", "category" } }`.
+   * Nothing is read from a real run.
+   *
+   * @returns {Promise<{ time: Record<string, Record<string, unknown>>, log: Record<string, string> | null }>}
+   */
+  async function readForms() {
+    const found = dirs === null ? null : await fixtureJson('forms.json')
+    const obj = found !== null && typeof found === 'object' ? /** @type {any} */ (found) : {}
+    return { time: obj.time ?? {}, log: obj.log ?? null }
+  }
+
   return {
     now,
     readCommit,
     readDiffs,
+    readForms,
     readSlots,
     readMachine,
     readAgents,
     readGithub,
+    readPulls,
     readMilestones,
     readProjectFields,
     readStacks,

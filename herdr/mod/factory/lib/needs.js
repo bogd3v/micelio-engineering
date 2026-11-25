@@ -11,7 +11,15 @@ import { parseGates } from './gates.js'
 import { parseDecision } from './decision.js'
 import { parseProgress } from './detail.js'
 import { milestoneRows } from './panel.js'
-import { SEND_DELAY_MS, minutesSince, timeLine, toMs } from './time.js'
+import {
+  SEND_DELAY_MS,
+  hasTimeNote,
+  minutesSince,
+  timeLine,
+  timeMessage,
+  timerLabel,
+  toMs,
+} from './time.js'
 
 /** The colour of a space's badge, by its position in the layout's props (as `panel.js`). */
 const SPACE_COLOURS = ['space-m', 'space-f', 'space-p']
@@ -159,6 +167,36 @@ export const emptyForm = () => ({
 })
 
 /**
+ * What the form of "Log time" on an open pull request holds when the maintainer has not touched it.
+ *
+ * @typedef {object} TimeLogForm
+ * @property {boolean} open
+ * @property {'none' | 'diff' | 'report'} read `none` is "Noted": it was read before
+ * @property {string} readMin
+ * @property {'none' | 'stack' | 'test'} hand
+ * @property {string} handMin
+ * @property {string} remark
+ * @property {number | null} timerAt when the hands-on timer started
+ */
+
+/** @returns {TimeLogForm} */
+export const emptyTimeLogForm = () => ({
+  open: false,
+  read: 'none',
+  readMin: '',
+  hand: 'none',
+  handMin: '',
+  remark: '',
+  timerAt: null,
+})
+
+/** The issue a pull request closes or refers to: `Closes #N`, `Fixes #N`, `Refs #N`. @param {string | null | undefined} body @returns {number | null} */
+export function pullIssue(body) {
+  const match = /\b(?:closes|fixes|resolves|refs)\s+#(\d+)/i.exec(body ?? '')
+  return match === null ? null : Number(match[1])
+}
+
+/**
  * The cards of "Needs you".
  *
  * @param {object} input
@@ -172,6 +210,7 @@ export const emptyForm = () => ({
  * @param {Record<number, Partial<Form>>} [input.forms] the time forms
  * @param {Record<string, boolean>} [input.armed] the retries the maintainer armed, by card key
  * @param {number} [input.cores] the machine's thread count, for the load a retry waits for
+ * @param {Record<number, Partial<TimeLogForm>>} [input.timeForms] the forms of "Log time", by issue number
  * @param {'dark' | 'light'} [input.theme]
  */
 export function buildNeeds({
@@ -185,6 +224,7 @@ export function buildNeeds({
   forms = {},
   armed = {},
   cores = 0,
+  timeForms = {},
   theme = 'dark',
 }) {
   /** @type {any[]} */
@@ -226,6 +266,52 @@ export function buildNeeds({
     const raw = read?.raw
     if (raw == null) return
     const { rows } = milestoneRows(read, now, inSpace)
+
+    // An open pull request with no `time:` note of the maintainer: a silent approval for `metrics`. One
+    // card for each issue, the first pull request that names it.
+    const carded = new Set()
+    for (const pull of raw.pulls ?? []) {
+      const number = pullIssue(pull.body)
+      const row = number === null ? undefined : rows.find((r) => r.number === number)
+      if (number === null || row === undefined) continue
+      const noted = [...pull.comments, ...pull.reviews].some(
+        (c) => c.user?.login === raw.maintainer && hasTimeNote(c.body)
+      )
+      if (noted || carded.has(number)) continue
+      carded.add(number)
+      const form = { ...emptyTimeLogForm(), ...timeForms[number] }
+      // A running timer has not added its minutes yet: the line waits for it to stop.
+      const time = !form.open
+        ? null
+        : form.timerAt === null
+          ? timeLine({ ...form, lane: row.lane })
+          : { line: null, error: 'Stop the timer first.' }
+      const at = toMs(pull.created_at) ?? now
+      cards.push({
+        key: `time:${space.name}#${number}`,
+        kind: 'time',
+        at,
+        age: Math.max(0, now - at),
+        space: badge,
+        number,
+        pull: pull.number,
+        master: masterAt,
+        lane: row.lane,
+        cat: cat('master', 'needs'),
+        head: `${space.name}#${number} · PR open · G6`,
+        text: 'No time note from you on this pull request yet.',
+        form: form.open
+          ? {
+              ...form,
+              showHands: row.lane === 'full',
+              timer: timerLabel(form.timerAt, now),
+              error: time?.error ?? null,
+            }
+          : null,
+        lines: time?.line == null ? null : timeMessage(number, time.line),
+        posted: time?.line ?? null,
+      })
+    }
 
     for (const row of rows) {
       const issue = raw.issues.find((i) => i.number === row.number)
@@ -376,6 +462,11 @@ export function buildNeeds({
  */
 export function cardMessages(card) {
   if (card.kind === 'batch') return card.messages
+  if (card.kind === 'time') {
+    return card.lines === null || card.master === null
+      ? []
+      : [{ target: card.master, text: card.lines }]
+  }
   if (card.kind !== 'signoff' || card.locked || card.lines === null || card.master === null) {
     return []
   }

@@ -1,0 +1,20 @@
+[
+  {
+    "number": 1001,
+    "body": "Closes #389",
+    "created_at": "2026-11-24T15:58:00Z",
+    "comments": [
+      { "user": { "login": "ale9420" }, "body": "Looks fine, I will read it tomorrow.", "created_at": "2026-11-24T15:59:00Z" }
+    ],
+    "reviews": []
+  },
+  {
+    "number": 1002,
+    "body": "Closes #901",
+    "created_at": "2026-11-24T15:30:00Z",
+    "comments": [],
+    "reviews": [
+      { "user": { "login": "ale9420" }, "body": "time: 3m diff", "state": "COMMENTED" }
+    ]
+  }
+]
