@@ -9,7 +9,10 @@
 #   factory-slot.sh hold --agent maintainer                   (a heavy slot for the maintainer;
 #                                                             exit 75 when none is free)
 #   factory-slot.sh status
-#   factory-slot.sh reap
+#   factory-slot.sh reap                                      (keeps a slot younger than FACTORY_REAP_GRACE;
+#                                                             appends each kill and release to reap.log)
+#
+# `run` appends the signal it receives to run.log; reap.log and run.log are in FACTORY_SLOT_DIR.
 #
 # Environment: FACTORY_SLOT_DIR, FACTORY_TMP, FACTORY_RUN_TMP, FACTORY_CORES, FACTORY_HEAVY_SLOTS,
 # FACTORY_WORKER_SLOTS, FACTORY_REAP_GRACE, FACTORY_AGENT, HC_TERMINAL_ID.
@@ -27,7 +30,7 @@ WORKERS="${FACTORY_WORKER_SLOTS:-6}"
 GRACE="${FACTORY_REAP_GRACE:-300}"
 
 die() { echo "factory-slot: $*" >&2; exit 2; }
-usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
 positive() { [[ "$1" =~ ^[1-9][0-9]*$ ]] || die "$2 must be a positive whole number, got '$1'"; }
 positive "$HEAVY" FACTORY_HEAVY_SLOTS
@@ -104,7 +107,15 @@ cmd_run() {
     echo "start=$(date +%s)"
     echo "command=$*"
   } >"$owner.tmp" && mv "$owner.tmp" "$owner"
-  trap 'kill -TERM -- "-$pid" 2>/dev/null' INT TERM
+  # A line in run.log says that this wrapper was signalled, before the command's group is.
+  local cmdline="$*"
+  on_signal() {
+    printf '%s %s wrapper=%s pgid=%s agent=%s command=%s\n' "$(date -Is)" "$1" "$$" "$pid" "$agent" "$cmdline" \
+      >>"$DIR/run.log" 2>/dev/null
+    kill -TERM -- "-$pid" 2>/dev/null
+  }
+  trap 'on_signal INT' INT
+  trap 'on_signal TERM' TERM
   local rc
   wait "$pid"
   rc=$?
@@ -323,13 +334,10 @@ hc_answer() {
 # Prints ended, running or unknown for an agent. Either tool listing it makes it running; it has
 # ended only when both herdr and hc say it is gone; any other pair is unknown. With no herdr on PATH,
 # hc alone decides; a herdr that is there and fails still gives unknown.
-agent_state() {
-  local from_herdr from_hc
-  from_herdr=$(herdr_answer "$1")
-  from_hc=$(hc_answer "$1")
-  if [[ "$from_herdr" == live || "$from_hc" == live ]]; then
+combine_answers() { # $1 herdr's answer, $2 hc's
+  if [[ "$1" == live || "$2" == live ]]; then
     echo running
-  elif [[ "$from_hc" == gone && ( "$from_herdr" == gone || "$from_herdr" == absent ) ]]; then
+  elif [[ "$2" == gone && ( "$1" == gone || "$1" == absent ) ]]; then
     echo ended
   else
     echo unknown
@@ -349,21 +357,40 @@ kill_group() {
 
 # A hold (slot-N.hold) is the maintainer's: reap never removes one.
 cmd_reap() {
-  declare -A state
+  declare -A state herdr_of hc_of
   local f agent pid st now
   now=$(date +%s)
-  # Asks herdr and hc once per agent: the answer is cached in the shell, not in a subshell.
-  lookup() { [[ -n "${state[$1]:-}" ]] || state[$1]=$(agent_state "$1"); }
+  # Asks herdr and hc once per agent: the answers are cached in the shell, not in a subshell.
+  lookup() {
+    [[ -n "${state[$1]:-}" ]] && return
+    herdr_of[$1]=$(herdr_answer "$1")
+    hc_of[$1]=$(hc_answer "$1")
+    state[$1]=$(combine_answers "${herdr_of[$1]}" "${hc_of[$1]}")
+  }
+  # One line of reap.log: what was done, to which file, and what both tools said.
+  log_reap() { # $1 killed|released, $2 file, $3 agent, $4 command (slots only)
+    local by="${FACTORY_AGENT:-${HC_TERMINAL_ID:--}}"
+    local h="${herdr_of[$3]}"
+    [[ "$h" == absent ]] && h=unknown
+    printf '%s %s %s agent=%s herdr=%s hc=%s by=%s:%s%s\n' "$(date -Is)" "$1" "$2" "$3" "$h" \
+      "${hc_of[$3]}" "$$" "$by" "${4:+ command=$4}" >>"$DIR/reap.log" 2>/dev/null
+  }
 
   for f in "$DIR"/heavy/slot-*.owner; do
     [[ -e "$f" ]] || continue
     pid=$(field "$f" pid)
     agent=$(field "$f" agent)
     if ! alive "$pid"; then rm -f "$f"; echo "removed $f"; continue; fi
+    # A run younger than the grace period is kept, whatever herdr and hc answer.
+    st=$(field "$f" start)
+    [[ "$st" =~ ^[0-9]+$ ]] || st=0
+    ((now - st < GRACE)) && continue
     [[ -n "$agent" ]] || continue
     lookup "$agent"
     case "${state[$agent]}" in
-      ended) kill_group "$(field "$f" pgid)"; rm -f "$f"; echo "killed $f" ;;
+      ended)
+        log_reap killed "$f" "$agent" "$(field "$f" command)"
+        kill_group "$(field "$f" pgid)"; rm -f "$f"; echo "killed $f" ;;
       unknown) echo "unknown $f" ;;
     esac
   done
@@ -375,7 +402,7 @@ cmd_reap() {
     ((now - st < GRACE)) && continue
     lookup "$agent"
     case "${state[$agent]}" in
-      ended) rm -f "$f"; echo "released $f" ;;
+      ended) log_reap released "$f" "$agent"; rm -f "$f"; echo "released $f" ;;
       unknown) echo "unknown $f" ;;
     esac
   done
