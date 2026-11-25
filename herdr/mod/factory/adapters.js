@@ -9,15 +9,63 @@
 // (`issues-<space>.json` first), `comments-<n>.json`, `docker-compose-ls.json`, `process-<pid>.json` (an orphan's cores and minutes), `stack-ages.json` (the minutes before `now.txt` each stack was created), `loadhistory.json`,
 // `milestones-<space>.json` (`milestones.json`) and `project-fields.json` (the factory's share), `diffs.json` (the minutes before `now.txt` each issue's diff was opened), `forms.json` (what the "Log time" and correction forms hold), `pulls-<space>.json` (the open pull requests, with their comments and reviews), `commit-<n>.txt` (the commit message of an issue's packet), `worktree-<n>.json` (the branch and the lines changed of an issue's worktree), `now.txt` for the clock, `github-at.txt` for the time of the GitHub reads that work and
 // `github-error.txt`: with it, the first GitHub read of each space works and every later one fails with
-// its text, as a `gh` that stops answering does.
+// its text, as a `gh` that stops answering does. A pair of a space tagged `<tag>` (`pairsOf` of
+// `lib/panel.js`) has its own files, with the space and the tag, and the tag before an issue's number:
+// `issues-<space>-<tag>.json`, `pulls-<space>-<tag>.json`, `milestones-<space>-<tag>.json`,
+// `comments-<tag><n>.json`, `commit-<tag><n>.txt` and `worktree-<tag><n>.json`.
 
 import { parseNumstat } from './lib/detail.js'
+import { pairsOf } from './lib/panel.js'
+
+/** The tag of a pair as a recording names it: `-<tag>` after the space's name, `''` for an untagged pair. @param {{ tag: string }} pair */
+const tagged = (pair) => (pair.tag === '' ? '' : `-${pair.tag}`)
 
 /** The hwmon folders looked at, `hwmon0` to `hwmon15`. */
 const HWMON_FOLDERS = 16
 
 /** At most this many `gh api` calls at once. */
 const GH_AT_ONCE = 4
+
+/**
+ * The pairs of the layout's `spaces`, one space for each `name`: the entries that share a name are its
+ * pairs, in the order of the file, and the first one's repository is the space's. An entry in another
+ * repository needs a `tag` of one to three lowercase letters that no other pair of the space has, and is
+ * left out without one; an entry in the space's own repository (another milestone) needs none, and
+ * its tag is `''`.
+ *
+ * @param {unknown[]} entries
+ * @returns {import('./lib/panel.js').SpaceConfig[]}
+ */
+function readSpaces(entries) {
+  /** @type {Map<string, import('./lib/panel.js').SpaceConfig & { pairs: import('./lib/panel.js').Pair[] }>} */
+  const byName = new Map()
+  for (const s of entries) {
+    if (s === null || typeof s !== 'object') continue
+    const e = /** @type {Record<string, unknown>} */ (s)
+    if (typeof e['name'] !== 'string') continue
+    const pair = {
+      repo: typeof e['repo'] === 'string' ? e['repo'] : '',
+      milestone: Number(e['milestone']),
+      epic: e['epic'] === undefined || e['epic'] === null ? null : Number(e['epic']),
+      tag: typeof e['tag'] === 'string' ? e['tag'] : '',
+    }
+    const space = byName.get(e['name'])
+    if (space === undefined) {
+      byName.set(e['name'], {
+        name: e['name'],
+        repo: pair.repo,
+        milestone: pair.milestone,
+        epic: pair.epic,
+        pairs: [{ ...pair, tag: '' }],
+      })
+    } else if (pair.repo === space.repo) {
+      space.pairs.push({ ...pair, tag: '' })
+    } else if (/^[a-z]{1,3}$/.test(pair.tag) && !space.pairs.some((p) => p.tag === pair.tag)) {
+      space.pairs.push(pair)
+    }
+  }
+  return [...byName.values()]
+}
 
 /**
  * The block's props as the panel reads them.
@@ -42,14 +90,7 @@ export function readConfig(raw) {
         : Array.isArray(fixture)
           ? fixture.filter((f) => typeof f === 'string')
           : null,
-    spaces: spaces
-      .filter((s) => s !== null && typeof s === 'object' && typeof s.name === 'string')
-      .map((s) => ({
-        name: s.name,
-        repo: typeof s.repo === 'string' ? s.repo : '',
-        milestone: Number(s.milestone),
-        epic: s.epic === undefined || s.epic === null ? null : Number(s.epic),
-      })),
+    spaces: readSpaces(spaces),
   }
 }
 
@@ -234,87 +275,122 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
   }
 
   /**
-   * The issues of a space's milestone and the comments of each open one.
+   * The issues of each pair's milestone and the comments of each open one, each in its pair's repository:
+   * the first pair's as `issues` and `comments`, the next pairs' in `others`, in the order of the pairs (a
+   * space of one pair has no `others`). A read that fails for one pair fails for the space.
    *
    * @param {import('./lib/panel.js').SpaceConfig} space
    */
   async function readGithub(space) {
     let at = iso(await now())
     try {
+      const pairs = pairsOf(space)
+      /** @type {{ issues: any[], comments: Record<number, unknown> }[]} */
+      const parts = []
       if (dirs !== null) {
         githubReads[space.name] = (githubReads[space.name] ?? 0) + 1
         const failure = await fixtureText('github-error.txt')
         if (failure !== null && githubReads[space.name] > 1) return { error: failure.trim() }
         const stamp = await fixtureText('github-at.txt')
         if (stamp !== null) at = stamp.trim()
-        const issues =
-          (await fixtureJson(`issues-${space.name}.json`)) ?? (await fixtureJson('issues.json'))
-        if (!Array.isArray(issues)) return { error: 'no issues.json in the fixture' }
         const today = iso(await now()).slice(0, 10)
-        /** @type {Record<number, unknown>} */
-        const comments = {}
-        for (const issue of issues) {
-          if (issue.state === 'closed' && !closedOn(issue, today)) continue
-          comments[issue.number] = (await fixtureJson(`comments-${issue.number}.json`)) ?? []
+        for (const pair of pairs) {
+          const name = `issues-${space.name}${tagged(pair)}.json`
+          const issues =
+            pair === pairs[0]
+              ? ((await fixtureJson(name)) ?? (await fixtureJson('issues.json')))
+              : await fixtureJson(name)
+          if (!Array.isArray(issues)) {
+            return { error: `no ${pair === pairs[0] ? 'issues.json' : name} in the fixture` }
+          }
+          /** @type {Record<number, unknown>} */
+          const comments = {}
+          for (const issue of issues) {
+            if (issue.state === 'closed' && !closedOn(issue, today)) continue
+            comments[issue.number] =
+              (await fixtureJson(`comments-${pair.tag}${issue.number}.json`)) ?? []
+          }
+          parts.push({ issues, comments })
         }
-        return { at, issues, comments, maintainer: config.maintainer }
-      }
-      const issues = await gh(
-        `repos/${space.repo}/issues?milestone=${space.milestone}&state=all&per_page=100`
-      )
-      if (!Array.isArray(issues)) throw new Error('gh api: not a list of issues')
-      const today = iso(await now()).slice(0, 10)
-      // The open issues, and the ones closed today: the Board's "Merged today" shows each one's lane.
-      const open = issues.filter(
-        (i) => (i.state !== 'closed' || closedOn(i, today)) && i.pull_request == null
-      )
-      /** @type {Record<number, unknown>} */
-      const comments = {}
-      for (let i = 0; i < open.length; i += GH_AT_ONCE) {
-        const batch = open.slice(i, i + GH_AT_ONCE)
-        const got = await Promise.all(
-          batch.map((issue) =>
-            gh(`repos/${space.repo}/issues/${issue.number}/comments?per_page=100`)
+      } else {
+        for (const pair of pairs) {
+          const issues = await gh(
+            `repos/${pair.repo}/issues?milestone=${pair.milestone}&state=all&per_page=100`
           )
-        )
-        batch.forEach((issue, k) => {
-          comments[issue.number] = got[k]
-        })
+          if (!Array.isArray(issues)) throw new Error('gh api: not a list of issues')
+          const today = iso(await now()).slice(0, 10)
+          // The open issues, and the ones closed today: the Board's "Merged today" shows each one's lane.
+          const open = issues.filter(
+            (i) => (i.state !== 'closed' || closedOn(i, today)) && i.pull_request == null
+          )
+          /** @type {Record<number, unknown>} */
+          const comments = {}
+          for (let i = 0; i < open.length; i += GH_AT_ONCE) {
+            const batch = open.slice(i, i + GH_AT_ONCE)
+            const got = await Promise.all(
+              batch.map((issue) =>
+                gh(`repos/${pair.repo}/issues/${issue.number}/comments?per_page=100`)
+              )
+            )
+            batch.forEach((issue, k) => {
+              comments[issue.number] = got[k]
+            })
+          }
+          parts.push({ issues, comments })
+        }
       }
-      return { at, issues, comments, maintainer: config.maintainer }
+      const [first, ...others] = parts
+      return {
+        at,
+        issues: first?.issues ?? [],
+        comments: first?.comments ?? {},
+        maintainer: config.maintainer,
+        ...(others.length === 0 ? {} : { others }),
+      }
     } catch (error) {
       return { error: reason(error) }
     }
   }
 
   /**
-   * The open pull requests of a space's repository, each with its comments and its reviews, so that
-   * "Needs you" can tell which has no `time:` note of the maintainer. A failed read of the pull requests
-   * is no pull requests: it never fails the read of the milestone.
+   * The open pull requests of each repository of a space's pairs, each with its comments and its reviews,
+   * so that "Needs you" can tell which has no `time:` note of the maintainer. A pull request of another
+   * repository than the space's carries its `repo`. A failed read of the pull requests is no pull
+   * requests: it never fails the read of the milestone.
    *
    * @param {import('./lib/panel.js').SpaceConfig} space
    * @returns {Promise<import('./lib/panel.js').OpenPull[]>}
    */
   async function readPulls(space) {
     try {
-      if (dirs !== null) {
-        const found = await fixtureJson(`pulls-${space.name}.json`)
-        return Array.isArray(found) ? found : []
-      }
-      const open = await gh(`repos/${space.repo}/pulls?state=open&per_page=100`)
-      if (!Array.isArray(open)) return []
+      /** @type {import('./lib/panel.js').OpenPull[]} */
       const out = []
-      for (let i = 0; i < open.length; i += GH_AT_ONCE) {
-        const got = await Promise.all(
-          open.slice(i, i + GH_AT_ONCE).map(async (pull) => ({
-            number: pull.number,
-            body: pull.body ?? null,
-            created_at: pull.created_at,
-            comments: await gh(`repos/${space.repo}/issues/${pull.number}/comments?per_page=100`),
-            reviews: await gh(`repos/${space.repo}/pulls/${pull.number}/reviews?per_page=100`),
-          }))
-        )
-        out.push(...got)
+      const seen = new Set()
+      for (const pair of pairsOf(space)) {
+        if (seen.has(pair.repo)) continue
+        seen.add(pair.repo)
+        const own = pair.repo === space.repo
+        /** @param {import('./lib/panel.js').OpenPull} pull */
+        const mark = (pull) => (own ? pull : { ...pull, repo: pair.repo })
+        if (dirs !== null) {
+          const found = await fixtureJson(`pulls-${space.name}${tagged(pair)}.json`)
+          if (Array.isArray(found)) out.push(...found.map(mark))
+          continue
+        }
+        const open = await gh(`repos/${pair.repo}/pulls?state=open&per_page=100`)
+        if (!Array.isArray(open)) continue
+        for (let i = 0; i < open.length; i += GH_AT_ONCE) {
+          const got = await Promise.all(
+            open.slice(i, i + GH_AT_ONCE).map(async (pull) => ({
+              number: pull.number,
+              body: pull.body ?? null,
+              created_at: pull.created_at,
+              comments: await gh(`repos/${pair.repo}/issues/${pull.number}/comments?per_page=100`),
+              reviews: await gh(`repos/${pair.repo}/pulls/${pull.number}/reviews?per_page=100`),
+            }))
+          )
+          out.push(...got.map(mark))
+        }
       }
       return out
     } catch {
@@ -323,8 +399,9 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
   }
 
   /**
-   * The milestones of each space's repository, for the factory's share: `gh api repos/<repo>/milestones`
-   * (`milestones-<space>.json`, then `milestones.json`, in a fixture), one read for each repository.
+   * The milestones of the repository of each pair of each space, for the factory's share:
+   * `gh api repos/<repo>/milestones` (`milestones-<space>.json`, `milestones-<space>-<tag>.json` for a
+   * tagged pair, then `milestones.json`, in a fixture), one read for each repository.
    *
    * @param {import('./lib/panel.js').SpaceConfig[]} spaces
    */
@@ -334,14 +411,16 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
       /** @type {Record<string, unknown>} */
       const byRepo = {}
       for (const space of spaces) {
-        if (space.repo in byRepo) continue
-        const list =
-          dirs !== null
-            ? ((await fixtureJson(`milestones-${space.name}.json`)) ??
-              (await fixtureJson('milestones.json')))
-            : await gh(`repos/${space.repo}/milestones?state=all&per_page=100`)
-        if (!Array.isArray(list)) return { error: `no milestones for ${space.repo}` }
-        byRepo[space.repo] = list
+        for (const pair of pairsOf(space)) {
+          if (pair.repo in byRepo) continue
+          const list =
+            dirs !== null
+              ? ((await fixtureJson(`milestones-${space.name}${tagged(pair)}.json`)) ??
+                (await fixtureJson('milestones.json')))
+              : await gh(`repos/${pair.repo}/milestones?state=all&per_page=100`)
+          if (!Array.isArray(list)) return { error: `no milestones for ${pair.repo}` }
+          byRepo[pair.repo] = list
+        }
       }
       return { at, byRepo }
     } catch (error) {
@@ -457,12 +536,14 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
    *
    * @param {number} issue
    * @param {string} path the worktree
+   * @param {string} [tag] the tag of the issue's pair: its recording is `worktree-<tag><n>.json`
    */
-  async function readWorktree(issue, path) {
+  async function readWorktree(issue, path, tag = '') {
     try {
       if (dirs !== null) {
-        const found = await fixtureJson(`worktree-${issue}.json`)
-        return found === null ? { error: `no worktree-${issue}.json in the fixture` } : found
+        const name = `worktree-${tag}${issue}.json`
+        const found = await fixtureJson(name)
+        return found === null ? { error: `no ${name} in the fixture` } : found
       }
       /** @param {string[]} args */
       const git = async (args) => {
@@ -481,17 +562,18 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
 
   /**
    * The first line of an issue's commit message, the subject: `<packet>/commit-message.txt`, or
-   * `commit-<issue>.txt` of the fixture. `null` when there is none.
+   * `commit-<tag><issue>.txt` of the fixture. `null` when there is none.
    *
    * @param {number} issue
    * @param {string} packet the packet directory
+   * @param {string} [tag] the tag of the issue's pair
    * @returns {Promise<string | null>}
    */
-  async function readCommit(issue, packet) {
+  async function readCommit(issue, packet, tag = '') {
     try {
       const text =
         dirs !== null
-          ? await fixtureText(`commit-${issue}.txt`)
+          ? await fixtureText(`commit-${tag}${issue}.txt`)
           : await readTextFile(`${packet.replace(/\/+$/, '')}/commit-message.txt`)
       const line = text?.split(/\r?\n/, 1)[0]?.trim()
       return line === undefined || line === '' ? null : line
@@ -502,7 +584,8 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
 
   /**
    * With a fixture, the diffs the maintainer is taken to have opened: `diffs.json`, the minutes before
-   * `now.txt` that each issue's diff was opened. Nothing is read from a real run, where the maintainer's
+   * `now.txt` that each issue's diff was opened, by the issue's key (`issueKey` of `lib/panel.js`: `"5"`,
+   * or `"owner/repo#5"` for an issue of another repository of the space). Nothing is read from a real run, where the maintainer's
    * click opens them.
    *
    * @returns {Promise<Record<string, number>>}

@@ -1,5 +1,6 @@
 // The correction form ("Log a correction", `herdr/mod/design/screens/LogForm.png`): the line it sends to a
-// master, `log #N | <what> | <category>`, and the line the master posts on the issue from it
+// master, `log #N | <what> | <category>` (`log owner/repo#N | …` for an issue of another repository of a
+// space), and the line the master posts on the issue from it
 // (`factory-log | <date> | #N | <what> | <category> | -`, `herdr/master.md`, "Lines from the mod" and
 // `docs/factory.md`, `C.1`). A function of its arguments: nothing here reads the clock or sends.
 
@@ -8,14 +9,14 @@ export const CATEGORIES = Object.freeze(['lint', 'test', 'skill', 'standard', 'i
 
 /**
  * @typedef {object} LogForm
- * @property {string} issue `#792` (a number, with or without the `#`)
+ * @property {string} issue `#792` (a number, with or without the `#`), or `owner/repo#792`
  * @property {string} what what was wrong, not how it was fixed
  * @property {string | null} category one of `CATEGORIES`
  */
 
-/** @returns {LogForm} */
-export const emptyLogForm = (/** @type {number | null} */ number = null) => ({
-  issue: number === null ? '' : `#${number}`,
+/** The form with the issue filled in: a number is `#N`, a reference (`owner/repo#N`) stays as it is. @returns {LogForm} */
+export const emptyLogForm = (/** @type {number | string | null} */ issue = null) => ({
+  issue: issue === null ? '' : typeof issue === 'number' ? `#${issue}` : issue,
   what: '',
   category: null,
 })
@@ -34,15 +35,17 @@ export const escapeWhat = (what) => what.replaceAll(/\s+/g, ' ').trim().replaceA
  *
  * @param {LogForm} form
  * @param {number} now milliseconds since the epoch (for the date of the posted line)
- * @returns {{ number: number | null, send: string | null, posted: string, error: string | null }}
+ * @returns {{ number: number | null, repo: string | null, send: string | null, posted: string, error: string | null }} `repo` is the `owner/repo` the issue names, `null` for `#N`
  */
 export function correctionLine(form, now) {
-  const match = /^#?(\d+)$/.exec(form.issue.trim())
-  const number = match === null ? null : Number(match[1])
+  const match = /^(?:([\w.-]+\/[\w.-]+)#|#)?(\d+)$/.exec(form.issue.trim())
+  const number = match === null ? null : Number(match[2])
+  const repo = match?.[1] ?? null
+  const ref = `${repo ?? ''}#${number}`
   const what = escapeWhat(form.what)
   const category = form.category
   const date = new Date(now).toISOString().slice(0, 10)
-  const shown = number === null ? form.issue.trim() || '#…' : `#${number}`
+  const shown = number === null ? form.issue.trim() || '#…' : ref
   const posted = `factory-log | ${date} | ${shown} | ${what === '' ? '…' : what} | ${category ?? '…'} | -`
   /** @type {string | null} */
   let error = null
@@ -51,7 +54,8 @@ export function correctionLine(form, now) {
   else if (category === null || !CATEGORIES.includes(category)) error = 'Pick a category.'
   return {
     number,
-    send: error === null ? `log #${number} | ${what} | ${category}` : null,
+    repo,
+    send: error === null ? `log ${ref} | ${what} | ${category}` : null,
     posted,
     error,
   }

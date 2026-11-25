@@ -37,7 +37,18 @@ import {
 } from 'herdr'
 import { createAdapters, readConfig } from './adapters.js'
 import { createActions, createRetries } from './lib/actions.js'
-import { buildGithub, buildPanel, formatAge, parseStacks, pushLoad, SECTIONS } from './lib/panel.js'
+import {
+  buildGithub,
+  buildPanel,
+  formatAge,
+  issueKey,
+  pairReads,
+  parseStacks,
+  pushLoad,
+  refOf,
+  SECTIONS,
+  tagsOf,
+} from './lib/panel.js'
 import { buildBoard, factoryShare } from './lib/board.js'
 import {
   answerLine,
@@ -104,7 +115,7 @@ export default class Factory extends View {
     this.stacks = { value: [], at: null, stale: false, error: null }
     this.history = []
     this.terminals = []
-    /** `{ space, number }` in the overlay of an issue, `null` in the panel. */
+    /** `{ space, number, repo }` in the overlay of an issue (`repo` left out: the space's), `null` in the panel. */
     this.detail = props()?.detail ?? null
     /** The Board tab is this mod opened with `board` in its props (`tab.new {mod, props}`). */
     this.board = props()?.board === true
@@ -120,16 +131,16 @@ export default class Factory extends View {
     this.scroll = ScrollHandle.new()
     this.order = []
     this.open = this.load('open', {})
-    /** The subject of each issue's commit message, by number. */
+    /** The subject of each issue's commit message, by the issue's key (`issueKey` of `lib/panel.js`). */
     this.commits = {}
     /** When the panel first saw each blocked terminal (by address): `terminals()` gives no time for it. */
     this.blockedSince = {}
-    /** When the maintainer opened each issue's diff (the model's clock), by number; kept in memory only. */
+    /** When the maintainer opened each issue's diff (the model's clock), by key; kept in memory only. */
     this.diffs = {}
-    /** The time forms, and the text inputs of each, by issue number. */
+    /** The time forms, and the text inputs of each, by the issue's key. */
     this.forms = {}
     this.formInputs = {}
-    /** The forms of "Log time" on an open pull request, and their inputs, by issue number. */
+    /** The forms of "Log time" on an open pull request, and their inputs, by the issue's key. */
     this.timeForms = {}
     this.timeInputs = {}
     /** True in the overlay of Customize (`props().customize`). */
@@ -150,14 +161,14 @@ export default class Factory extends View {
     this.post = createPoster({ notify, playSound })
     this.saturation = createSaturation()
     this.look = createLook()
-    /** `{ space, number }` in the overlay of the correction form (`props().log`), `null` elsewhere. */
+    /** `{ space, number, ref }` in the overlay of the correction form (`props().log`), `null` elsewhere. */
     this.logOpen = props()?.log ?? null
     /** What the correction form holds, and its inputs: made in the overlay only, where the form is drawn. */
     this.logState =
       this.logOpen === null
         ? null
         : {
-            form: emptyLogForm(this.logOpen.number),
+            form: emptyLogForm(this.logOpen.ref ?? this.logOpen.number),
             inputs: {
               issue: InputState.new({ placeholder: '#792' }),
               what: TextareaState.new({ placeholder: 'What was wrong, in one line.', rows: 3 }),
@@ -206,7 +217,7 @@ export default class Factory extends View {
         localStorage.setItem('open', JSON.stringify(this.open))
         cx.notify()
       },
-      openDetail: (space, number) => this.openDetail(space, number),
+      openDetail: (space, number, repo) => this.openDetail(space, number, repo),
       openBoard: () => this.openBoard(),
       openCustomize: () => this.openCustomize(),
       boardOn: true,
@@ -257,7 +268,7 @@ export default class Factory extends View {
         ),
       toggleRetry: (card, cx) => {
         if (this.retries.isArmed(card.key)) this.retries.cancel(card.key)
-        else if (card.master !== null) this.retries.arm(card.key, card.number, card.master)
+        else if (card.master !== null) this.retries.arm(card.key, card.ref, card.master)
         cx.notify()
       },
       askBringDown: (project, cx) => {
@@ -311,16 +322,22 @@ export default class Factory extends View {
             String(card.number),
             card.repo,
           ],
-          `reports-${card.number}`
+          `reports-${card.issue}`
         ),
-      inputs: (number) => this.formInputs[number] ?? null,
-      setForm: (number, patch, cx) => this.setForm(number, patch, cx),
-      timeInputs: (number) => this.timeInputs[number] ?? null,
-      setTimeForm: (number, patch, cx) => this.setTimeForm(number, patch, cx),
-      toggleTimer: (number, cx) => this.toggleTimer(number, cx),
+      inputs: (issue) => this.formInputs[issue] ?? null,
+      setForm: (issue, patch, cx) => this.setForm(issue, patch, cx),
+      timeInputs: (issue) => this.timeInputs[issue] ?? null,
+      setTimeForm: (issue, patch, cx) => this.setTimeForm(issue, patch, cx),
+      toggleTimer: (issue, cx) => this.toggleTimer(issue, cx),
       openLog: (space, number) => this.openLog(space, number),
-      openLogFromDetail: () =>
-        this.openLog(this.detail?.space ?? null, this.detail?.number ?? null),
+      openLogFromDetail: () => {
+        const open = this.openIssue()
+        this.openLog(
+          this.detail?.space ?? null,
+          this.detail?.number ?? null,
+          open === null ? null : refOf(open.space, open.pair, open.issue.number)
+        )
+      },
       logForm: {
         inputs: this.logState?.inputs ?? null,
         choose: (category, cx) => {
@@ -388,6 +405,7 @@ export default class Factory extends View {
       leases: slots?.leases.leases ?? [],
       orphans: slots?.orphans ?? [],
       stacks: this.stacks.value,
+      tags: tagsOf(this.config.spaces),
     }
   }
 
@@ -415,7 +433,7 @@ export default class Factory extends View {
    * Opens the diff of an issue's worktree against its merge base with `origin/main` in a pane that only
    * reads, and counts the minutes of the time form from now on.
    *
-   * @param {{ number: number, worktree: string | null, lane?: string }} card
+   * @param {{ number: number, issue: number | string, worktree: string | null, lane?: string }} card
    */
   openDiff(card) {
     if (card.worktree === null) return
@@ -430,15 +448,15 @@ export default class Factory extends View {
         'diff',
         path,
       ],
-      `diff-${card.number}`
+      `diff-${card.issue}`
     )
-    if (this.diffs[card.number] === undefined) this.diffs[card.number] = this.now
-    if (this.formInputs[card.number] === undefined && card.lane !== 'express') {
-      this.makeForm(card.number)
+    if (this.diffs[card.issue] === undefined) this.diffs[card.issue] = this.now
+    if (this.formInputs[card.issue] === undefined && card.lane !== 'express') {
+      this.makeForm(card.issue)
     }
   }
 
-  /** The inputs of an issue's time form; made where an event handler runs, never in `render`. @param {number} number */
+  /** The inputs of an issue's time form; made where an event handler runs, never in `render`. @param {number | string} number the issue's key */
   makeForm(number) {
     this.forms[number] = emptyForm()
     const readMin = InputState.new({ placeholder: 'min' })
@@ -463,7 +481,7 @@ export default class Factory extends View {
    * The form of "Log time" on an open pull request. Its inputs are made when it first opens (where an
    * event handler runs, never in `render`).
    *
-   * @param {number} number @param {Record<string, unknown>} patch @param {any} cx
+   * @param {number | string} number the issue's key @param {Record<string, unknown>} patch @param {any} cx
    */
   setTimeForm(number, patch, cx) {
     const form = (this.timeForms[number] ??= emptyTimeLogForm())
@@ -493,7 +511,7 @@ export default class Factory extends View {
     cx.notify()
   }
 
-  /** Starts the hands-on timer, or stops it and adds its minutes to the field. @param {number} number @param {any} cx */
+  /** Starts the hands-on timer, or stops it and adds its minutes to the field. @param {number | string} number the issue's key @param {any} cx */
   toggleTimer(number, cx) {
     const form = this.timeForms[number]
     if (form === undefined) return
@@ -507,7 +525,7 @@ export default class Factory extends View {
     cx.notify()
   }
 
-  /** @param {number} number @param {Record<string, unknown>} patch @param {any} cx */
+  /** @param {number | string} number the issue's key @param {Record<string, unknown>} patch @param {any} cx */
   setForm(number, patch, cx) {
     const form = this.forms[number]
     if (form === undefined) return
@@ -549,35 +567,35 @@ export default class Factory extends View {
     if (card.options !== undefined || card.question !== undefined) {
       const option = this.ui.answer.option
       if (option === null || card.master === null) return
-      const text = answerLine(card.number, option, this.ui.answer.note?.value() ?? '')
-      this.outbox.start(
-        Date.now(),
-        `answer #${card.number}`,
-        [{ target: card.master, text }],
-        'answer'
-      )
+      const ref = card.ref ?? `#${card.number}`
+      const text = answerLine(ref, option, this.ui.answer.note?.value() ?? '')
+      this.outbox.start(Date.now(), `answer ${ref}`, [{ target: card.master, text }], 'answer')
     } else {
       const messages = cardMessages(card)
       const label =
         card.kind === 'batch'
           ? 'the shared sign-off'
           : card.kind === 'time'
-            ? `time note #${card.number}`
-            : `sign-off #${card.number}`
+            ? `time note ${card.ref}`
+            : `sign-off ${card.ref}`
       this.outbox.start(Date.now(), label, messages, card.key)
     }
     cx.notify()
   }
 
   /**
-   * The master of the space of the correction form: the space whose milestone holds the issue it names,
-   * else the space it was opened from, else the first.
+   * The master of the space of the correction form: the space whose milestone holds the issue it names
+   * (`#N` in a pair of the space's repository, `owner/repo#N` in a pair of that repository), else the
+   * space it was opened from, else the first.
    */
   logTarget() {
-    const { number } = correctionLine(this.logState.form, this.now)
+    const { number, repo } = correctionLine(this.logState.form, this.now)
     const space =
       this.config.spaces.find((s) =>
-        this.github?.spaces[s.name]?.raw?.issues.some((i) => i.number === number)
+        pairReads(s, this.github?.spaces[s.name]).some(
+          ({ pair, raw }) =>
+            pair.repo === (repo ?? s.repo) && raw.issues.some((i) => i.number === number)
+        )
       ) ??
       this.config.spaces.find((s) => s.name === this.logOpen?.space) ??
       this.config.spaces[0]
@@ -597,11 +615,11 @@ export default class Factory extends View {
   /** Starts the 10 s countdown of `log #N | <what> | <category>`, for the master of the issue's space. @param {any} cx */
   startLogSend(cx) {
     this.sentNote = null
-    const { send, number, master } = this.logModel()
+    const { send, number, repo, master } = this.logModel()
     if (send !== null && master !== null) {
       this.outbox.start(
         Date.now(),
-        `correction #${number}`,
+        `correction ${repo ?? ''}#${number}`,
         [{ target: master, text: send }],
         'log'
       )
@@ -609,14 +627,19 @@ export default class Factory extends View {
     cx.notify()
   }
 
-  /** Opens the correction form: this mod with `log` in its props. @param {string | null} space @param {number | null} number */
-  openLog(space, number) {
+  /**
+   * Opens the correction form: this mod with `log` in its props.
+   *
+   * @param {string | null} space @param {number | null} number
+   * @param {string | null} [ref] the issue's reference, `owner/repo#N` for an issue of another repository of the space
+   */
+  openLog(space, number, ref = null) {
     openOverlay({
       mod: 'factory',
       kind: 'dialog',
       width: 380,
       height: 0.9,
-      props: { ...props(), log: { space, number } },
+      props: { ...props(), log: { space, number, ...(ref === null ? {} : { ref }) } },
     })
   }
 
@@ -783,14 +806,19 @@ export default class Factory extends View {
     openBoardTab(run, props, panes)
   }
 
-  /** Opens the overlay of an issue: the same mod with `detail` in its props. @param {string} space @param {number} number */
-  openDetail(space, number) {
+  /**
+   * Opens the overlay of an issue: the same mod with `detail` in its props.
+   *
+   * @param {string} space @param {number} number
+   * @param {string} [repo] the repository of the issue's pair, when it is not the space's
+   */
+  openDetail(space, number, repo) {
     openOverlay({
       mod: 'factory',
       kind: 'dialog',
       width: 760,
       height: 0.9,
-      props: { ...props(), detail: { space, number } },
+      props: { ...props(), detail: { space, number, ...(repo === undefined ? {} : { repo }) } },
     })
   }
 
@@ -870,13 +898,15 @@ export default class Factory extends View {
           this.seeded = true
           this.history = await a.readHistory()
           // A fixture says which diffs were opened, since nobody clicks in a recording.
+          // Their keys are those of `issueKey`: a number, or `owner/repo#N`.
+          const key = (/** @type {string} */ k) => (/^\d+$/.test(k) ? Number(k) : k)
           for (const [number, minutes] of Object.entries(await a.readDiffs())) {
             this.diffs[number] = now - Number(minutes) * 60_000
-            this.makeForm(Number(number))
+            this.makeForm(key(number))
           }
           const forms = await a.readForms()
           for (const [number, patch] of Object.entries(forms.time)) {
-            this.setTimeForm(Number(number), { open: true, ...patch }, cx)
+            this.setTimeForm(key(number), { open: true, ...patch }, cx)
             const form = this.timeForms[number]
             this.timeInputs[number].readMin.set_value(form.readMin)
             this.timeInputs[number].handMin.set_value(form.handMin)
@@ -995,28 +1025,37 @@ export default class Factory extends View {
     })
   }
 
-  /** The subject of each open issue's commit message, from the packet its `### Progress` names. */
+  /** The subject of each open issue's commit message, from the packet its `### Progress` names, by key. */
   async readCommits() {
     for (const space of this.config.spaces) {
-      for (const issue of this.github?.spaces[space.name]?.raw?.issues ?? []) {
-        if (issue.state === 'closed') continue
-        const packet = parseProgress(issue.body).packet
-        if (packet === null) continue
-        const dir = packet.startsWith('~/') ? `${home()}${packet.slice(1)}` : packet
-        const subject = await this.adapters.readCommit(issue.number, dir)
-        if (subject === null) delete this.commits[issue.number]
-        else this.commits[issue.number] = subject
+      for (const { pair, raw } of pairReads(space, this.github?.spaces[space.name])) {
+        for (const issue of raw.issues) {
+          if (issue.state === 'closed') continue
+          const packet = parseProgress(issue.body).packet
+          if (packet === null) continue
+          const dir = packet.startsWith('~/') ? `${home()}${packet.slice(1)}` : packet
+          const key = issueKey(space, pair, issue.number)
+          const subject = await this.adapters.readCommit(issue.number, dir, pair.tag)
+          if (subject === null) delete this.commits[key]
+          else this.commits[key] = subject
+        }
       }
     }
   }
 
-  /** The open issue, as GitHub gave it, with its comments and its space. */
+  /** The open issue, as GitHub gave it, with its comments, its space and its pair. */
   openIssue() {
     const space = this.config.spaces.find((s) => s.name === this.detail?.space)
-    const raw = space === undefined ? null : this.github?.spaces[space.name]?.raw
-    const issue = raw?.issues.find((i) => i.number === this.detail?.number)
-    if (space === undefined || raw == null || issue === undefined) return null
-    return { space, issue, comments: raw.comments[issue.number] ?? [], maintainer: raw.maintainer }
+    if (space === undefined) return null
+    const repo = this.detail?.repo ?? space.repo
+    for (const { pair, raw } of pairReads(space, this.github?.spaces[space.name])) {
+      if (pair.repo !== repo) continue
+      const issue = raw.issues.find((i) => i.number === this.detail?.number)
+      if (issue === undefined) continue
+      const comments = raw.comments[issue.number] ?? []
+      return { space, pair, issue, comments, maintainer: raw.maintainer }
+    }
+    return null
   }
 
   /** The branch and the lines changed of the open issue's worktree, named in its `### Progress`. */
@@ -1027,7 +1066,8 @@ export default class Factory extends View {
     if (path === null) return
     const read = await this.adapters.readWorktree(
       open.issue.number,
-      path.startsWith('~/') ? `${home()}${path.slice(1)}` : path
+      path.startsWith('~/') ? `${home()}${path.slice(1)}` : path,
+      open.pair.tag
     )
     if (!('error' in read)) this.worktree = read
   }
@@ -1045,10 +1085,13 @@ export default class Factory extends View {
       comments: open.comments,
       maintainer: open.maintainer,
       space: {
-        repo: open.space.repo,
+        repo: open.pair.repo,
         letter: (open.space.name[0] ?? '?').toUpperCase(),
         colour: ['space-m', 'space-f', 'space-p'][at % 3] ?? 'muted',
         name: open.space.name,
+        tag: open.pair.tag,
+        ref: refOf(open.space, open.pair, open.issue.number),
+        tags: tagsOf(this.config.spaces),
       },
       now: this.now,
       agents,

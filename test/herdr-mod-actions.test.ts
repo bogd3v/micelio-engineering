@@ -223,6 +223,68 @@ describe('a held check', () => {
     expect(retries.check(1, 32)).toEqual([])
   })
 
+  it('an armed retry of an issue of another repository sends retry owner/repo#N once', () => {
+    const spaces = readConfig({
+      spaces: [
+        { name: 'micelio', repo: 'bogd3v/micelio', milestone: 18 },
+        { name: 'micelio', repo: 'bogd3v/micelio-cms', milestone: 12, tag: 'c' },
+      ],
+    }).spaces
+    const held = (line: string) => [
+      { user: { login: ME }, body: line, created_at: new Date(NOW - 6 * MIN).toISOString(), id: 1 },
+    ]
+    const github = buildGithub({
+      now: NOW,
+      spaces,
+      reads: {
+        micelio: {
+          at: AT,
+          issues: [{ number: 531, title: 'own', state: 'open', body: null, created_at: AT }],
+          comments: {},
+          maintainer: ME,
+          others: [
+            {
+              issues: [{ number: 531, title: 'cms', state: 'open', body: null, created_at: AT }],
+              comments: {
+                531: held('held | 2026-11-24 | bogd3v/micelio-cms#531 | G2 | timeouts at load 81'),
+              },
+            },
+          ],
+        },
+      },
+    })
+    const agents = parseAgents([
+      {
+        address: 'tm',
+        name: null,
+        parent: null,
+        status: 'idle',
+        foreground: { argv: ['claude', '--agent', 'master'] },
+        labels: { 'herdr.space': 'sp-1', where: 'micelio / 1' },
+      },
+    ])
+    const { cards } = buildNeeds({ now: NOW, config: { spaces }, github, agents, cores: 32 })
+    // Only the issue of the other repository is held; #531 of the space's repository is not.
+    expect(cards).toHaveLength(1)
+    const [card] = cards
+    expect(card).toMatchObject({
+      kind: 'held',
+      key: 'held:micelio bogd3v/micelio-cms#531',
+      head: 'micelio bogd3v/micelio-cms#531 · G2 · HELD',
+      ref: 'bogd3v/micelio-cms#531',
+      master: 'tm',
+    })
+    const sent: [string, string][] = []
+    const retries = createRetries({
+      send: (target: string, text: string) => sent.push([target, text]),
+    })
+    retries.arm(card.key, card.ref, card.master)
+    expect(retries.check(30, 32)).toEqual([])
+    expect(retries.check(5, 32)).toEqual(['retry bogd3v/micelio-cms#531'])
+    expect(retries.check(5, 32)).toEqual([])
+    expect(sent).toEqual([['tm', 'retry bogd3v/micelio-cms#531']])
+  })
+
   it('shows its reason and the button that arms it, with the threshold of the machine', () => {
     const { cards } = needsFor(heldComments())
     expect(cards).toHaveLength(1)

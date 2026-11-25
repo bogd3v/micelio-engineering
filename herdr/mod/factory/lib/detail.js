@@ -3,7 +3,7 @@
 // A function of its arguments: the time, the issue, its comments and the terminals are given by the
 // caller. `views/detail.js` only draws it.
 
-import { modelOf } from './agents.js'
+import { issueOfName, modelOf } from './agents.js'
 import { catFile } from './cat.js'
 import { parseGates } from './gates.js'
 import { parseDecision } from './decision.js'
@@ -134,8 +134,8 @@ function stateOf(status) {
  * @param {{ number: number, title?: string, body?: string | null, state?: string }} input.issue
  * @param {{ user?: { login?: string }, body?: string, created_at?: string, id?: number }[]} input.comments
  * @param {string} input.maintainer
- * @param {{ repo: string, letter: string, colour: string, name?: string }} input.space
- * @param {import('./agents.js').Agent[]} input.agents the agents of the space
+ * @param {{ repo: string, letter: string, colour: string, name?: string, tag?: string, ref?: string, tags?: string[] }} input.space the repository of the issue's pair (the header names it), its tag, the issue's reference (`#N` with none) and the tags of the spaces' pairs
+ * @param {import('./agents.js').Agent[]} input.agents the agents of the space: those of the issue are the ones with its pair's tag
  * @param {import('./agents.js').Terminal[]} input.terminals the rows of `terminals()`, for the model
  * @param {{ name: string }[]} input.stacks the stacks up
  * @param {{ branch: string | null, added: number | null, removed: number | null } | null} input.worktree what the worktree says
@@ -155,7 +155,10 @@ export function buildDetail({
   now = 0,
 }) {
   const closed = issue.state === 'closed'
-  const onIt = agents.filter((a) => a.issue === issue.number && a.role !== null)
+  const tag = space.tag ?? ''
+  const onIt = agents.filter(
+    (a) => a.issue === issue.number && (a.tag ?? '') === tag && a.role !== null
+  )
   const gates = parseGates({
     comments,
     maintainer,
@@ -238,7 +241,7 @@ export function buildDetail({
   for (const [role, sum] of sums) {
     if (taken.has(role)) continue
     rows.push({
-      name: `${role}-${issue.number}`,
+      name: `${role}-${tag}${issue.number}`,
       address: null,
       role,
       model: '--',
@@ -281,6 +284,7 @@ export function buildDetail({
       ? null
       : {
           number: issue.number,
+          ref: space.ref ?? `#${issue.number}`,
           title: `Decision for you · G${live === -1 ? 2 : live + 1} · R${Math.max(1, gates.round)} · waiting ${formatAge(Math.max(0, now - asked.at))}`,
           question: asked.question,
           options: asked.options,
@@ -288,7 +292,11 @@ export function buildDetail({
           masterName: space.name ?? space.repo,
         }
 
-  const stack = stacks.find((s) => new RegExp(`(?:^|\\D)${issue.number}$`).test(s.name))
+  // The stack whose name ends in the issue's `<tag><N>`.
+  const stack = stacks.find((s) => {
+    const id = issueOfName(s.name, space.tags ?? (tag === '' ? [] : [tag]))
+    return id !== null && id.issue === issue.number && id.tag === tag
+  })
   return {
     number: issue.number,
     title: issue.title ?? '',

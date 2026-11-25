@@ -10,9 +10,10 @@ import { catFile } from './cat.js'
 import { parseGates } from './gates.js'
 import { parseDecision } from './decision.js'
 import { parseProgress } from './detail.js'
-import { milestoneRows } from './panel.js'
+import { issueAt, issueKey, milestoneRows, onPair, pairReads, refOf } from './panel.js'
 import {
   SEND_DELAY_MS,
+  refText,
   hasTimeNote,
   minutesSince,
   timeLine,
@@ -71,7 +72,8 @@ export function laneWhy(comments, maintainer) {
 
 /**
  * The check an issue holds: the last line `held | <date> | #N | <gate> | <reason>` of the maintainer's login
- * (`herdr/master.md`, "A held check"), unless a later gate comment of the same gate reports the rerun.
+ * (`herdr/master.md`, "A held check"; `owner/repo#N` for an issue of another repository of the space),
+ * unless a later gate comment of the same gate reports the rerun.
  *
  * @param {{ user?: { login?: string }, body?: string, created_at?: string, id?: number }[]} comments
  * @param {string} maintainer
@@ -89,7 +91,7 @@ export function parseHeld(comments, maintainer, number) {
   for (const comment of own) {
     const body = comment.body ?? ''
     const at = toMs(comment.created_at) ?? 0
-    const line = /^held \| [^|]*\| #(\d+) \| G([2-6]) \| (.+)$/m.exec(body)
+    const line = /^held \| [^|]*\| (?:[\w.-]+\/[\w.-]+)?#(\d+) \| G([2-6]) \| (.+)$/m.exec(body)
     if (line !== null) {
       held =
         Number(line[1]) === number ? { gate: Number(line[2]), reason: line[3].trim(), at } : null
@@ -104,46 +106,48 @@ export function parseHeld(comments, maintainer, number) {
 /**
  * The sign-off line of one issue, with its time line when it has one.
  *
- * @param {number} number
+ * @param {number | string} issue the number of an issue of the space's repository, or its reference (`refOf` of `panel.js`)
  * @param {string | null} [time] a line `time: …`
  * @returns {string}
  */
-export function signOffMessage(number, time = null) {
-  return `approved, sign off #${number}${time === null ? '' : `\n${time}`}`
+export function signOffMessage(issue, time = null) {
+  return `approved, sign off ${refText(issue)}${time === null ? '' : `\n${time}`}`
 }
 
 /**
  * The messages of a shared sign-off, one for each master (each gets only the numbers of its own
  * space, `G5.3`; a card holds one space's issues, so it is one message). Only an issue that is
- * `express` and whose diff was read is named.
+ * `express` and whose diff was read is named, by its reference (`#N`, or `owner/repo#N` for an issue of
+ * another repository of the space).
  *
- * @param {{ number: number, lane: string, read: boolean, master: string | null }[]} items
+ * @param {{ number: number, ref?: string, lane: string, read: boolean, master: string | null }[]} items
  * @returns {{ target: string, text: string }[]}
  */
 export function sharedMessages(items) {
-  /** @type {Map<string, number[]>} */
+  /** @type {Map<string, string[]>} */
   const byMaster = new Map()
   for (const item of items) {
     if (item.lane !== 'express' || !item.read || item.master === null) continue
-    byMaster.set(item.master, [...(byMaster.get(item.master) ?? []), item.number])
+    byMaster.set(item.master, [...(byMaster.get(item.master) ?? []), item.ref ?? `#${item.number}`])
   }
-  return [...byMaster].map(([target, numbers]) => ({
+  return [...byMaster].map(([target, refs]) => ({
     target,
-    text: `approved, sign off ${numbers.map((n) => `#${n}`).join(' ')}`,
+    text: `approved, sign off ${refs.join(' ')}`,
   }))
 }
 
 /**
- * The answer to a decision: `answer #N: <option>[ — <note>]`.
+ * The answer to a decision: `answer #N: <option>[ — <note>]` (`answer owner/repo#N: …` for an issue of
+ * another repository of the space).
  *
- * @param {number} number
+ * @param {number | string} issue the number of an issue of the space's repository, or its reference
  * @param {string} option the letter
  * @param {string} [note]
  * @returns {string}
  */
-export function answerLine(number, option, note = '') {
+export function answerLine(issue, option, note = '') {
   const text = oneLine(note)
-  return `answer #${number}: ${option}${text === '' ? '' : ` — ${text}`}`
+  return `answer ${refText(issue)}: ${option}${text === '' ? '' : ` — ${text}`}`
 }
 
 /**
@@ -205,12 +209,12 @@ export function pullIssue(body) {
  * @param {import('./panel.js').Github | null} input.github
  * @param {import('./agents.js').Agent[]} input.agents
  * @param {Record<string, number>} [input.blockedSince] when the panel first saw each blocked terminal (by address)
- * @param {Record<number, number>} [input.diffs] when the maintainer opened each issue's diff (by number)
- * @param {Record<number, string>} [input.commits] the subject of each issue's commit message
- * @param {Record<number, Partial<Form>>} [input.forms] the time forms
+ * @param {Record<string, number>} [input.diffs] when the maintainer opened each issue's diff, by its key (`issueKey` of `panel.js`: the number in the space's repository, `owner/repo#N` in another)
+ * @param {Record<string, string>} [input.commits] the subject of each issue's commit message, by its key
+ * @param {Record<string, Partial<Form>>} [input.forms] the time forms, by key
  * @param {Record<string, boolean>} [input.armed] the retries the maintainer armed, by card key
  * @param {number} [input.cores] the machine's thread count, for the load a retry waits for
- * @param {Record<number, Partial<TimeLogForm>>} [input.timeForms] the forms of "Log time", by issue number
+ * @param {Record<string, Partial<TimeLogForm>>} [input.timeForms] the forms of "Log time", by key
  * @param {'dark' | 'light'} [input.theme]
  */
 export function buildNeeds({
@@ -263,163 +267,174 @@ export function buildNeeds({
     }
 
     const read = github?.spaces[space.name]
-    const raw = read?.raw
-    if (raw == null) return
-    const { rows } = milestoneRows(read, now, inSpace)
-
-    // An open pull request with no `time:` note of the maintainer: a silent approval for `metrics`. One
-    // card for each issue, the first pull request that names it.
+    // An issue is in one pair; its card names it by its reference, and keeps its state by its key.
     const carded = new Set()
-    for (const pull of raw.pulls ?? []) {
-      const number = pullIssue(pull.body)
-      const row = number === null ? undefined : rows.find((r) => r.number === number)
-      if (number === null || row === undefined) continue
-      const noted = [...pull.comments, ...pull.reviews].some(
-        (c) => c.user?.login === raw.maintainer && hasTimeNote(c.body)
-      )
-      if (noted || carded.has(number)) continue
-      carded.add(number)
-      const form = { ...emptyTimeLogForm(), ...timeForms[number] }
-      // A running timer has not added its minutes yet: the line waits for it to stop.
-      const time = !form.open
-        ? null
-        : form.timerAt === null
-          ? timeLine({ ...form, lane: row.lane })
-          : { line: null, error: 'Stop the timer first.' }
-      const at = toMs(pull.created_at) ?? now
-      cards.push({
-        key: `time:${space.name}#${number}`,
-        kind: 'time',
-        at,
-        age: Math.max(0, now - at),
-        space: badge,
-        number,
-        pull: pull.number,
-        master: masterAt,
-        lane: row.lane,
-        cat: cat('master', 'needs'),
-        head: `${space.name}#${number} · PR open · G6`,
-        text: 'No time note from you on this pull request yet.',
-        form: form.open
-          ? {
-              ...form,
-              showHands: row.lane === 'full',
-              timer: timerLabel(form.timerAt, now),
-              error: time?.error ?? null,
-            }
-          : null,
-        lines: time?.line == null ? null : timeMessage(number, time.line),
-        posted: time?.line ?? null,
+    for (const { pair, raw } of pairReads(space, read)) {
+      const ofPair = inSpace.filter((a) => onPair(a, pair))
+      const { rows } = milestoneRows({ raw }, now, ofPair)
+      const where = (/** @type {number} */ n) => issueAt(space, pair, n)
+      const ids = (/** @type {number} */ n) => ({
+        number: n,
+        ref: refOf(space, pair, n),
+        issue: issueKey(space, pair, n),
+        repo: pair.repo,
       })
-    }
 
-    for (const row of rows) {
-      const issue = raw.issues.find((i) => i.number === row.number)
-      const comments = raw.comments[row.number] ?? []
-
-      // A decision a worker waits for.
-      const decision = parseDecision(comments, raw.maintainer)
-      if (decision !== null) {
-        const waiting = inSpace.find((a) => a.issue === row.number && a.needsYou)
-        const worker = waiting ?? inSpace.find((a) => a.issue === row.number && a.role === 'worker')
-        const gates = parseGates({ comments, maintainer: raw.maintainer })
-        cards.push({
-          key: `decision:${space.name}#${row.number}`,
-          kind: 'decision',
-          at: decision.at,
-          age: Math.max(0, now - decision.at),
-          space: badge,
-          number: row.number,
-          master: masterAt,
-          lane: row.lane,
-          cat: cat(worker?.role ?? 'worker', 'needs'),
-          head: `${space.name}#${row.number} · G2 · r${Math.max(1, gates.round)}`,
-          text: decision.question,
-          options: decision.options,
-        })
-      }
-
-      // A check held by the load: its reason, and a retry the mod sends once.
-      const held = parseHeld(comments, raw.maintainer, row.number)
-      if (held !== null) {
-        const key = `held:${space.name}#${row.number}`
-        const on = armed[key] === true
-        cards.push({
-          key,
-          kind: 'held',
-          at: held.at,
-          age: Math.max(0, now - held.at),
-          space: badge,
-          number: row.number,
-          master: masterAt,
-          lane: row.lane,
-          cat: cat(inSpace.find((a) => a.issue === row.number)?.role ?? 'worker', 'held'),
-          head: `${space.name}#${row.number} · G${held.gate} · HELD`,
-          text: held.reason,
-          armed: on,
-          retryLabel: retryLabel(cores, on),
-          armedNote: on ? armedNote(cores) : null,
-        })
-      }
-
-      if (row.marks[4] !== 'needs') continue
-      const opened = diffs[row.number]
-      const item = {
-        number: row.number,
-        title: row.title,
-        lane: row.lane,
-        space: badge,
-        master: masterAt,
-        read: opened !== undefined,
-        at: now - (row.waitMs ?? 0),
-        repo: space.repo,
-        worktree: parseProgress(issue?.body).worktree,
-      }
-      if (row.lane === 'express') {
-        express.push(item)
-        continue
-      }
-
-      // A sign-off.
-      const gates = parseGates({ comments, maintainer: raw.maintainer })
-      const last = (/** @type {number} */ gate) => gates.rounds.findLast((r) => r.gate === gate)
-      const form = { ...emptyForm(), ...forms[row.number] }
-      const minutes = form.readMin ?? String(minutesSince(now, opened) ?? '')
-      const time =
-        opened === undefined ? null : timeLine({ ...form, readMin: minutes, lane: row.lane })
-      const locked = opened === undefined
-      cards.push({
-        key: `signoff:${space.name}#${row.number}`,
-        kind: 'signoff',
-        at: item.at,
-        age: row.waitMs ?? 0,
-        space: badge,
-        number: row.number,
-        master: masterAt,
-        lane: row.lane,
-        repo: space.repo,
-        worktree: item.worktree,
-        cat: cat('master', 'needs'),
-        head: `${space.name}#${row.number} · G5`,
-        text: `Ready for your sign-off.${issue?.title ? ` ${issue.title}` : ''}`,
-        review: row.lane === 'express' || last(3) === undefined ? null : last(3)?.summary || null,
-        verify: row.lane === 'express' || last(4) === undefined ? null : last(4)?.summary || null,
-        laneText:
-          `${row.lane === 'full' ? 'Full' : row.lane === 'normal' ? 'Normal' : 'Express'}: ${laneWhy(comments, raw.maintainer)}`.trim(),
-        commit: commits[row.number] ?? null,
-        locked,
-        lockedNote: LOCKED_NOTE,
-        form: locked
+      // An open pull request with no `time:` note of the maintainer: a silent approval for `metrics`. One
+      // card for each issue, the first pull request that names it.
+      for (const pull of raw.pulls) {
+        const number = pullIssue(pull.body)
+        const row = number === null ? undefined : rows.find((r) => r.number === number)
+        if (number === null || row === undefined) continue
+        const noted = [...pull.comments, ...pull.reviews].some(
+          (c) => c.user?.login === raw.maintainer && hasTimeNote(c.body)
+        )
+        const id = ids(number)
+        if (noted || carded.has(id.issue)) continue
+        carded.add(id.issue)
+        const form = { ...emptyTimeLogForm(), ...timeForms[id.issue] }
+        // A running timer has not added its minutes yet: the line waits for it to stop.
+        const time = !form.open
           ? null
-          : {
-              ...form,
-              readMin: minutes,
-              showHands: row.lane === 'full',
-              tracked: minutesSince(now, opened),
-              error: time?.error ?? null,
-            },
-        lines: locked || time?.line == null ? null : signOffMessage(row.number, time.line),
-      })
+          : form.timerAt === null
+            ? timeLine({ ...form, lane: row.lane })
+            : { line: null, error: 'Stop the timer first.' }
+        const since = toMs(pull.created_at) ?? now
+        cards.push({
+          key: `time:${where(number)}`,
+          kind: 'time',
+          at: since,
+          age: Math.max(0, now - since),
+          space: badge,
+          ...id,
+          pull: pull.number,
+          master: masterAt,
+          lane: row.lane,
+          cat: cat('master', 'needs'),
+          head: `${where(number)} · PR open · G6`,
+          text: 'No time note from you on this pull request yet.',
+          form: form.open
+            ? {
+                ...form,
+                showHands: row.lane === 'full',
+                timer: timerLabel(form.timerAt, now),
+                error: time?.error ?? null,
+              }
+            : null,
+          lines: time?.line == null ? null : timeMessage(id.ref, time.line),
+          posted: time?.line ?? null,
+        })
+      }
+
+      for (const row of rows) {
+        const issue = raw.issues.find((i) => i.number === row.number)
+        const comments = raw.comments[row.number] ?? []
+        const id = ids(row.number)
+
+        // A decision a worker waits for.
+        const decision = parseDecision(comments, raw.maintainer)
+        if (decision !== null) {
+          const waiting = ofPair.find((a) => a.issue === row.number && a.needsYou)
+          const worker =
+            waiting ?? ofPair.find((a) => a.issue === row.number && a.role === 'worker')
+          const gates = parseGates({ comments, maintainer: raw.maintainer })
+          cards.push({
+            key: `decision:${where(row.number)}`,
+            kind: 'decision',
+            at: decision.at,
+            age: Math.max(0, now - decision.at),
+            space: badge,
+            ...id,
+            master: masterAt,
+            lane: row.lane,
+            cat: cat(worker?.role ?? 'worker', 'needs'),
+            head: `${where(row.number)} · G2 · r${Math.max(1, gates.round)}`,
+            text: decision.question,
+            options: decision.options,
+          })
+        }
+
+        // A check held by the load: its reason, and a retry the mod sends once.
+        const held = parseHeld(comments, raw.maintainer, row.number)
+        if (held !== null) {
+          const key = `held:${where(row.number)}`
+          const on = armed[key] === true
+          cards.push({
+            key,
+            kind: 'held',
+            at: held.at,
+            age: Math.max(0, now - held.at),
+            space: badge,
+            ...id,
+            master: masterAt,
+            lane: row.lane,
+            cat: cat(ofPair.find((a) => a.issue === row.number)?.role ?? 'worker', 'held'),
+            head: `${where(row.number)} · G${held.gate} · HELD`,
+            text: held.reason,
+            armed: on,
+            retryLabel: retryLabel(cores, on),
+            armedNote: on ? armedNote(cores) : null,
+          })
+        }
+
+        if (row.marks[4] !== 'needs') continue
+        const opened = diffs[id.issue]
+        const item = {
+          ...id,
+          title: row.title,
+          lane: row.lane,
+          space: badge,
+          master: masterAt,
+          read: opened !== undefined,
+          at: now - (row.waitMs ?? 0),
+          label: where(row.number),
+          worktree: parseProgress(issue?.body).worktree,
+        }
+        if (row.lane === 'express') {
+          express.push(item)
+          continue
+        }
+
+        // A sign-off.
+        const gates = parseGates({ comments, maintainer: raw.maintainer })
+        const last = (/** @type {number} */ gate) => gates.rounds.findLast((r) => r.gate === gate)
+        const form = { ...emptyForm(), ...forms[id.issue] }
+        const minutes = form.readMin ?? String(minutesSince(now, opened) ?? '')
+        const time =
+          opened === undefined ? null : timeLine({ ...form, readMin: minutes, lane: row.lane })
+        const locked = opened === undefined
+        cards.push({
+          key: `signoff:${where(row.number)}`,
+          kind: 'signoff',
+          at: item.at,
+          age: row.waitMs ?? 0,
+          space: badge,
+          ...id,
+          master: masterAt,
+          lane: row.lane,
+          worktree: item.worktree,
+          cat: cat('master', 'needs'),
+          head: `${where(row.number)} · G5`,
+          text: `Ready for your sign-off.${issue?.title ? ` ${issue.title}` : ''}`,
+          review: row.lane === 'express' || last(3) === undefined ? null : last(3)?.summary || null,
+          verify: row.lane === 'express' || last(4) === undefined ? null : last(4)?.summary || null,
+          laneText:
+            `${row.lane === 'full' ? 'Full' : row.lane === 'normal' ? 'Normal' : 'Express'}: ${laneWhy(comments, raw.maintainer)}`.trim(),
+          commit: commits[id.issue] ?? null,
+          locked,
+          lockedNote: LOCKED_NOTE,
+          form: locked
+            ? null
+            : {
+                ...form,
+                readMin: minutes,
+                showHands: row.lane === 'full',
+                tracked: minutesSince(now, opened),
+                error: time?.error ?? null,
+              },
+          lines: locked || time?.line == null ? null : signOffMessage(id.ref, time.line),
+        })
+      }
     }
   })
 
@@ -427,7 +442,8 @@ export function buildNeeds({
   // that space's master.
   for (const group of Map.groupBy(express, (/** @type {any} */ i) => i.space.name).values()) {
     const sorted = group.toSorted(
-      (/** @type {any} */ a, /** @type {any} */ b) => a.at - b.at || a.number - b.number
+      (/** @type {any} */ a, /** @type {any} */ b) =>
+        a.at - b.at || a.number - b.number || a.ref.localeCompare(b.ref)
     )
     const at = sorted[0]?.at ?? now
     const readCount = sorted.filter((i) => i.read).length

@@ -231,7 +231,8 @@ export function createSaturation() {
 
 /**
  * The held checks and the red gates of a look: the key of each, `held:<card key>` for a card of "Needs
- * you" that is a held check and `red:<space>#<n>` for an issue of Milestones whose gate is red.
+ * you" that is a held check and `red:<space>#<n>` (`red:<space> owner/repo#<n>` for an issue of another
+ * repository of the space) for an issue of Milestones whose gate is red.
  *
  * @param {any[]} cards `buildNeeds(...).cards`
  * @param {any} sections `buildPanel(...).sections`
@@ -242,7 +243,11 @@ export function heldOrRed(cards, sections) {
   for (const card of cards) if (card.kind === 'held') keys.add(`held:${card.key}`)
   for (const space of sections.milestones?.spaces ?? [])
     for (const issue of space.issues)
-      if (issue.marks.includes('red')) keys.add(`red:${space.name}#${issue.number}`)
+      if (issue.marks.includes('red')) {
+        // `#N` in the space's repository, `owner/repo#N` (its row's `id`) in another.
+        const ref = typeof issue.id === 'string' ? issue.id : `#${issue.number}`
+        keys.add(`red:${space.name}${ref.startsWith('#') ? '' : ' '}${ref}`)
+      }
   return keys
 }
 

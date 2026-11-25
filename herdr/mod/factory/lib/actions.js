@@ -11,6 +11,8 @@
 export const FIXTURE_NOTE = 'Fixture: nothing was run.'
 
 import { dockerArgs } from '../adapters.js'
+import { issueOfName } from './agents.js'
+import { refText } from './time.js'
 
 /** The exit status `factory-slot.sh hold` gives when no heavy slot is free. */
 export const NO_FREE_SLOT = 75
@@ -64,19 +66,19 @@ export const armedNote = (cores) =>
 /**
  * The retries the maintainer armed, and the one send each gets. `check` is called with each reading of the
  * load: a retry whose master is known is sent once, when the load is under the threshold, and is then no
- * longer armed.
+ * longer armed. It is `retry #N`, or `retry owner/repo#N` for an issue of another repository of the space.
  *
  * @param {object} deps
  * @param {(target: string, text: string) => unknown} deps.send the caller's `hc send`
  * @param {boolean} [deps.disabled] nothing is sent, and a retry stays armed
  */
 export function createRetries({ send, disabled = false }) {
-  /** @type {Map<string, { number: number, master: string }>} */
+  /** @type {Map<string, { issue: number | string, master: string }>} */
   const armed = new Map()
   return {
-    /** @param {string} key @param {number} number @param {string} master */
-    arm(key, number, master) {
-      armed.set(key, { number, master })
+    /** @param {string} key @param {number | string} issue its number, or its reference (`refOf` of `panel.js`) @param {string} master */
+    arm(key, issue, master) {
+      armed.set(key, { issue, master })
     },
     /** @param {string} key */
     cancel(key) {
@@ -99,9 +101,9 @@ export function createRetries({ send, disabled = false }) {
       if (disabled || load1 === null || cores <= 0 || !(load1 < retryBelow(cores))) return []
       /** @type {string[]} */
       const sent = []
-      for (const [key, { number, master }] of [...armed]) {
+      for (const [key, { issue, master }] of [...armed]) {
         armed.delete(key)
-        const text = `retry #${number}`
+        const text = `retry ${refText(issue)}`
         send(master, text)
         sent.push(text)
       }
@@ -112,25 +114,38 @@ export function createRetries({ send, disabled = false }) {
 
 /**
  * Whether a stack belongs to someone: a live agent of the issue its name ends in, or a worker lease of it.
- * A stack whose name has no number belongs to no issue, so no agent and no lease can own it.
+ * A stack whose name has no number belongs to no issue, so no agent and no lease can own it. A name that
+ * ends in `<tag><N>`, with a tag of the spaces' pairs, is issue N of that pair (`issueOfName`).
  *
  * @param {string} name the Compose project
- * @param {{ issue: number | null, role: string | null }[]} agents
+ * @param {{ issue: number | null, tag?: string, role: string | null }[]} agents
  * @param {{ agent: string }[]} leases
+ * @param {string[]} [tags] the tags of the spaces' pairs
  * @returns {boolean}
  */
-export function stackOwned(name, agents, leases) {
-  const issue = /(\d+)$/.exec(name)?.[1]
-  if (issue === undefined) return false
+export function stackOwned(name, agents, leases, tags = []) {
+  const id = issueOfName(name, tags)
+  if (id === null) return false
   const live = agents.some(
-    (a) => a.issue === Number(issue) && a.role !== 'master' && a.role !== 'planner'
+    (a) =>
+      a.issue === id.issue &&
+      (a.tag ?? '') === id.tag &&
+      a.role !== 'master' &&
+      a.role !== 'planner'
   )
-  return live || leases.some((l) => /(\d+)$/.exec(l.agent)?.[1] === issue)
+  return (
+    live ||
+    leases.some((l) => {
+      const of = issueOfName(l.agent, tags)
+      return of !== null && of.issue === id.issue && of.tag === id.tag
+    })
+  )
 }
 
 /**
  * @typedef {object} Facts what the panel knows now
- * @property {{ issue: number | null, role: string | null }[]} agents the live agents
+ * @property {{ issue: number | null, tag?: string, role: string | null }[]} agents the live agents
+ * @property {string[]} [tags] the tags of the spaces' pairs
  * @property {{ agent: string }[]} leases the worker leases
  * @property {{ pid: number, cwd: string, command: string }[]} orphans what `status` lists as orphans
  * @property {{ name: string }[]} stacks the stacks `docker compose ls` lists
@@ -189,7 +204,7 @@ export function createActions({ exec, config, facts, disabled = false }) {
   function stackRefusal(name) {
     const f = facts()
     if (!f.stacks.some((s) => s.name === name)) return `${name} is not a stack that runs`
-    if (stackOwned(name, f.agents, f.leases)) return `${name} has a live agent or a lease`
+    if (stackOwned(name, f.agents, f.leases, f.tags)) return `${name} has a live agent or a lease`
     return null
   }
 

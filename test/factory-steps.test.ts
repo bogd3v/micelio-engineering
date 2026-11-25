@@ -203,6 +203,8 @@ const STEPS: Record<string, string[]> = {
   ],
   'the tests the change makes false': [`${AGENTS}planner.md`],
   'cargo-deny: true': ['.github/workflows/ci.yml', 'docs/workflows.md'],
+  'owner/repo#N': [`${AGENTS}master.md`, 'herdr/master.md', 'herdr/mod/README.md'],
+  'worker-<tag><N>': ['herdr/master.md', 'herdr/mod/README.md'],
 }
 
 /** One line per listed file that does not contain its term, naming the file. */

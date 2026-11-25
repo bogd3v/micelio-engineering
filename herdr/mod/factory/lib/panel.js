@@ -5,6 +5,7 @@
 // Colours are the names of `herdr/mod/design/tokens.json` (`cyan`, `magenta`, `red`, `warn-fill`,
 // `muted`, `fg`, …); a view resolves them in the theme it draws.
 
+import { issueOfName } from './agents.js'
 import { catFile } from './cat.js'
 import { buildIssues } from './issues.js'
 import { ageMs, toMs } from './time.js'
@@ -154,12 +155,21 @@ export function parseStacks(text) {
  *
  * @typedef {object} SpaceConfig
  * @property {string} name the space's name in Herdr
+ * @property {string} repo `owner/name`, the repository of its first pair: the space's repository
+ * @property {number} milestone the first pair's milestone
+ * @property {number | null} [epic] the first pair's epic, left out of the rows
+ * @property {Pair[]} [pairs] every `{ repo, milestone }` of the space, in the order of the layout; a config with none is its one pair (`pairsOf`)
+ *
+ * @typedef {object} Pair one milestone of a space
  * @property {string} repo `owner/name`
- * @property {number} milestone the milestone's number
- * @property {number | null} [epic] the epic's number, left out of the rows
+ * @property {number} milestone
+ * @property {number | null} [epic] left out of the rows
+ * @property {string} tag `''` for a pair of the space's repository; else the letters before the number of its agents (`worker-<tag><N>`) and of its recordings
+ *
+ * @typedef {{ issues: Parameters<typeof buildIssues>[0]['issues'], comments: Parameters<typeof buildIssues>[0]['comments'] }} PairRaw the issues and comments of one pair
  *
  * @typedef {object} SpaceMilestone
- * @property {{ issues: Parameters<typeof buildIssues>[0]['issues'], comments: Parameters<typeof buildIssues>[0]['comments'], maintainer: string, pulls: OpenPull[] } | null} raw the last good read, the epic and the pull requests left out; turned into rows by `milestoneRows` with the agents of the moment
+ * @property {{ issues: Parameters<typeof buildIssues>[0]['issues'], comments: Parameters<typeof buildIssues>[0]['comments'], maintainer: string, pulls: OpenPull[], others?: PairRaw[] } | null} raw the last good read, the epics and the pull requests left out: the first pair's issues and comments, `others` those of the next pairs, and the pull requests of every pair's repository; turned into rows by `milestoneRows` with the agents of the moment
  * @property {string | null} at when the last good read was made
  * @property {number | null} ageMs
  * @property {boolean} stale
@@ -169,10 +179,107 @@ export function parseStacks(text) {
  */
 
 /**
+ * The pairs of a space: its `pairs`, or, for a config made with none, the one of its `repo`,
+ * `milestone` and `epic`.
+ *
+ * @param {{ repo: string, milestone?: number, epic?: number | null, pairs?: Pair[] }} space
+ * @returns {Pair[]}
+ */
+export function pairsOf(space) {
+  return Array.isArray(space.pairs) && space.pairs.length > 0
+    ? space.pairs
+    : [{ repo: space.repo, milestone: Number(space.milestone), epic: space.epic ?? null, tag: '' }]
+}
+
+/**
+ * The tags of the pairs of every space.
+ *
+ * @param {{ repo: string, pairs?: Pair[] }[]} spaces
+ * @returns {string[]}
+ */
+export const tagsOf = (spaces) =>
+  spaces.flatMap((s) => pairsOf(s).map((p) => p.tag)).filter((t) => t !== '')
+
+/**
+ * The reference of an issue: `#N` in the space's repository, `owner/repo#N` in another repository of the
+ * space. Every line the mod sends names the issue with it.
+ *
+ * @param {{ repo: string }} space
+ * @param {{ repo: string }} pair
+ * @param {number} number
+ * @returns {string}
+ */
+export const refOf = (space, pair, number) =>
+  pair.repo === space.repo ? `#${number}` : `${pair.repo}#${number}`
+
+/**
+ * The key of an issue in what the mod keeps per issue (the diffs opened, the forms, the commit
+ * subjects): its number in the space's repository, as before, and its reference in another, so two
+ * issues of the same number never share one.
+ *
+ * @param {{ repo: string }} space
+ * @param {{ repo: string }} pair
+ * @param {number} number
+ * @returns {number | string}
+ */
+export const issueKey = (space, pair, number) =>
+  pair.repo === space.repo ? number : refOf(space, pair, number)
+
+/**
+ * How a card names an issue: `<space>#N`, or `<space> owner/repo#N` for another repository.
+ *
+ * @param {{ name: string, repo: string }} space
+ * @param {{ repo: string }} pair
+ * @param {number} number
+ * @returns {string}
+ */
+export function issueAt(space, pair, number) {
+  const ref = refOf(space, pair, number)
+  return ref.startsWith('#') ? `${space.name}${ref}` : `${space.name} ${ref}`
+}
+
+/**
+ * Each pair of a space with what its last good read holds: its issues and comments, the maintainer, and
+ * the open pull requests of its repository. Empty before a good read.
+ *
+ * @param {SpaceConfig} space
+ * @param {SpaceMilestone | undefined} read
+ * @returns {{ pair: Pair, raw: { issues: PairRaw['issues'], comments: PairRaw['comments'], maintainer: string, pulls: OpenPull[] } }[]}
+ */
+export function pairReads(space, read) {
+  const raw = read?.raw
+  if (raw == null) return []
+  return pairsOf(space).flatMap((pair, i) => {
+    const part = i === 0 ? raw : raw.others?.[i - 1]
+    if (part == null) return []
+    const pulls = (raw.pulls ?? []).filter((p) => (p.repo ?? space.repo) === pair.repo)
+    return [
+      {
+        pair,
+        raw: {
+          issues: part.issues,
+          comments: part.comments,
+          maintainer: raw.maintainer,
+          pulls,
+        },
+      },
+    ]
+  })
+}
+
+/**
+ * Whether an agent works on an issue of a pair: its tag is the pair's.
+ *
+ * @param {{ tag?: string }} agent
+ * @param {Pair} pair
+ */
+export const onPair = (agent, pair) => (agent.tag ?? '') === pair.tag
+
+/**
  * @param {object} input
  * @param {number} input.now
  * @param {SpaceConfig[]} input.spaces
- * @param {Record<string, { at: string, issues: Parameters<typeof buildIssues>[0]['issues'], comments: Parameters<typeof buildIssues>[0]['comments'], maintainer: string, pulls?: OpenPull[] } | { error: string }>} input.reads
+ * @param {Record<string, { at: string, issues: Parameters<typeof buildIssues>[0]['issues'], comments: Parameters<typeof buildIssues>[0]['comments'], maintainer: string, pulls?: OpenPull[], others?: PairRaw[] } | { error: string }>} input.reads
  * @param {Github | null} [input.previous]
  * @returns {Github}
  */
@@ -197,14 +304,23 @@ export function buildGithub({ now, spaces, reads, previous = null }) {
         entry.stale = true
         entry.error = read.error
       } else {
-        const own = read.issues.filter(
-          (i) => (i.pull_request ?? null) === null && i.number !== space.epic
-        )
+        const pairs = pairsOf(space)
+        /** @param {PairRaw['issues']} issues @param {Pair | undefined} pair */
+        const own = (issues, pair) =>
+          issues.filter((i) => (i.pull_request ?? null) === null && i.number !== pair?.epic)
         entry.raw = {
-          issues: own,
+          issues: own(read.issues, { ...pairs[0], epic: space.epic ?? pairs[0]?.epic }),
           comments: read.comments,
           maintainer: read.maintainer,
           pulls: read.pulls ?? [],
+          ...(read.others === undefined
+            ? {}
+            : {
+                others: read.others.map((part, i) => ({
+                  issues: own(part.issues, pairs[i + 1]),
+                  comments: part.comments,
+                })),
+              }),
         }
         entry.at = read.at
         entry.stale = false
@@ -231,6 +347,39 @@ export function milestoneRows(read, now, agents) {
   const all = buildIssues({ ...read.raw, now, agents })
   const rows = all.filter((r) => r.waitMs !== null)
   return { rows, counts: { closed: all.length - rows.length, total: all.length } }
+}
+
+/**
+ * The rows of every pair of a space, in the order of its pairs, each with its pair, its reference and
+ * its key; the agents of each pair are those of its tag.
+ *
+ * @param {SpaceConfig} space
+ * @param {SpaceMilestone | undefined} read
+ * @param {number} now
+ * @param {import('./agents.js').Agent[]} agents the agents of the space
+ * @returns {{ rows: (import('./issues.js').IssueRow & { pair: Pair, ref: string, key: number | string })[], counts: { closed: number, total: number } }}
+ */
+export function spaceRows(space, read, now, agents) {
+  const rows = []
+  const counts = { closed: 0, total: 0 }
+  for (const { pair, raw } of pairReads(space, read)) {
+    const got = milestoneRows(
+      { raw },
+      now,
+      agents.filter((a) => onPair(a, pair))
+    )
+    counts.closed += got.counts.closed
+    counts.total += got.counts.total
+    for (const row of got.rows) {
+      rows.push({
+        ...row,
+        pair,
+        ref: refOf(space, pair, row.number),
+        key: issueKey(space, pair, row.number),
+      })
+    }
+  }
+  return { rows, counts }
 }
 
 /** @typedef {{ value: unknown, at: string | null, ageMs: number | null, stale: boolean, error: string | null }} Source */
@@ -275,8 +424,8 @@ const MARK_NAME = {
  * @param {import('./agents.js').Agent[]} onIt
  * @returns {string}
  */
-function noteOf(row, onIt) {
-  if (row.blocked) return `blocked by ${row.blockedBy.map((n) => `#${n}`).join(', ')}`
+function noteOf(row, onIt, ref = (/** @type {number} */ n) => `#${n}`) {
+  if (row.blocked) return `blocked by ${row.blockedBy.map(ref).join(', ')}`
   const waiting = onIt.find((a) => a.needsYou)
   if (waiting) return `${waiting.role ?? 'agent'} is blocked: it may need you`
   if (row.marks[4] === 'needs') return 'waits for your sign-off'
@@ -403,7 +552,8 @@ export function buildPanel({
   const milestone = Object.fromEntries(
     config.spaces.map((space) => [
       space.name,
-      milestoneRows(
+      spaceRows(
+        space,
         github?.spaces[space.name],
         now,
         agents.filter((a) => a.space?.name === space.name)
@@ -569,10 +719,11 @@ export function buildPanel({
         : '—',
       stale: read?.stale === true,
       issues: (milestone[space.name]?.rows ?? []).map((row) => {
-        const onIt = inSpace.filter((a) => a.issue === row.number)
+        const onIt = inSpace.filter((a) => a.issue === row.number && onPair(a, row.pair))
         return {
           number: row.number,
-          id: `#${row.number}`,
+          id: row.ref,
+          repo: row.pair.repo,
           marks: row.marks,
           aria: row.marks
             .map((m, i) => `G${i + 1} ${MARK_NAME[/** @type {keyof typeof MARK_NAME} */ (m)] ?? m}`)
@@ -580,7 +731,7 @@ export function buildPanel({
           label: row.label,
           tone: labelTone(row.marks, row.blocked),
           lane: row.lane.toUpperCase(),
-          note: noteOf(row, onIt),
+          note: noteOf(row, onIt, (n) => refOf(space, row.pair, n)),
           needsYou: row.needsYou,
           cats: catsOf(row, onIt, master, theme),
         }
@@ -588,20 +739,31 @@ export function buildPanel({
     }
   })
 
-  // Stacks up.
+  // Stacks up: a name that ends in `<tag><N>` is issue N of the pair with that tag, and only its agents
+  // and its lease own it.
+  const tags = tagsOf(config.spaces)
   const owners = (/** @type {string} */ name) => {
-    const issue = /(\d+)$/.exec(name)?.[1]
-    if (issue === undefined) return []
+    const id = issueOfName(name, tags)
+    if (id === null) return []
     return withRole
-      .filter((a) => a.issue === Number(issue) && a.role !== 'master' && a.role !== 'planner')
+      .filter(
+        (a) =>
+          a.issue === id.issue &&
+          (a.tag ?? '') === id.tag &&
+          a.role !== 'master' &&
+          a.role !== 'planner'
+      )
       .map((a) => a.name ?? a.address)
   }
   /** The worker lease of the issue a stack's name ends in. */
   const leaseOf = (/** @type {string} */ name) => {
-    const issue = /(\d+)$/.exec(name)?.[1]
-    if (issue === undefined) return null
+    const id = issueOfName(name, tags)
+    if (id === null) return null
     return (
-      (slots?.leases.leases ?? []).find((l) => /(\d+)$/.exec(l.agent)?.[1] === issue)?.agent ?? null
+      (slots?.leases.leases ?? []).find((l) => {
+        const of = issueOfName(l.agent, tags)
+        return of !== null && of.issue === id.issue && of.tag === id.tag
+      })?.agent ?? null
     )
   }
   const stackRows = stacks.value.map((s) => {

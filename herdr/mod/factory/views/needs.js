@@ -2,8 +2,8 @@
 // something waits (`herdr/mod/design/screens/Panel.png`, `TimeForm.png`). A click here never reaches a
 // worker: a button opens a pane that only reads, or starts the 10 s countdown of a line for the master.
 // `ctx.ui` gives `goTo(address)`, `openDiff(card)`, `openReports(card)`, `readDiffs(card, cx)`,
-// `openDetail(space, number)`, `setForm(number, patch, cx)`, `inputs(number)`, `timeInputs(number)`, `setTimeForm(number, patch, cx)`,
-// `toggleTimer(number, cx)`, `send(card, cx)`,
+// `openDetail(space, number, repo)`, `setForm(issue, patch, cx)`, `inputs(issue)`, `timeInputs(issue)`, `setTimeForm(issue, patch, cx)`,
+// `toggleTimer(issue, cx)` (`issue` is a card's key of its issue, `issueKey` of `lib/panel.js`), `send(card, cx)`,
 // `undo(cx)` and `pending` (the countdown, `null` when none runs).
 
 import { div } from 'gpui-kit'
@@ -128,7 +128,7 @@ function countdown(/** @type {any} */ ctx, /** @type {any} */ pending) {
  */
 function timeForm(/** @type {any} */ ctx, /** @type {any} */ card, log = false) {
   const f = card.form
-  const n = card.number
+  const n = card.issue
   const inputs = log ? ctx.ui.timeInputs(n) : ctx.ui.inputs(n)
   const set = (/** @type {any} */ patch) => (/** @type {any} */ _e, /** @type {any} */ cx) =>
     log ? ctx.ui.setTimeForm(n, patch, cx) : ctx.ui.setForm(n, patch, cx)
@@ -252,13 +252,13 @@ function signoff(ctx, card) {
       .mt(10)
       .gap(8)
       .child(
-        button(ctx, `diff-${card.number}`, 'OPEN DIFF', {
+        button(ctx, `diff-${card.issue}`, 'OPEN DIFF', {
           click: () => ctx.ui.openDiff(card),
           disabled: card.worktree === null,
         })
       )
       .child(
-        button(ctx, `reports-${card.number}`, 'REPORTS', {
+        button(ctx, `reports-${card.issue}`, 'REPORTS', {
           tone: 'fg',
           click: () => ctx.ui.openReports(card),
         })
@@ -270,7 +270,7 @@ function signoff(ctx, card) {
   body.child(timeForm(ctx, card))
   if (mine) return body.child(countdown(ctx, pending))
   return body.child(
-    button(ctx, `signoff-${card.number}`, `APPROVE & SIGN OFF #${card.number}`, {
+    button(ctx, `signoff-${card.issue}`, `APPROVE & SIGN OFF ${card.ref}`, {
       primary: true,
       disabled: card.lines === null || card.master === null || pending !== null,
       click: (/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.send(card, cx),
@@ -296,7 +296,7 @@ function batch(ctx, card) {
             .gap(6)
             .text_size(11.5)
             .child(badge(ctx, i.space.letter, i.space.colour, 16))
-            .child(div().flex_1().min_w(0).child(`${i.space.name}#${i.number} · ${i.title}`))
+            .child(div().flex_1().min_w(0).child(`${i.label} · ${i.title}`))
             .child(label(i.read ? 'read' : 'unread', i.read ? ctx.c['cyan'] : ctx.c['muted'], 11))
         )
       )
@@ -341,17 +341,17 @@ function timeCard(ctx, card) {
     .child(displayBold(div()).mt(8).text_size(14).child(card.text))
   if (card.form === null) {
     return body.child(
-      button(ctx, `log-time-${card.number}`, 'LOG TIME', {
+      button(ctx, `log-time-${card.issue}`, 'LOG TIME', {
         tone: 'fg',
         click: (/** @type {any} */ _e, /** @type {any} */ cx) =>
-          ctx.ui.setTimeForm(card.number, { open: true }, cx),
+          ctx.ui.setTimeForm(card.issue, { open: true }, cx),
       }).mt(10)
     )
   }
   body.child(timeForm(ctx, card, true))
   if (mine) return body.child(countdown(ctx, pending))
   return body.child(
-    button(ctx, `post-time-${card.number}`, 'POST TIME NOTE', {
+    button(ctx, `post-time-${card.issue}`, 'POST TIME NOTE', {
       primary: true,
       disabled: card.lines === null || card.master === null || pending !== null,
       click: (/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.send(card, cx),
@@ -372,10 +372,10 @@ function decision(ctx, card) {
         )
     )
     .child(
-      button(ctx, `answer-${card.number}`, 'ANSWER THROUGH THE MASTER', {
+      button(ctx, `answer-${card.issue}`, 'ANSWER THROUGH THE MASTER', {
         primary: true,
         tone: 'magenta',
-        click: () => ctx.ui.openDetail(card.space.name, card.number),
+        click: () => ctx.ui.openDetail(card.space.name, card.number, card.repo),
       }).mt(10)
     )
 }
@@ -390,7 +390,7 @@ function held(ctx, card) {
         .mt(10)
         .gap(8)
         .child(
-          button(ctx, `retry-${card.number}`, card.retryLabel, {
+          button(ctx, `retry-${card.issue}`, card.retryLabel, {
             disabled: card.master === null,
             tip: 'This space has no master to send retry to.',
             click: (/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.toggleRetry(card, cx),

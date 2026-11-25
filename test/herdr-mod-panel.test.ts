@@ -16,6 +16,12 @@ import {
   // @ts-expect-error a plain JavaScript module of the mod, with no declarations
 } from '../herdr/mod/factory/lib/panel.js'
 // @ts-expect-error a plain JavaScript module of the mod, with no declarations
+import { parseAgents } from '../herdr/mod/factory/lib/agents.js'
+// @ts-expect-error a plain JavaScript module of the mod, with no declarations
+import { stackOwned } from '../herdr/mod/factory/lib/actions.js'
+// @ts-expect-error a plain JavaScript module of the mod, with no declarations
+import { heldOrRed } from '../herdr/mod/factory/lib/settings.js'
+// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { buildState } from '../herdr/mod/factory/lib/state.js'
 // @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { colours, THEMES } from '../herdr/mod/factory/lib/tokens.js'
@@ -288,6 +294,233 @@ describe('the panel', () => {
       'verifier-810',
     ])
     expect(saturated.sections.workers.count).toBe('6/6 · next worker waits')
+  })
+})
+
+describe('a space of several repositories', () => {
+  const PAIRS = [
+    { name: 'fixture-space', repo: 'bogd3v/fixture', milestone: 1 },
+    { name: 'fixture-space', repo: 'bogd3v/fixture-two', milestone: 3, tag: 'tw' },
+  ]
+  const SPACES_FIXTURE = [`${FIXTURES}/spaces`, FIXTURES]
+
+  /** One round of `main.js` on the `spaces/` recordings. */
+  async function spacesRound() {
+    const config = readConfig({ ...props(SPACES_FIXTURE), spaces: PAIRS })
+    const a = createAdapters({ exec: noExec, readTextFile, terminals: () => [], config })
+    const now: number = await a.now()
+    const state = buildState({
+      now,
+      fetched: {
+        slots: await a.readSlots(),
+        machine: await a.readMachine(),
+        agents: await a.readAgents(),
+      },
+    })
+    const reads: Record<string, unknown> = {}
+    for (const space of config.spaces) reads[space.name] = await a.readGithub(space)
+    const github = buildGithub({ now, spaces: config.spaces, reads })
+    const stacks = parseStacks(((await a.readStacks()) as { text: string }).text)
+    return buildPanel({
+      now,
+      state,
+      github,
+      stacks: { value: stacks, at: null, stale: false, error: null },
+      config,
+    })
+  }
+
+  it("a space of two pairs reads each pair's issues, comments and pull requests in that pair's repository, with GET calls only", async () => {
+    const calls: string[][] = []
+    const a = createAdapters({
+      exec: async (cmd: string, args: string[]) => {
+        calls.push([cmd, ...args])
+        const endpoint = String(args[1])
+        const out = endpoint.includes('/pulls?')
+          ? [{ number: 40, body: 'Closes #5', created_at: '2026-11-24T15:00:00Z' }]
+          : endpoint.includes('/issues?')
+            ? [{ number: 5, title: 't', state: 'open', body: null }]
+            : []
+        return { code: 0, stdout: JSON.stringify(out), stderr: '' }
+      },
+      readTextFile,
+      terminals: () => [],
+      config: readConfig({ ...props(null), spaces: PAIRS }),
+    })
+    const config = readConfig({ ...props(null), spaces: PAIRS })
+    expect(config.spaces).toHaveLength(1)
+    const space = config.spaces[0]
+    const read = await a.readGithub(space)
+    expect(read).toMatchObject({
+      issues: [{ number: 5 }],
+      comments: { 5: [] },
+      others: [{ issues: [{ number: 5 }], comments: { 5: [] } }],
+    })
+    const pulls = await a.readPulls(space)
+    // A pull request of the other repository carries it; the space's own carries none, as before.
+    expect(pulls.map((p: { number: number; repo?: string }) => [p.number, p.repo])).toEqual([
+      [40, undefined],
+      [40, 'bogd3v/fixture-two'],
+    ])
+    expect(calls).toEqual([
+      ['gh', 'api', 'repos/bogd3v/fixture/issues?milestone=1&state=all&per_page=100'],
+      ['gh', 'api', 'repos/bogd3v/fixture/issues/5/comments?per_page=100'],
+      ['gh', 'api', 'repos/bogd3v/fixture-two/issues?milestone=3&state=all&per_page=100'],
+      ['gh', 'api', 'repos/bogd3v/fixture-two/issues/5/comments?per_page=100'],
+      ['gh', 'api', 'repos/bogd3v/fixture/pulls?state=open&per_page=100'],
+      ['gh', 'api', 'repos/bogd3v/fixture/issues/40/comments?per_page=100'],
+      ['gh', 'api', 'repos/bogd3v/fixture/pulls/40/reviews?per_page=100'],
+      ['gh', 'api', 'repos/bogd3v/fixture-two/pulls?state=open&per_page=100'],
+      ['gh', 'api', 'repos/bogd3v/fixture-two/issues/40/comments?per_page=100'],
+      ['gh', 'api', 'repos/bogd3v/fixture-two/pulls/40/reviews?per_page=100'],
+    ])
+    // Every call is `gh api <endpoint>`, a GET: no method, no field, no input.
+    for (const call of calls) expect(call).toHaveLength(3)
+    calls.length = 0
+    await a.readMilestones(config.spaces)
+    expect(calls).toEqual([
+      ['gh', 'api', 'repos/bogd3v/fixture/milestones?state=all&per_page=100'],
+      ['gh', 'api', 'repos/bogd3v/fixture-two/milestones?state=all&per_page=100'],
+    ])
+  })
+
+  it('Milestones shows #5 and bogd3v/fixture-two#5 in one space, each with its own agents', async () => {
+    const panel = await spacesRound()
+    const spaces = panel.sections.milestones.spaces as {
+      name: string
+      merged: string
+      issues: { id: string; repo: string; note: string; cats: { name: string }[] }[]
+    }[]
+    expect(spaces.map((s) => s.name)).toEqual(['fixture-space'])
+    const issues = spaces[0]?.issues ?? []
+    expect(issues.map((i) => i.id)).toEqual([
+      '#5',
+      '#6',
+      'bogd3v/fixture-two#5',
+      'bogd3v/fixture-two#6',
+    ])
+    expect(spaces[0]?.merged).toBe('0/4')
+    const byId = (id: string) => issues.find((i) => i.id === id)
+    // #5 waits at G5, so its master's cat comes first; worker-tw5 is not on it.
+    expect(byId('#5')?.cats.map((c) => c.name)).toEqual(['master', 'worker-5'])
+    expect(byId('#5')?.repo).toBe('bogd3v/fixture')
+    expect(byId('bogd3v/fixture-two#5')?.cats.map((c) => c.name)).toEqual(['worker-tw5'])
+    expect(byId('bogd3v/fixture-two#5')?.note).toBe('worker is blocked: it may need you')
+    expect(byId('bogd3v/fixture-two#5')?.repo).toBe('bogd3v/fixture-two')
+  })
+
+  it('a stack named wt-tw5 belongs to worker-tw5 and not to worker-5', async () => {
+    const panel = await spacesRound()
+    expect(panel.sections.stacks.rows).toEqual([
+      { name: 'wt-tw5', status: 'running(2)', owner: 'worker-tw5', removable: false, age: null },
+    ])
+    // With no live agent of the pair tagged tw, worker-5 does not own it: it can be brought down.
+    const config = readConfig({ ...props(SPACES_FIXTURE), spaces: PAIRS })
+    const agents = parseAgents([
+      { address: 'tm', name: null, parent: null, status: 'idle', labels: {} },
+      { address: 't5', name: 'worker-5', parent: 'tm', status: 'working' },
+    ])
+    const alone = buildPanel({
+      now: Date.parse('2026-11-24T16:00:00Z'),
+      state: { stale: false, sources: { agents: { value: agents } } },
+      github: null,
+      stacks: {
+        value: [{ name: 'wt-tw5', status: 'running(2)' }],
+        at: null,
+        stale: false,
+        error: null,
+      },
+      config,
+    })
+    expect(alone.sections.stacks.rows[0]).toMatchObject({ owner: null, removable: true })
+    // The lease of worker-tw5 owns it, that of worker-5 does not; the machine's buttons agree.
+    const leased = (agent: string) =>
+      buildPanel({
+        now: Date.parse('2026-11-24T16:00:00Z'),
+        state: {
+          stale: false,
+          sources: {
+            agents: { value: agents },
+            slots: {
+              value: {
+                heavy: { used: 0, total: 0, slots: [] },
+                leases: { used: 1, total: 2, leases: [{ agent }] },
+                queue: [],
+                orphans: [],
+                paused: false,
+              },
+            },
+          },
+        },
+        github: null,
+        stacks: { value: [{ name: 'wt-tw5', status: 'up' }], at: null, stale: false, error: null },
+        config,
+      }).sections.stacks.rows[0].owner
+    expect(leased('worker-tw5')).toBe('worker-tw5')
+    expect(leased('worker-5')).toBeNull()
+    expect(stackOwned('wt-tw5', agents, [], ['tw'])).toBe(false)
+    expect(stackOwned('wt-tw5', agents, [{ agent: 'worker-tw5' }], ['tw'])).toBe(true)
+    expect(stackOwned('wt-5', agents, [], ['tw'])).toBe(true)
+  })
+
+  it("a pair's epic is no row, and a blocked or red issue of another repository is named by its reference", () => {
+    const config = readConfig({
+      ...props(null),
+      spaces: [
+        { name: 'fixture-space', repo: 'bogd3v/fixture', milestone: 1, epic: 2 },
+        { name: 'fixture-space', repo: 'bogd3v/fixture-two', milestone: 3, epic: 9, tag: 'tw' },
+      ],
+    })
+    const at = '2026-11-24T10:00:00Z'
+    const issue = (number: number, body: string | null = null) => ({
+      number,
+      title: `issue ${number}`,
+      state: 'open',
+      body,
+      created_at: at,
+    })
+    const say = (body: string) => [{ user: { login: 'ale9420' }, body, created_at: at, id: 1 }]
+    const now = Date.parse('2026-11-24T16:00:00Z')
+    const github = buildGithub({
+      now,
+      spaces: config.spaces,
+      reads: {
+        'fixture-space': {
+          at,
+          issues: [issue(2), issue(9), issue(4)],
+          comments: {},
+          maintainer: 'ale9420',
+          others: [
+            {
+              issues: [issue(9), issue(2), issue(3), issue(4, '## Depends on\n\n- #3\n')],
+              comments: {
+                3: say('**Gate 3, round 1 (reviewer-tw3)** · 2 Blocking, 0 Important'),
+              },
+            },
+          ],
+        },
+      },
+    })
+    const state = { stale: false, sources: {} }
+    const panel = buildPanel({ now, state, github, config })
+    const rows = panel.sections.milestones.spaces[0].issues as {
+      id: string
+      note: string
+      marks: string[]
+    }[]
+    // Each pair leaves its own epic out: #2 of the first and #9 of the second.
+    expect(rows.map((r) => r.id)).toEqual([
+      '#4',
+      '#9',
+      'bogd3v/fixture-two#2',
+      'bogd3v/fixture-two#3',
+      'bogd3v/fixture-two#4',
+    ])
+    expect(rows.find((r) => r.id === 'bogd3v/fixture-two#4')?.note).toBe(
+      'blocked by bogd3v/fixture-two#3'
+    )
+    // The red gate of bogd3v/fixture-two#3 posts its own notification, apart from one of #3.
+    expect([...heldOrRed([], panel.sections)]).toEqual(['red:fixture-space bogd3v/fixture-two#3'])
   })
 })
 

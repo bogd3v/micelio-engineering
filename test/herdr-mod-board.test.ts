@@ -267,3 +267,50 @@ describe('the board', () => {
     expect(read('fediverse')).toEqual([5, 6, 7])
   })
 })
+
+describe('the board of a space of two repositories', () => {
+  it("the Board shows the cards of every pair of a space, an issue of another repository as owner/repo#N, and the share counts every pair's repository", async () => {
+    const config = readConfig({
+      checkout: ROOT.replace(/\/$/, ''),
+      maintainer: 'ale9420',
+      fixture: ['test/fixtures/herdr-mod/spaces', 'test/fixtures/herdr-mod'],
+      spaces: [
+        { name: 'fixture-space', repo: 'bogd3v/fixture', milestone: 1 },
+        { name: 'fixture-space', repo: 'bogd3v/fixture-two', milestone: 3, tag: 'tw' },
+      ],
+    })
+    const a = createAdapters({ exec: noExec, readTextFile, terminals: () => [], config })
+    const now: number = await a.now()
+    const state = buildState({ now, fetched: { agents: await a.readAgents() } })
+    const reads: Record<string, unknown> = {}
+    for (const space of config.spaces) reads[space.name] = await a.readGithub(space)
+    const github = buildGithub({ now, spaces: config.spaces, reads })
+    const milestones = await a.readMilestones(config.spaces)
+    expect(Object.keys((milestones as { byRepo: object }).byRepo)).toEqual([
+      'bogd3v/fixture',
+      'bogd3v/fixture-two',
+    ])
+    const share = factoryShare({
+      fields: ((await a.readProjectFields()) as { fields: never }).fields,
+      milestones: (milestones as { byRepo: never }).byRepo,
+      spaces: config.spaces,
+    })
+    // The catalogue's issues in both repositories (6 and 4) over those and the plugins' (10).
+    expect(share).toEqual({ line: '0.9', foundations: 10, total: 20, percent: 50 })
+    const board = buildBoard({ now, state, github, config, share })
+    const cards = (board.columns as Column[]).flatMap((c) =>
+      c.cards.map((card) => [c.key, card.id, card.agent])
+    )
+    expect(cards).toEqual([
+      ['g2', 'bogd3v/fixture-two#5', 'worker-tw5'],
+      // G5 is the oldest wait first: the two express issues waited since 13:00, #5 since 14:30.
+      ['g5', '#6', 'master'],
+      ['g5', 'bogd3v/fixture-two#6', 'master'],
+      ['g5', '#5', 'master'],
+    ])
+    expect(board.filters.spaces.map((f: { label: string }) => f.label)).toEqual([
+      'ALL SPACES',
+      'FIXTURE-SPACE · 0/4',
+    ])
+  })
+})

@@ -13,7 +13,8 @@
 # herdr/factory-agent.sh, ADR-0002): the panel passes it to `docker -H`, as Herdr's `exec` has no environment.
 #
 #   --maintainer <login>   the GitHub login whose gate comments count (default $FACTORY_MAINTAINER)
-#   --spaces <file.json>   the layout's `spaces`: [{ "name", "repo", "milestone", "epic" }, …]
+#   --spaces <file.json>   the layout's `spaces`, copied as it is: [{ "name", "repo", "milestone", "epic", "tag" }, …];
+#                          entries that share a name are one space (herdr/mod/README.md, "Configure")
 #   --side left|right      the side of the panel in the layout (default right): the first or the last child of work-body
 #   --fixture <folder>     read the recordings of <folder> instead of the machine (repeat for a list)
 #

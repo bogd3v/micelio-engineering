@@ -3,7 +3,11 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 // @ts-expect-error a plain JavaScript module of the mod, with no declarations
+import { readConfig } from '../herdr/mod/factory/adapters.js'
+// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { parseAgents } from '../herdr/mod/factory/lib/agents.js'
+// @ts-expect-error a plain JavaScript module of the mod, with no declarations
+import { onPair, pairsOf } from '../herdr/mod/factory/lib/panel.js'
 // @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { parseGates } from '../herdr/mod/factory/lib/gates.js'
 // @ts-expect-error a plain JavaScript module of the mod, with no declarations
@@ -368,9 +372,122 @@ describe('agents', () => {
   it('carries no context size and no model', () => {
     for (const agent of agents(terminals)) {
       expect(Object.keys(agent).toSorted()).toEqual(
-        ['address', 'issue', 'name', 'needsYou', 'role', 'space', 'status'].toSorted()
+        ['address', 'issue', 'name', 'needsYou', 'role', 'space', 'status', 'tag'].toSorted()
       )
     }
+  })
+})
+
+describe('the spaces of the layout', () => {
+  interface Pair {
+    repo: string
+    milestone: number
+    epic: number | null
+    tag: string
+  }
+  interface Space {
+    name: string
+    repo: string
+    milestone: number
+    epic: number | null
+    pairs: Pair[]
+  }
+  const spacesOf = (spaces: unknown[]) => (readConfig({ spaces }) as { spaces: Space[] }).spaces
+
+  it('readConfig makes the entries that share a name one space, its pairs in the order of the file', () => {
+    const spaces = spacesOf([
+      { name: 'micelio', repo: 'bogd3v/micelio', milestone: 18, epic: 872 },
+      { name: 'micelio-engineering', repo: 'bogd3v/micelio-engineering', milestone: 12 },
+      { name: 'micelio', repo: 'bogd3v/micelio-cms', milestone: 12, tag: 'c' },
+      { name: 'micelio', repo: 'bogd3v/micelio-plugin-core', milestone: 8, tag: 'pc' },
+      { name: 'micelio', repo: 'bogd3v/micelio', milestone: 15, epic: 900 },
+    ])
+    expect(spaces.map((s) => s.name)).toEqual(['micelio', 'micelio-engineering'])
+    const micelio = spaces[0] as Space
+    // The first entry's repository is the space's; a second milestone of it needs no tag.
+    expect(micelio).toMatchObject({ repo: 'bogd3v/micelio', milestone: 18, epic: 872 })
+    expect(micelio.pairs).toEqual([
+      { repo: 'bogd3v/micelio', milestone: 18, epic: 872, tag: '' },
+      { repo: 'bogd3v/micelio-cms', milestone: 12, epic: null, tag: 'c' },
+      { repo: 'bogd3v/micelio-plugin-core', milestone: 8, epic: null, tag: 'pc' },
+      { repo: 'bogd3v/micelio', milestone: 15, epic: 900, tag: '' },
+    ])
+    expect(pairsOf(micelio)).toBe(micelio.pairs)
+  })
+
+  it("a layout of one entry per space reads as one pair per space, with the entry's repo, milestone and epic", () => {
+    const spaces = spacesOf([
+      { name: 'micelio-engineering', repo: 'bogd3v/micelio-engineering', milestone: 12, epic: 790 },
+      { name: 'fediverse', repo: 'bogd3v/fediverse', milestone: 3, epic: null },
+    ])
+    expect(spaces).toEqual([
+      {
+        name: 'micelio-engineering',
+        repo: 'bogd3v/micelio-engineering',
+        milestone: 12,
+        epic: 790,
+        pairs: [{ repo: 'bogd3v/micelio-engineering', milestone: 12, epic: 790, tag: '' }],
+      },
+      {
+        name: 'fediverse',
+        repo: 'bogd3v/fediverse',
+        milestone: 3,
+        epic: null,
+        pairs: [{ repo: 'bogd3v/fediverse', milestone: 3, epic: null, tag: '' }],
+      },
+    ])
+    // A config made by hand, with no pairs, is its one pair.
+    expect(pairsOf({ name: 'x', repo: 'a/b', milestone: 2, epic: 9 })).toEqual([
+      { repo: 'a/b', milestone: 2, epic: 9, tag: '' },
+    ])
+  })
+
+  it('an entry in another repository of a space with no tag, or with a tag the space already has, is left out', () => {
+    const [space] = spacesOf([
+      { name: 'micelio', repo: 'bogd3v/micelio', milestone: 18 },
+      { name: 'micelio', repo: 'bogd3v/micelio-cms', milestone: 12 },
+      { name: 'micelio', repo: 'bogd3v/micelio-plugin-core', milestone: 8, tag: 'pc' },
+      { name: 'micelio', repo: 'bogd3v/micelio-cms', milestone: 12, tag: 'pc' },
+      { name: 'micelio', repo: 'bogd3v/micelio-cms', milestone: 12, tag: 'CMS' },
+      { name: 'micelio', repo: 'bogd3v/micelio-cms', milestone: 12, tag: 'abcd' },
+      { name: 'micelio', repo: 'bogd3v/micelio-cms', milestone: 12, tag: '' },
+    ]) as Space[]
+    expect(space?.pairs.map((p) => `${p.repo}:${p.tag}`)).toEqual([
+      'bogd3v/micelio:',
+      'bogd3v/micelio-plugin-core:pc',
+    ])
+  })
+
+  it("worker-tw5, reviewer-tw5-r2 and verifier-tw5 are on issue 5 of the pair tagged tw, and worker-5 on issue 5 of the space's repository", () => {
+    const [space] = spacesOf([
+      { name: 'fixture-space', repo: 'bogd3v/fixture', milestone: 1 },
+      { name: 'fixture-space', repo: 'bogd3v/fixture-two', milestone: 3, tag: 'tw' },
+    ]) as Space[]
+    const [own, two] = space?.pairs ?? []
+    const row = (address: string, name: string): Terminal => ({
+      address,
+      name,
+      parent: null,
+      status: 'working',
+      foreground: { argv: ['claude'] },
+      labels: {},
+    })
+    const agents = parseAgents([
+      row('a', 'worker-tw5'),
+      row('b', 'reviewer-tw5-r2'),
+      row('c', 'verifier-tw5'),
+      row('d', 'worker-5'),
+      row('e', 'worker-pc267'),
+    ]) as (AgentRow & { issue: number | null; tag: string })[]
+    expect(agents.map((a) => [a.role, a.issue, a.tag])).toEqual([
+      ['worker', 5, 'tw'],
+      ['reviewer', 5, 'tw'],
+      ['verifier', 5, 'tw'],
+      ['worker', 5, ''],
+      ['worker', 267, 'pc'],
+    ])
+    expect(agents.filter((a) => onPair(a, two)).map((a) => a.address)).toEqual(['a', 'b', 'c'])
+    expect(agents.filter((a) => onPair(a, own)).map((a) => a.address)).toEqual(['d'])
   })
 })
 
