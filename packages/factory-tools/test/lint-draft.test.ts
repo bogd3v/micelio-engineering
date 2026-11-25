@@ -702,3 +702,114 @@ describe('lint-draft in micelio-engineering', () => {
     expect((await run(false)).code).toBe(0)
   })
 })
+
+describe('lint-draft age of the evidence of the Tests section', () => {
+  const tests = (...lines: string[]): string =>
+    `# chore: x\n\n## Tests\n\n${lines.join('\n')}\n\n## Instructions that were wrong or missing\n\nNothing\n`
+  const aged = (
+    evidenceTimes: Record<string, number>,
+    changedTimes: Record<string, number> = { 'src/a.ts': 2000 }
+  ): DraftContext => ({
+    changed: Object.keys(changedTimes),
+    synced: SYNCED,
+    checkCommand: null,
+    evidenceTimes,
+    changedTimes,
+  })
+
+  it('fails a log older than the newest changed file when its entry names no round', () => {
+    const problems = lintDraft(
+      tests('- `npm test`: exit 0 (`logs/npm-test.log`)'),
+      aged({ 'logs/npm-test.log': 1000 })
+    )
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.problem).toContain('logs/npm-test.log')
+    expect(problems[0]?.problem).toContain('1970-01-01T00:00:01.000Z')
+    expect(problems[0]?.problem).toContain('src/a.ts')
+    const block = tests('```text', '$ npm test', 'exit 0', 'log: logs/npm-test.log', '```')
+    expect(lintDraft(block, aged({ 'logs/npm-test.log': 1000 }))).toHaveLength(1)
+  })
+
+  it('fails an image the Tests section names that predates the newest changed file', () => {
+    const problems = lintDraft(
+      tests('- `herdr-app shot`: exit 0, `shots/Panel.png`'),
+      aged({ 'shots/Panel.png': 1999 })
+    )
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.problem).toContain('shots/Panel.png')
+  })
+
+  it('fails an image a fenced block names', () => {
+    const block = tests('```text', '$ herdr-app shot --out shots/X.png', 'exit 0', '```')
+    expect(lintDraft(block, aged({ 'shots/X.png': 1000 }))).toHaveLength(1)
+  })
+
+  it('passes an older log whose entry names its round', () => {
+    const old = aged({ 'logs/npm-test.log': 1000 })
+    expect(
+      lintDraft(tests('- `npm test`: exit 0, `logs/npm-test.log` (from round 1)'), old)
+    ).toEqual([])
+    const block = tests('From round 1:', '```text', '$ npm test', 'log: logs/npm-test.log', '```')
+    expect(lintDraft(block, old)).toEqual([])
+    const failing = tests('- `npm test` without the change: exit 1, `logs/npm-test.log`')
+    expect(lintDraft(failing, old)).toEqual([])
+  })
+
+  it('passes a log written after the last change to the diff', () => {
+    const item = tests('- `npm test`: exit 0 (`logs/npm-test.log`)')
+    expect(lintDraft(item, aged({ 'logs/npm-test.log': 2000 }))).toEqual([])
+    expect(lintDraft(item, aged({ 'logs/npm-test.log': 3000 }))).toEqual([])
+  })
+
+  it('is skipped without the times, and for a file that does not exist', () => {
+    const item = tests('- `npm test`: exit 0 (`logs/npm-test.log`)')
+    expect(lintDraft(item, context([]))).toEqual([])
+    expect(lintDraft(item, aged({}))).toEqual([])
+    expect(lintDraft(item, aged({ 'logs/npm-test.log': 1 }, {}))).toEqual([])
+  })
+
+  it('createDeps reads the times of the packet files and of the changed and untracked files', async () => {
+    const root = tempDir('lint-draft-age-')
+    const repo = join(root, 'wt')
+    const packet = join(root, 'packet')
+    mkdirSync(repo)
+    mkdirSync(join(packet, 'logs'), { recursive: true })
+    execFileSync('git', ['-C', repo, 'init', '-q'])
+    await writeFile(join(repo, 'a.ts'), 'x')
+    execFileSync('git', ['-C', repo, 'add', '.'])
+    execFileSync('git', [
+      '-C',
+      repo,
+      '-c',
+      'user.name=t',
+      '-c',
+      'user.email=t@t',
+      'commit',
+      '-q',
+      '-m',
+      'x',
+    ])
+    await writeFile(join(repo, 'a.ts'), 'y')
+    await writeFile(join(repo, 'b.ts'), 'x')
+    await writeFile(join(packet, 'logs', 'a.log'), 'x')
+    const deps = createDeps(repo)
+    const evidence = await deps.evidenceTimes?.(join(packet, 'logs'), ['logs/a.log', 'logs/b.log'])
+    expect(Object.keys(evidence ?? {})).toEqual(['logs/a.log'])
+    const changed = await deps.changedTimes?.('HEAD')
+    expect(Object.keys(changed ?? {}).sort()).toEqual(['a.ts', 'b.ts'])
+  })
+
+  it('runLintDraft passes the times from its dependencies to the rule', async () => {
+    const deps = (log: number): LintDraftDeps => ({
+      readText: () => Promise.resolve(tests('- `npm test`: exit 0 (`logs/npm-test.log`)')),
+      diffNames: () => Promise.resolve([]),
+      syncedFiles: () => Promise.resolve(SYNCED),
+      logFiles: () => Promise.resolve(['npm-test.log']),
+      evidenceTimes: () => Promise.resolve({ 'logs/npm-test.log': log }),
+      changedTimes: () => Promise.resolve({ 'src/a.ts': 2000 }),
+    })
+    const argv = ['lint-draft', '--file', 'd.md', '--base', 'b', '--logs', 'logs']
+    expect((await runLintDraft(argv, deps(1000))).code).toBe(1)
+    expect((await runLintDraft(argv, deps(2000))).code).toBe(0)
+  })
+})
