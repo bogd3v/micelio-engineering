@@ -1,0 +1,13 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "include": ["exports", "types"],
+  "tags": ["-public"],
+  "ignoreWorkspaces": ["fixtures/basic"],
+  "workspaces": {
+    ".": {
+      "entry": ["herdr/mod/factory/main.js", "herdr/mod/build-cats.mjs", "scripts/*.mjs"],
+      "ignore": ["fixtures/**", "template/**", "template-rust/**"]
+    },
+    "packages/*": {}
+  }
+}

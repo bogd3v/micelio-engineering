@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 /** One rule of `micelio-lint-ee`: a line that matches `pattern` fails with `message`. */
-export interface EeRule {
+interface EeRule {
   /** The text that marks the line as Strapi Enterprise code. */
   pattern: RegExp
   /** What the line does, as it appears in the report. */
@@ -14,7 +14,7 @@ export interface EeRule {
  * The three rules of `micelio-cms`'s `scripts/check-no-ee.mjs`, none dropped or narrowed
  * (Strapi Enterprise code is not AGPL-compatible, bogd3v/micelio-cms#96).
  */
-export const EE_RULES: readonly EeRule[] = [
+const EE_RULES: readonly EeRule[] = [
   {
     pattern: /STRAPI_LICENSE/,
     message: 'sets or reads STRAPI_LICENSE (Strapi Enterprise license key)',

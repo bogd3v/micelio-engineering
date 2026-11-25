@@ -15,7 +15,7 @@ const DEFAULT_PROFILE = 'typescript'
  * The hashes of a version in the new form (ADR-0001, point 5): the core, at
  * `docs/engineering-standard.md`, and each profile file, at `docs/standard/<profile>.md`.
  */
-export interface VersionHashes {
+interface VersionHashes {
   /** The SHA-256 of `docs/engineering-standard.md`. */
   core: string
   /** The SHA-256 of `docs/standard/<profile>.md`, by profile name. */

@@ -3,7 +3,7 @@
 
 import { div } from 'gpui-kit'
 import { h_flex, v_flex } from 'gpui-base'
-import { display, displayBold, label } from './ui.js'
+import { displayBold, label } from './ui.js'
 
 /**
  * The 32 px button that opens Customize (`Panel.png`): three bars with a knob each, drawn as bars.
@@ -132,5 +132,3 @@ export function controls(ctx, model) {
     )
     .child(ctx.ui.actionNote === null ? div() : label(`> ${ctx.ui.actionNote}`, ctx.c['red'], 11.5))
 }
-
-export { display }

@@ -1,0 +1,4 @@
+{
+  "include": ["exports", "types"],
+  "tags": ["-public"]
+}

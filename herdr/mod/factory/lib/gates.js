@@ -5,11 +5,8 @@
 
 import { toMs } from './time.js'
 
-/** The seven marks of a gate, in the order of the design's legend (`herdr/mod/design/README.md`, rule 5). */
-export const MARKS = ['passed', 'running', 'needs', 'held', 'red', 'notReached', 'omitted']
-
 /** The letter of each mark in a track string such as `pprrtt` (`Panel.dc.html`). */
-export const MARK_LETTER = {
+const MARK_LETTER = {
   passed: 'p',
   running: 'r',
   needs: 'n',
@@ -20,7 +17,7 @@ export const MARK_LETTER = {
 }
 
 /** The lanes, and the gates each one omits (`docs/factory.md`, `L.2`). */
-export const LANES = ['express', 'normal', 'full']
+const LANES = ['express', 'normal', 'full']
 const OMITTED = { express: [3, 4], normal: [], full: [] }
 
 /**
@@ -40,7 +37,7 @@ const OMITTED = { express: [3, 4], normal: [], full: [] }
  * @property {boolean} calibration the lane line reads `(calibration: full)`
  * @property {Round[]} rounds the Gate 1 to 4 comments, oldest first
  * @property {number} round the highest round number any of them names, 0 with none
- * @property {string[]} marks one mark of `MARKS` for each of G1 to G6
+ * @property {string[]} marks one mark for each of G1 to G6: `passed`, `running`, `needs`, `held`, `red`, `notReached` or `omitted`, the seven of the design's legend (`herdr/mod/design/README.md`, rule 5)
  * @property {string} track the marks as letters, `pprrtt`
  * @property {string} label where the issue is: `G3-4·r1`, `G5`, `G2·r1 HELD`, `G4·r1 RED`
  * @property {number | null} since milliseconds since the epoch of the last gate comment
