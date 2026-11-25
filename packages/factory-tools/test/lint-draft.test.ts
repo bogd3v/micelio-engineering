@@ -813,3 +813,83 @@ describe('lint-draft age of the evidence of the Tests section', () => {
     expect((await runLintDraft(argv, deps(2000))).code).toBe(0)
   })
 })
+
+describe('lint-draft figures of the Tests section against their logs', () => {
+  const tests = (...lines: string[]): string =>
+    `# chore: x\n\n## Tests\n\n${lines.join('\n')}\n\n## Instructions that were wrong or missing\n\nNothing\n`
+  const withLogs = (logContents: Record<string, string>): DraftContext => ({
+    changed: [],
+    synced: SYNCED,
+    checkCommand: null,
+    logContents,
+  })
+  const vitest = ' Test Files  23 passed (23)\n      Tests  706 passed (706)\n'
+
+  it('fails a baseline figure in parentheses that the named log does not hold', () => {
+    const problems = lintDraft(
+      tests('- `npm test`: exit 0, 706 passed (700 passed on main) (`logs/npm-test.log`)'),
+      withLogs({ 'npm-test.log': vitest })
+    )
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.line).toBe('npm test')
+    expect(problems[0]?.problem).toContain('700 passed')
+    expect(problems[0]?.problem).toContain('logs/npm-test.log')
+  })
+
+  it('fails a reuse count written in a form the named log does not print', () => {
+    const problems = lintDraft(
+      tests('- `reuse lint`: exit 0, 43 / 43 files (`logs/reuse.log`)'),
+      withLogs({ 'reuse.log': '* Files with copyright information: 43 / 43\n' })
+    )
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.problem).toContain('43 files')
+    expect(problems[0]?.problem).toContain('logs/reuse.log')
+  })
+
+  it('passes an entry whose figures the named log holds', () => {
+    const draft = tests(
+      '- `npm test`: exit 0, 23 test files, 706 tests, round 2 (`logs/npm-test.log`)',
+      '- `npm test`: exit 1, 1,706 passed without the change (`logs/other.log`)',
+      '- `npm test`: exit 0, 706 passed (`logs/missing.log`)'
+    )
+    expect(lintDraft(draft, withLogs({ 'npm-test.log': vitest }))).toEqual([])
+  })
+
+  it('does not compare a prose figure that verify-draft does not compare', () => {
+    const draft = tests(
+      '- `npm test`: exit 0, 706 passed, +5 new tests, load 7.66 on 8 cores (`logs/npm-test.log`)'
+    )
+    expect(lintDraft(draft, withLogs({ 'npm-test.log': vitest }))).toEqual([])
+  })
+
+  it('compares an entry that verify-draft prints as earlier, and is skipped without log texts', () => {
+    const draft = tests(
+      '- `npm test`: exit 0, 700 passed (`logs/a.log`)',
+      '- `npm test`: exit 0, 706 passed (`logs/b.log`)'
+    )
+    const texts = { 'a.log': vitest, 'b.log': vitest }
+    expect(lintDraft(draft, withLogs(texts))).toHaveLength(1)
+    expect(lintDraft(draft, { ...withLogs(texts), logContents: undefined })).toEqual([])
+  })
+
+  it('createDeps reads the texts of the named logs and runLintDraft hands them to the rule', async () => {
+    const dir = tempDir('lint-draft-figures-')
+    await writeFile(join(dir, 'npm-test.log'), vitest)
+    const draft = tests('- `npm test`: exit 0, 700 passed (`logs/npm-test.log`)')
+    const deps = createDeps(dir)
+    expect(await deps.logContents?.(dir, ['npm-test.log', 'gone.log'])).toEqual({
+      'npm-test.log': vitest,
+    })
+    const run = await runLintDraft(
+      ['lint-draft', '--file', 'd.md', '--base', 'b', '--logs', 'logs'],
+      {
+        readText: () => Promise.resolve(draft),
+        diffNames: () => Promise.resolve([]),
+        syncedFiles: () => Promise.resolve(SYNCED),
+        logContents: () => Promise.resolve({ 'npm-test.log': vitest }),
+      }
+    )
+    expect(run.code).toBe(1)
+    expect(run.stdout).toContain('700 passed')
+  })
+})

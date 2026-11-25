@@ -223,7 +223,7 @@ function runKey(entry: Entry, agents: string[][], scripts: string[]): string | n
 }
 
 /** The figures a summary line reports: `482 tests`, `23 passed`, as `[number, word]`. */
-function figures(summary: string): [string, string][] {
+export function figures(summary: string): [string, string][] {
   const text = summary
     .replace(/`[^`]*`/g, ' ')
     .replace(/\bround\s+\d+/gi, ' ')
@@ -245,7 +245,7 @@ function figures(summary: string): [string, string][] {
  * The numbers the output of a run gives for `word`: the ones before it (`482 passed`) and the ones
  * after it as a label (`Tests  482 passed`, `Test Files  23 passed`, for `tests` and `test files`).
  */
-function numbersBefore(output: string, word: string): string[] {
+export function numbersBefore(output: string, word: string): string[] {
   const plain = output.replace(/\u001b\[[0-9;]*m/g, '')
   const parts = word.split(' ')
   const last = (parts.pop() ?? '').replace(/s$/, '')

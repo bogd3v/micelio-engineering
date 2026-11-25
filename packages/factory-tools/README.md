@@ -193,6 +193,17 @@ or a file cannot be read.
   that does not exist is the missing-log rule's, and a changed file the diff deletes has no time.
   Without the times (a test's dependencies leave them out), the rule is skipped.
 
+- With `--logs <dir>`, each figure of a "Tests" entry that starts with a command and names
+  `logs/<file>` is compared with the text of that log, with the rules `verify-draft` applies to a
+  run's output (`figures` and `numbersBefore` of `verify-draft`; "What it reads" below): a label
+  before the number counts, thousands separators are read, `round <n>`, `exit <n>` and backticks are
+  not figures, and a prose figure whose word the log never counts is not compared while the log
+  counts another figure of the line. Each figure the log does not hold is a problem that names the
+  command, the figure and the log (for example `the figure "700 passed" is not in logs/npm-test.log`).
+  An entry that `verify-draft` prints as `earlier:` is compared with its own log too; a run shown
+  failing `without the change` is exempt. A log that does not exist is the missing-log rule's.
+  Without the log texts (`LintDraftDeps.logContents`, which `createDeps` sets), the rule is skipped.
+
 - A draft whose "Tests" section has no entry that runs the check command and reports `exit 0`
   fails, and the problem names the command and `G2.1` of `docs/factory.md`: the check command is
   green in every lane, whatever the change touches. The command is the `check:` line of the first
