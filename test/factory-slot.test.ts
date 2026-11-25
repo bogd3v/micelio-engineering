@@ -361,6 +361,25 @@ describe('factory-slot.sh run', () => {
   })
 })
 
+describe('factory-slot.sh run signals', () => {
+  it('run writes the signal it receives to run.log before it stops the command', async () => {
+    const run = start(['run', ...holder('a')], { FACTORY_AGENT: 'worker-5' })
+    await until(() => existsSync(join(root, 'slots/heavy/slot-1.owner')), 'the owner file')
+    await until(() => existsSync(upOf('a')), 'the command')
+    const pgid = Number(owner()['pgid'])
+    const wrapper = run.child.pid as number
+    process.kill(wrapper, 'SIGTERM')
+    await run.exited
+    expect(groupAlive(pgid)).toBe(false)
+    const line = readFileSync(join(root, 'slots/run.log'), 'utf8').trim()
+    expect(line).toMatch(
+      new RegExp(
+        `^\\d{4}-\\d{2}-\\d{2}T\\S+ TERM wrapper=${String(wrapper)} pgid=${String(pgid)} agent=worker-5 command=sh -c touch .*a\\.up.*$`
+      )
+    )
+  })
+})
+
 describe('factory-slot.sh acquire and release', () => {
   it('acquire exits 75 when the workers pool is full', () => {
     // With no FACTORY_WORKER_SLOTS the pool holds 6 leases.
@@ -712,6 +731,52 @@ describe('factory-slot.sh reap', () => {
     expect(existsSync(dir)).toBe(false)
     expect(existsSync(otherName)).toBe(true)
     expect(existsSync(aFile)).toBe(true)
+  })
+
+  it('reap keeps a slot younger than the grace period, though neither herdr nor hc lists its agent', async () => {
+    const { run, pgid } = await startOwned('worker-5')
+    const path = pathWith('worker-5', { herdr: agentNotFound, hc: notFound })
+    const kept = slot(['reap'], { FACTORY_REAP_GRACE: '300' }, path)
+    expect(kept.code).toBe(0)
+    expect(kept.out).toBe('')
+    expect(groupAlive(pgid)).toBe(true)
+    expect(existsSync(owned())).toBe(true)
+    expect(existsSync(join(root, 'slots/reap.log'))).toBe(false)
+    // Past the grace period the same answers kill it.
+    const killed = slot(['reap'], { FACTORY_REAP_GRACE: '0' }, path)
+    expect(killed.out).toContain(`killed ${owned()}`)
+    await run.exited
+    expect(groupAlive(pgid)).toBe(false)
+  })
+
+  it('reap writes each slot it kills and each lease it releases to reap.log, with both answers', async () => {
+    const { run } = await startOwned('worker-5')
+    expect(slot(['acquire', '--pool', 'workers', '--agent', 'worker-5']).code).toBe(0)
+    const path = pathWith('worker-5', { herdr: agentNotFound, hc: finished })
+    const r = slot(['reap'], { FACTORY_AGENT: 'master-1' }, path)
+    expect(r.out).toContain(`killed ${owned()}`)
+    expect(r.out).toContain(`released ${leaseOf('worker-5')}`)
+    await run.exited
+    const lines = readFileSync(join(root, 'slots/reap.log'), 'utf8').trim().split('\n')
+    expect(lines).toHaveLength(2)
+    const stamp = '\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}'
+    expect(lines[0]).toMatch(
+      new RegExp(
+        `^${stamp} killed ${owned()} agent=worker-5 herdr=gone hc=gone by=\\d+:master-1 command=sh -c touch .*a\\.up.*$`
+      )
+    )
+    expect(lines[1]).toMatch(
+      new RegExp(
+        `^${stamp} released ${leaseOf('worker-5')} agent=worker-5 herdr=gone hc=gone by=\\d+:master-1$`
+      )
+    )
+    // A kill by a reap with no name of its own says so.
+    const second = await startOwned('worker-5')
+    slot(['reap'], { HC_TERMINAL_ID: 't7' }, path)
+    await second.run.exited
+    slot(['reap'], {}, path)
+    const all = readFileSync(join(root, 'slots/reap.log'), 'utf8')
+    expect(all).toMatch(/killed .* by=\d+:t7 /)
   })
 
   it('reap keeps a lease younger than the grace period', () => {
