@@ -199,12 +199,12 @@ describe('the role prompts', () => {
   /** Words per prompt, as `wc -w` counts them: runs of non-whitespace. */
   const BUDGET: Record<string, number> = {
     master: 1480,
-    worker: 1326,
+    worker: 1393,
     planner: 950,
     verifier: 728,
     reviewer: 633,
   }
-  const TOTAL = 5090
+  const TOTAL = 5157
 
   it('each role prompt stays under its word budget', () => {
     const dir = join(ROOT, 'template/.claude/agents')
@@ -226,6 +226,23 @@ describe('the role prompts', () => {
     }
     const total = Object.values(counts).reduce((a, b) => a + b, 0)
     expect(total, 'total words').toBeLessThanOrEqual(TOTAL)
+  })
+
+  it('the worker prompt asks for the record of each outside API a change calls or stubs', () => {
+    const prompt = readFileSync(join(ROOT, 'template/.claude/agents/worker.md'), 'utf8')
+    const build = prompt.slice(
+      prompt.indexOf('Build the smallest change'),
+      prompt.indexOf('Keep tool output out of the worktree')
+    )
+    const line = build.split('\n').find((l) => l.includes('program outside the repository'))
+    expect(line, 'a line of the list under "Build the smallest change"').toMatch(/^- /)
+    expect(line).toContain('the change calls or a test stubs')
+    expect(line).toContain('"For review" cites where its behaviour is recorded')
+    expect(line).toContain(
+      'its type declaration, a findings document, or a captured output in the packet'
+    )
+    expect(line).toContain('a stub returns what that record says (fields, stream and exit code)')
+    expect(line).toContain('with no record is reported to the master, not assumed')
   })
 })
 
