@@ -8,6 +8,7 @@
 import { issueOfName } from './agents.js'
 import { catFile } from './cat.js'
 import { buildIssues } from './issues.js'
+import { paceOf } from './quota.js'
 import { ageMs, toMs } from './time.js'
 
 /** The collapsible sections of the panel, in the order of the design. */
@@ -41,6 +42,23 @@ export function formatAge(ms) {
   const m = Math.floor(s / 60)
   if (m < 60) return `${m} min`
   return `${Math.floor(m / 60)} h`
+}
+
+/**
+ * What the header's sync label adds while GitHub's quota is low: ` · quota <remaining> · slow <time to
+ * reset>`, or ` · quota 0 · paused <time to reset>`; nothing while the pace is `normal`.
+ *
+ * @param {import('./quota.js').Quota | null} quota
+ * @param {number} now milliseconds since the epoch
+ * @returns {string}
+ */
+export function paceNote(quota, now) {
+  const pace = paceOf(quota, now)
+  if (quota === null || pace === 'normal') return ''
+  const left = formatAge(quota.reset * 1000 - now)
+  return pace === 'stopped'
+    ? ` · quota 0 · paused ${left}`
+    : ` · quota ${quota.remaining} · slow ${left}`
 }
 
 /**
@@ -481,6 +499,7 @@ function catsOf(row, onIt, master, theme) {
  * @param {{ spaces: SpaceConfig[] }} input.config
  * @param {'dark' | 'light'} [input.theme] the theme the cat files are named for
  * @param {Record<string, boolean>} [input.open] the sections the maintainer opened or closed
+ * @param {import('./quota.js').Quota | null} [input.quota] the last quota GitHub reported: the header says so while the pace is not `normal`
  */
 export function buildPanel({
   now,
@@ -492,6 +511,7 @@ export function buildPanel({
   config,
   theme = 'dark',
   open = {},
+  quota = null,
 }) {
   const slots = /** @type {import('./slots.js').Slots | null} */ (
     orEmpty(state.sources['slots']).value
@@ -605,8 +625,14 @@ export function buildPanel({
     pause: { on: paused, label: paused ? 'Resume workers' : 'Pause new workers' },
     reserve: { on: reserved, label: reserved ? 'Release my slot' : 'Reserve a slot' },
     sync: githubStale
-      ? { text: `GH STALE ${formatAge(staleAge).toUpperCase()}`, stale: true }
-      : { text: `sync ${formatAge(fresh.length === 0 ? null : Math.min(...fresh))}`, stale: false },
+      ? {
+          text: `GH STALE ${formatAge(staleAge).toUpperCase()}${paceNote(quota, now)}`,
+          stale: true,
+        }
+      : {
+          text: `sync ${formatAge(fresh.length === 0 ? null : Math.min(...fresh))}${paceNote(quota, now)}`,
+          stale: false,
+        },
   }
 
   // The banners.

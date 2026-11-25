@@ -1,6 +1,6 @@
 // The calls the model is kept free of. Each read gives the shape `lib/state.js` and `lib/panel.js`
 // take: `{ at, … }` when it worked, `{ error }` when it did not. Nothing here writes: the commands are
-// `herdr/factory-slot.sh status`, `nproc`, `gh api` of a GET endpoint, `docker -H <dockerHost> compose ls` and `docker -H <dockerHost> ps -a`, `ps -o etimes=,pcpu= -p <pid>` (every `docker` call goes through `dockerArgs`), Herdr's
+// `herdr/factory-slot.sh status`, `nproc`, `gh api` of a GET endpoint (`--include`, and at most one `--header If-None-Match: <etag>`: the only flags it takes), `docker -H <dockerHost> compose ls` and `docker -H <dockerHost> ps -a`, `ps -o etimes=,pcpu= -p <pid>` (every `docker` call goes through `dockerArgs`), Herdr's
 // `terminals()` and files of `/proc`, `/sys` and the fixture folder.
 //
 // With `fixture` in the block's props (a folder, or a list of folders, the first that has a file
@@ -16,6 +16,7 @@
 
 import { parseNumstat } from './lib/detail.js'
 import { pairsOf } from './lib/panel.js'
+import { commentsDue, parseReply } from './lib/quota.js'
 
 /** The tag of a pair as a recording names it: `-<tag>` after the space's name, `''` for an untagged pair. @param {{ tag: string }} pair */
 const tagged = (pair) => (pair.tag === '' ? '' : `-${pair.tag}`)
@@ -262,16 +263,52 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
     }
   }
 
+  /** The `Etag` and the parsed body of the last `200` of each endpoint; in memory, one for each copy of the mod. @type {Map<string, { etag: string, body: unknown }>} */
+  const replies = new Map()
+  /** The last `X-Ratelimit-Remaining` and `X-Ratelimit-Reset` any reply gave. @type {import('./lib/quota.js').Quota | null} */
+  let quota = null
+  /** When the comments of each issue or pull request were last read, and its `updated_at` then. @type {Map<string, { updatedAt: unknown, at: number, value: any }>} */
+  const seenComments = new Map()
+
   /**
-   * One `gh api` GET: the JSON it printed.
+   * One `gh api` GET: the JSON it printed. The call is `gh api <endpoint> --include`, with the `Etag` of
+   * the endpoint's last `200` as `--header If-None-Match: <etag>`; a `304` (for which `gh` exits 1 with
+   * `gh: HTTP 304`) gives the body of that `200`. Any other non-zero exit is a failure.
    *
    * @param {string} endpoint
    * @returns {Promise<unknown>}
    */
   async function gh(endpoint) {
-    const run = await exec('gh', ['api', endpoint], { timeout: 30_000 })
+    const kept = replies.get(endpoint)
+    const args = ['api', endpoint, '--include']
+    if (kept !== undefined) args.push('--header', `If-None-Match: ${kept.etag}`)
+    const run = await exec('gh', args, { timeout: 30_000 })
+    const reply = parseReply(run.stdout)
+    if (reply.remaining !== null && reply.reset !== null) {
+      quota = { remaining: reply.remaining, reset: reply.reset }
+    }
+    if (reply.status === 304 && kept !== undefined) return kept.body
     if (run.code !== 0) throw new Error(run.stderr.trim() || `gh exit ${run.code}`)
-    return JSON.parse(run.stdout)
+    const body = JSON.parse(reply.body)
+    if (reply.etag !== null) replies.set(endpoint, { etag: reply.etag, body })
+    return body
+  }
+
+  /**
+   * The comments (or the comments and reviews) of an issue or a pull request: read when `commentsDue`
+   * says so, the last ones otherwise.
+   *
+   * @param {string} key
+   * @param {unknown} updatedAt the `updated_at` of its list
+   * @param {number} at milliseconds since the epoch
+   * @param {() => Promise<any>} read
+   */
+  async function commentsOf(key, updatedAt, at, read) {
+    const seen = seenComments.get(key)
+    if (seen !== undefined && !commentsDue(seen, updatedAt, at)) return seen.value
+    const value = await read()
+    seenComments.set(key, { updatedAt, at, value })
+    return value
   }
 
   /**
@@ -318,7 +355,8 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
             `repos/${pair.repo}/issues?milestone=${pair.milestone}&state=all&per_page=100`
           )
           if (!Array.isArray(issues)) throw new Error('gh api: not a list of issues')
-          const today = iso(await now()).slice(0, 10)
+          const at = await now()
+          const today = iso(at).slice(0, 10)
           // The open issues, and the ones closed today: the Board's "Merged today" shows each one's lane.
           const open = issues.filter(
             (i) => (i.state !== 'closed' || closedOn(i, today)) && i.pull_request == null
@@ -328,9 +366,10 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
           for (let i = 0; i < open.length; i += GH_AT_ONCE) {
             const batch = open.slice(i, i + GH_AT_ONCE)
             const got = await Promise.all(
-              batch.map((issue) =>
-                gh(`repos/${pair.repo}/issues/${issue.number}/comments?per_page=100`)
-              )
+              batch.map((issue) => {
+                const endpoint = `repos/${pair.repo}/issues/${issue.number}/comments?per_page=100`
+                return commentsOf(endpoint, issue.updated_at, at, () => gh(endpoint))
+              })
             )
             batch.forEach((issue, k) => {
               comments[issue.number] = got[k]
@@ -379,14 +418,24 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
         }
         const open = await gh(`repos/${pair.repo}/pulls?state=open&per_page=100`)
         if (!Array.isArray(open)) continue
+        const at = await now()
         for (let i = 0; i < open.length; i += GH_AT_ONCE) {
           const got = await Promise.all(
             open.slice(i, i + GH_AT_ONCE).map(async (pull) => ({
               number: pull.number,
               body: pull.body ?? null,
               created_at: pull.created_at,
-              comments: await gh(`repos/${pair.repo}/issues/${pull.number}/comments?per_page=100`),
-              reviews: await gh(`repos/${pair.repo}/pulls/${pull.number}/reviews?per_page=100`),
+              ...(await commentsOf(
+                `${pair.repo}#${pull.number}`,
+                pull.updated_at,
+                at,
+                async () => ({
+                  comments: await gh(
+                    `repos/${pair.repo}/issues/${pull.number}/comments?per_page=100`
+                  ),
+                  reviews: await gh(`repos/${pair.repo}/pulls/${pull.number}/reviews?per_page=100`),
+                })
+              )),
             }))
           )
           out.push(...got.map(mark))
@@ -612,6 +661,8 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
 
   return {
     now,
+    /** The last quota any reply gave, `null` before the first. */
+    quota: () => quota,
     readCommit,
     readDiffs,
     readForms,

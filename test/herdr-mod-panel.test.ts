@@ -341,7 +341,11 @@ describe('a space of several repositories', () => {
           : endpoint.includes('/issues?')
             ? [{ number: 5, title: 't', state: 'open', body: null }]
             : []
-        return { code: 0, stdout: JSON.stringify(out), stderr: '' }
+        return {
+          code: 0,
+          stdout: `HTTP/2.0 200 OK\r\nEtag: W/"x"\r\n\r\n${JSON.stringify(out)}`,
+          stderr: '',
+        }
       },
       readTextFile,
       terminals: () => [],
@@ -363,24 +367,30 @@ describe('a space of several repositories', () => {
       [40, 'bogd3v/fixture-two'],
     ])
     expect(calls).toEqual([
-      ['gh', 'api', 'repos/bogd3v/fixture/issues?milestone=1&state=all&per_page=100'],
-      ['gh', 'api', 'repos/bogd3v/fixture/issues/5/comments?per_page=100'],
-      ['gh', 'api', 'repos/bogd3v/fixture-two/issues?milestone=3&state=all&per_page=100'],
-      ['gh', 'api', 'repos/bogd3v/fixture-two/issues/5/comments?per_page=100'],
-      ['gh', 'api', 'repos/bogd3v/fixture/pulls?state=open&per_page=100'],
-      ['gh', 'api', 'repos/bogd3v/fixture/issues/40/comments?per_page=100'],
-      ['gh', 'api', 'repos/bogd3v/fixture/pulls/40/reviews?per_page=100'],
-      ['gh', 'api', 'repos/bogd3v/fixture-two/pulls?state=open&per_page=100'],
-      ['gh', 'api', 'repos/bogd3v/fixture-two/issues/40/comments?per_page=100'],
-      ['gh', 'api', 'repos/bogd3v/fixture-two/pulls/40/reviews?per_page=100'],
+      ['gh', 'api', 'repos/bogd3v/fixture/issues?milestone=1&state=all&per_page=100', '--include'],
+      ['gh', 'api', 'repos/bogd3v/fixture/issues/5/comments?per_page=100', '--include'],
+      [
+        'gh',
+        'api',
+        'repos/bogd3v/fixture-two/issues?milestone=3&state=all&per_page=100',
+        '--include',
+      ],
+      ['gh', 'api', 'repos/bogd3v/fixture-two/issues/5/comments?per_page=100', '--include'],
+      ['gh', 'api', 'repos/bogd3v/fixture/pulls?state=open&per_page=100', '--include'],
+      ['gh', 'api', 'repos/bogd3v/fixture/issues/40/comments?per_page=100', '--include'],
+      ['gh', 'api', 'repos/bogd3v/fixture/pulls/40/reviews?per_page=100', '--include'],
+      ['gh', 'api', 'repos/bogd3v/fixture-two/pulls?state=open&per_page=100', '--include'],
+      ['gh', 'api', 'repos/bogd3v/fixture-two/issues/40/comments?per_page=100', '--include'],
+      ['gh', 'api', 'repos/bogd3v/fixture-two/pulls/40/reviews?per_page=100', '--include'],
     ])
-    // Every call is `gh api <endpoint>`, a GET: no method, no field, no input.
-    for (const call of calls) expect(call).toHaveLength(3)
+    // Every call is `gh api <endpoint> --include`, a GET: no method, no field, no input.
+    for (const call of calls) expect(call.slice(0, 4)).toEqual(['gh', 'api', call[2], '--include'])
+    for (const call of calls) expect(call).toHaveLength(4)
     calls.length = 0
     await a.readMilestones(config.spaces)
     expect(calls).toEqual([
-      ['gh', 'api', 'repos/bogd3v/fixture/milestones?state=all&per_page=100'],
-      ['gh', 'api', 'repos/bogd3v/fixture-two/milestones?state=all&per_page=100'],
+      ['gh', 'api', 'repos/bogd3v/fixture/milestones?state=all&per_page=100', '--include'],
+      ['gh', 'api', 'repos/bogd3v/fixture-two/milestones?state=all&per_page=100', '--include'],
     ])
   })
 
@@ -624,12 +634,13 @@ describe('the adapters', () => {
     const a = createAdapters({
       exec: async (cmd: string, args: string[]) => {
         calls.push([cmd, args])
+        const head = 'HTTP/2.0 200 OK\r\nEtag: W/"x"\r\n\r\n'
         if (cmd === 'gh' && String(args[1]).includes('/comments'))
-          return { code: 0, stdout: '[]', stderr: '' }
+          return { code: 0, stdout: `${head}[]`, stderr: '' }
         if (cmd === 'gh') {
           return {
             code: 0,
-            stdout: JSON.stringify([{ number: 5, title: 't', state: 'open', body: null }]),
+            stdout: head + JSON.stringify([{ number: 5, title: 't', state: 'open', body: null }]),
             stderr: '',
           }
         }
@@ -656,7 +667,9 @@ describe('the adapters', () => {
     expect(gh.length).toBe(2)
     for (const [, args] of gh) {
       expect(args[0]).toBe('api')
-      expect(args).toHaveLength(2)
+      // A GET: the endpoint, `--include`, and at most one If-None-Match header; no method, field or input.
+      expect(args[2]).toBe('--include')
+      expect(args.length === 3 || (args.length === 5 && args[3] === '--header')).toBe(true)
       expect(args[1]).toMatch(/^repos\/bogd3v\/micelio-engineering\/issues(\?|\/5\/comments\?)/)
     }
     for (const path of reads) expect(path).toMatch(/^\/(proc|sys)\//)
@@ -697,7 +710,7 @@ describe('the adapters', () => {
     const a = createAdapters({
       exec: async (cmd: string) => {
         if (cmd === 'gh' && failing) return { code: 1, stdout: '', stderr: 'gh: network error\n' }
-        if (cmd === 'gh') return { code: 0, stdout: '[]', stderr: '' }
+        if (cmd === 'gh') return { code: 0, stdout: 'HTTP/2.0 200 OK\r\n\r\n[]', stderr: '' }
         if (cmd === 'nproc') return { code: 0, stdout: '8\n', stderr: '' }
         return { code: 0, stdout: cmd === 'bash' ? '' : '[]', stderr: '' }
       },
