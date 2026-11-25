@@ -361,7 +361,11 @@ describe('the open pull requests', () => {
           : endpoint.includes('/reviews')
             ? [{ user: { login: ME }, body: 'time: 3m diff' }]
             : [{ user: { login: ME }, body: 'hi' }]
-        return { code: 0, stdout: JSON.stringify(out), stderr: '' }
+        return {
+          code: 0,
+          stdout: `HTTP/2.0 200 OK\r\nEtag: W/"x"\r\n\r\n${JSON.stringify(out)}`,
+          stderr: '',
+        }
       },
       readTextFile: async () => null,
       terminals: () => [],
@@ -384,9 +388,9 @@ describe('the open pull requests', () => {
       },
     ])
     expect(calls).toEqual([
-      ['gh', 'api', 'repos/bogd3v/micelio-engineering/pulls?state=open&per_page=100'],
-      ['gh', 'api', 'repos/bogd3v/micelio-engineering/issues/9/comments?per_page=100'],
-      ['gh', 'api', 'repos/bogd3v/micelio-engineering/pulls/9/reviews?per_page=100'],
+      ['gh', 'api', 'repos/bogd3v/micelio-engineering/pulls?state=open&per_page=100', '--include'],
+      ['gh', 'api', 'repos/bogd3v/micelio-engineering/issues/9/comments?per_page=100', '--include'],
+      ['gh', 'api', 'repos/bogd3v/micelio-engineering/pulls/9/reviews?per_page=100', '--include'],
     ])
     // A failed read is no pull requests: the milestone's read does not fail with it.
     failing.current = true

@@ -34,6 +34,7 @@ import {
   shared,
   terminals,
   theme,
+  window,
 } from 'herdr'
 import { createAdapters, readConfig } from './adapters.js'
 import { createActions, createRetries } from './lib/actions.js'
@@ -50,6 +51,7 @@ import {
   tagsOf,
 } from './lib/panel.js'
 import { buildBoard, factoryShare } from './lib/board.js'
+import { paceOf, readsNow } from './lib/quota.js'
 import {
   answerLine,
   buildNeeds,
@@ -128,6 +130,8 @@ export default class Factory extends View {
     this.seeded = false
     this.now = Date.now()
     this.busy = { fast: false, slow: false }
+    /** When GitHub was last read (the model's clock), for the slow pace. */
+    this.githubAt = null
     this.scroll = ScrollHandle.new()
     this.order = []
     this.open = this.load('open', {})
@@ -964,27 +968,42 @@ export default class Factory extends View {
     }
   }
 
-  /** The milestones of each space, from GitHub. */
+  /**
+   * The milestones of each space, from GitHub, unless the pace of the quota or a hidden window says not to
+   * (`readsNow` of `lib/quota.js`): a skipped read is not a failure, and the local reads go on.
+   */
   slow(cx) {
     if (this.busy.slow) return
     this.busy.slow = true
     cx.spawn(async (cx) => {
       try {
+        const now = await this.adapters.now()
+        const remote =
+          this.config.fixture !== null ||
+          readsNow({
+            pace: paceOf(this.adapters.quota(), now),
+            lastAt: this.githubAt,
+            now,
+            visible: window()?.visible,
+          })
         /** @type {Record<string, unknown>} */
         const reads = {}
-        for (const space of this.config.spaces) {
-          const read = await this.adapters.readGithub(space)
-          reads[space.name] =
-            'error' in read ? read : { ...read, pulls: await this.adapters.readPulls(space) }
+        if (remote) {
+          this.githubAt = now
+          for (const space of this.config.spaces) {
+            const read = await this.adapters.readGithub(space)
+            reads[space.name] =
+              'error' in read ? read : { ...read, pulls: await this.adapters.readPulls(space) }
+          }
         }
-        const now = await this.adapters.now()
+        // A skipped read has no reads: the last ones stay and their ages are counted again from now.
         this.github = buildGithub({
-          now,
+          now: await this.adapters.now(),
           spaces: this.config.spaces,
           reads,
           previous: this.github,
         })
-        await this.readShare()
+        await this.readShare(remote)
         await this.readWorktree()
         await this.readCommits()
         this.notifyNew()
@@ -995,10 +1014,10 @@ export default class Factory extends View {
     })
   }
 
-  /** The milestones of each repository and the project fields; a failed read keeps the last one. */
-  async readShare() {
+  /** The milestones of each repository (when `remote`) and the project fields; a failed read keeps the last one. @param {boolean} remote */
+  async readShare(remote) {
     const [milestones, fields] = await Promise.all([
-      this.adapters.readMilestones(this.config.spaces),
+      remote ? this.adapters.readMilestones(this.config.spaces) : { error: 'not read' },
       this.adapters.readProjectFields(),
     ])
     this.share = {
@@ -1122,6 +1141,7 @@ export default class Factory extends View {
       config: this.config,
       theme: this.themeNow(),
       open: this.open,
+      quota: this.adapters.quota(),
     })
   }
 
