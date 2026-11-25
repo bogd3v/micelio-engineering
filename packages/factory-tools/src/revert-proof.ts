@@ -1,5 +1,6 @@
 import { execFile, spawn } from 'node:child_process'
 import {
+  appendFile,
   chmod,
   cp,
   lstat,
@@ -247,11 +248,9 @@ export async function runRevertProof(
   ])
   const production = [...changed].filter((path) => !isTestPath(path, options.tests)).sort()
   if (production.length === 0) {
-    return {
-      code: 1,
-      stdout: 'restored: none\ndeleted: none\nnot proven: no production file changed\n',
-      stderr: '',
-    }
+    const stdout = 'restored: none\ndeleted: none\nnot proven: no production file changed\n'
+    await writeFile(resolve(defaultCwd, options.log), stdout)
+    return { code: 1, stdout, stderr: '' }
   }
 
   const links = options.links.length === 0 ? [DEFAULT_LINK] : options.links
@@ -300,20 +299,16 @@ export async function runRevertProof(
     const result = await runLogged(options.command, scratch, log)
     if ('error' in result) return fail(`cannot run "${options.command.join(' ')}": ${result.error}`)
     if ('signal' in result) {
-      return {
-        code: 2,
-        stdout: listing,
-        stderr: `error: the command was ended by ${result.signal}; that proves nothing\n`,
-      }
+      const stderr = `error: the command was ended by ${result.signal}; that proves nothing\n`
+      await appendFile(log, stderr)
+      return { code: 2, stdout: listing, stderr }
     }
     const exit = `exit code: ${String(result.code)}\n`
-    return result.code === 0
-      ? {
-          code: 1,
-          stdout: `${listing}${exit}not proven: the command passes on the merge base's code\n`,
-          stderr: '',
-        }
-      : { code: 0, stdout: `${listing}${exit}proven\n`, stderr: '' }
+    const verdict =
+      result.code === 0 ? "not proven: the command passes on the merge base's code\n" : 'proven\n'
+    const stdout = `${listing}${exit}${verdict}`
+    await appendFile(log, stdout)
+    return { code: result.code === 0 ? 1 : 0, stdout, stderr: '' }
   } finally {
     await rm(scratch, { recursive: true, force: true })
   }

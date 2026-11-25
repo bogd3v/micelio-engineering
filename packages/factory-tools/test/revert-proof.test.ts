@@ -70,7 +70,7 @@ describe('revert-proof', () => {
     expect(result.stdout).toContain('restored: src/other.txt, src/pins.txt')
     expect(result.stdout).toContain('deleted: src/added.txt')
     const output = readFileSync(log, 'utf8')
-    expect(output).toBe('v0.8.0\nold\nother.txt\npins.txt\n')
+    expect(output.startsWith('v0.8.0\nold\nother.txt\npins.txt\n')).toBe(true)
   })
 
   it('keeps the changed and the new test files as the worktree has them', async () => {
@@ -87,7 +87,7 @@ describe('revert-proof', () => {
     expect(isTestPath('custom/x.txt', ['custom/**'])).toBe(true)
     put('custom/x.txt', 'kept\n')
     await prove(['sh', '-c', 'cat custom/x.txt'], '--test', 'custom/**')
-    expect(readFileSync(log, 'utf8')).toBe('kept\n')
+    expect(readFileSync(log, 'utf8').startsWith('kept\n')).toBe(true)
   })
 
   it("is proven when the command fails on the base's code and not proven when it passes", async () => {
@@ -121,7 +121,7 @@ describe('revert-proof', () => {
       'echo out; echo err >&2; echo x > src/pins.txt; ls node_modules; exit 3',
     ])
     expect(result.code).toBe(0)
-    expect(readFileSync(log, 'utf8')).toBe('out\nerr\ndep.txt\n')
+    expect(readFileSync(log, 'utf8').startsWith('out\nerr\ndep.txt\n')).toBe(true)
     expect(git('status', '--short')).toBe(before)
     expect(readdirSync(repo).sort()).toEqual(listing)
     expect(readFileSync(join(repo, 'src/pins.txt'), 'utf8')).toBe('v0.8.1\n')
@@ -138,7 +138,7 @@ describe('revert-proof', () => {
       'cat node_modules/@scope/lib/pins.txt node_modules/plain/pins.txt node_modules/dep.txt; exit 1',
     ])
     expect(result.code).toBe(0)
-    expect(readFileSync(log, 'utf8')).toBe('v0.8.0\nv0.8.0\ndep\n')
+    expect(readFileSync(log, 'utf8').startsWith('v0.8.0\nv0.8.0\ndep\n')).toBe(true)
   })
 
   it('skips a directory that git lists, a missing link folder and an absolute link outside the repository', async () => {
@@ -163,9 +163,52 @@ describe('revert-proof', () => {
     put('src/ln', 'regular\n')
     const result = await prove(['sh', '-c', 'bin/run.sh; readlink src/ln; exit 1'])
     expect(result.code).toBe(0)
-    expect(readFileSync(log, 'utf8')).toBe('base\npins.txt\n')
+    expect(readFileSync(log, 'utf8').startsWith('base\npins.txt\n')).toBe(true)
     const killed = await prove(['sh', '-c', 'kill -9 $$'])
     expect(killed.code).toBe(2)
     expect(killed.stderr).toContain('ended by SIGKILL')
+  })
+
+  it("appends the listing, the exit code and proven to the log after the command's output", async () => {
+    const result = await prove(['sh', '-c', 'echo out; echo err >&2; exit 3'])
+    expect(result.code).toBe(0)
+    expect(readFileSync(log, 'utf8')).toBe(
+      `out\nerr\nrestored: src/other.txt, src/pins.txt\ndeleted: src/added.txt\nexit code: 3\nproven\n`
+    )
+    expect(result.stdout).toBe(
+      'restored: src/other.txt, src/pins.txt\ndeleted: src/added.txt\nexit code: 3\nproven\n'
+    )
+  })
+
+  it("appends the not proven verdict to the log when the command passes on the base's code", async () => {
+    const result = await prove(['sh', '-c', 'echo fine'])
+    expect(result.code).toBe(1)
+    expect(readFileSync(log, 'utf8')).toBe(`fine\n${result.stdout}`)
+    expect(
+      readFileSync(log, 'utf8').endsWith(
+        "exit code: 0\nnot proven: the command passes on the merge base's code\n"
+      )
+    ).toBe(true)
+  })
+
+  it('writes the log with the not proven verdict when no production file changed', async () => {
+    git('checkout', '-q', '--', '.')
+    rmSync(join(repo, 'src/added.txt'))
+    git('checkout', '-q', base, '--', '.')
+    put('test/new.test.txt', 'only a test\n')
+    writeFileSync(log, 'stale\n')
+    const result = await prove(['sh', '-c', 'exit 1'])
+    expect(result.code).toBe(1)
+    expect(readFileSync(log, 'utf8')).toBe(
+      'restored: none\ndeleted: none\nnot proven: no production file changed\n'
+    )
+  })
+
+  it('appends the signal error to the log when the command is ended by a signal', async () => {
+    const killed = await prove(['sh', '-c', 'echo before; kill -9 $$'])
+    expect(killed.code).toBe(2)
+    expect(readFileSync(log, 'utf8')).toBe(
+      'before\nerror: the command was ended by SIGKILL; that proves nothing\n'
+    )
   })
 })
