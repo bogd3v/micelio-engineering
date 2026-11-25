@@ -116,6 +116,8 @@ cmd_run() {
   }
   trap 'on_signal INT' INT
   trap 'on_signal TERM' TERM
+  # A closed pane sends HUP: untrapped, the wrapper would leave its command running without its TMPDIR.
+  trap 'on_signal HUP' HUP
   local rc
   wait "$pid"
   rc=$?
@@ -355,6 +357,15 @@ kill_group() {
   kill -KILL -- "-$pg" 2>/dev/null
 }
 
+# True while an owner file names this wrapper and a command that is alive.
+command_runs() { # $1 wrapper PID
+  local f
+  for f in "$DIR"/heavy/slot-*.owner; do
+    [[ -e "$f" && "$(field "$f" wrapper)" == "$1" ]] && alive "$(field "$f" pid)" && return 0
+  done
+  return 1
+}
+
 # A hold (slot-N.hold) is the maintainer's: reap never removes one.
 cmd_reap() {
   declare -A state herdr_of hc_of
@@ -406,10 +417,12 @@ cmd_reap() {
       unknown) echo "unknown $f" ;;
     esac
   done
-  # A wrapper that was killed never reached its own cleanup.
+  # A wrapper that was killed never reached its own cleanup. Its command may outlive it, and the
+  # directory is that command's TMPDIR.
   for f in "$RUN_TMP_ROOT"/run-*; do
     [[ -d "$f" && "${f##*/run-}" =~ ^[0-9]+$ ]] || continue
     alive "${f##*/run-}" && continue
+    command_runs "${f##*/run-}" && continue
     rm -rf -- "$f" && echo "removed $f"
   done
   return 0
