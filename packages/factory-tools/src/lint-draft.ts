@@ -345,7 +345,7 @@ function evidenceItems(draft: string): { line: string; names: string[]; exempt: 
 }
 
 /** The files the "Tests" section names whose times the rule needs (`runLintDraft` reads them). */
-export function evidenceNames(draft: string): string[] {
+function evidenceNames(draft: string): string[] {
   return [
     ...new Set(
       evidenceItems(draft)
@@ -395,7 +395,7 @@ function namedLog(summary: string): string | undefined {
 }
 
 /** The logs the figures rule needs (`runLintDraft` reads them): those named by an entry that is not a run shown failing. */
-export function figureLogNames(draft: string): string[] {
+function figureLogNames(draft: string): string[] {
   const names: string[] = []
   for (const entry of testsEntries(draft) ?? []) {
     const parsed = /^`([^`]+)`(.*)$/.exec(entry.text)
@@ -527,7 +527,7 @@ const NAMED_TEST = /`([^\s`]+) > "(.*?)"`/g
  *
  * @param issue - The issue's body.
  */
-export function namedTests(issue: string): { item: string; file: string; name: string }[] {
+function namedTests(issue: string): { item: string; file: string; name: string }[] {
   const named: { item: string; file: string; name: string }[] = []
   for (const item of sectionLines(issue, CRITERIA) ?? []) {
     for (const match of item.matchAll(NAMED_TEST)) {
@@ -615,7 +615,7 @@ function skipGroup(source: string, at: number): number {
  *
  * @param source - The text of a test file.
  */
-export function testTitles(source: string): string[] {
+function testTitles(source: string): string[] {
   const titles: string[] = []
   for (const call of source.matchAll(/(?<![\w$.])(?:it|test)(\.each)?\s*(?=[(`])/g)) {
     let at = (call.index ?? 0) + call[0].length

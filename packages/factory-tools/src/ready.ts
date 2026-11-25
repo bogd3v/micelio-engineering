@@ -22,7 +22,7 @@ export const MARKER = '<!-- micelio:issue-ready -->'
 export const READY_LABEL = 'ready'
 
 /** The label that marks an issue the maintainer runs by hand: no worker takes it and `ready` is never put on it. */
-export const MAINTAINER_RUN_LABEL = 'maintainer-run'
+const MAINTAINER_RUN_LABEL = 'maintainer-run'
 
 const LABEL_COLOR = '0e8a16'
 const LABEL_DESCRIPTION = 'Passes the Definition of Ready (lint-issue); a worker can start it'

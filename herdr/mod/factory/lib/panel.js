@@ -15,7 +15,7 @@ import { ageMs, toMs } from './time.js'
 export const SECTIONS = ['machine', 'slots', 'workers', 'milestones', 'stacks', 'orphans']
 
 /** How far back the load of the Machine section goes. */
-export const HISTORY_MS = 15 * 60_000
+const HISTORY_MS = 15 * 60_000
 
 /** The token that colours a space's badge, by the space's position in the layout's props. */
 export const SPACE_COLOURS = ['space-m', 'space-f', 'space-p']
@@ -52,7 +52,7 @@ export function formatAge(ms) {
  * @param {number} now milliseconds since the epoch
  * @returns {string}
  */
-export function paceNote(quota, now) {
+function paceNote(quota, now) {
   const pace = paceOf(quota, now)
   if (quota === null || pace === 'normal') return ''
   const left = formatAge(quota.reset * 1000 - now)
@@ -67,7 +67,7 @@ export function paceNote(quota, now) {
  * @param {number | null} ms
  * @returns {string}
  */
-export function formatClock(ms) {
+function formatClock(ms) {
   if (ms === null) return '—'
   const s = Math.floor(ms / 1000)
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
@@ -377,7 +377,7 @@ export function milestoneRows(read, now, agents) {
  * @param {import('./agents.js').Agent[]} agents the agents of the space
  * @returns {{ rows: (import('./issues.js').IssueRow & { pair: Pair, ref: string, key: number | string })[], counts: { closed: number, total: number } }}
  */
-export function spaceRows(space, read, now, agents) {
+function spaceRows(space, read, now, agents) {
   const rows = []
   const counts = { closed: 0, total: 0 }
   for (const { pair, raw } of pairReads(space, read)) {

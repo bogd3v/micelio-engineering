@@ -352,7 +352,7 @@ export const SET_OPTION = `mutation($project: ID!, $item: ID!, $field: ID!, $opt
 }`
 
 /** Whether `value` is a plain object. */
-export function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 

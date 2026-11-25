@@ -16,13 +16,6 @@ export function tempDir(prefix: string): string {
   return dir
 }
 
-/** Removes one directory `tempDir` made (a test that wants it gone earlier) and forgets it. */
-export function removeTemp(dir: string): void {
-  rmSync(dir, { recursive: true, force: true })
-  const at = made.indexOf(dir)
-  if (at >= 0) made.splice(at, 1)
-}
-
 afterAll(() => {
   for (const dir of made.splice(0)) rmSync(dir, { recursive: true, force: true })
 })

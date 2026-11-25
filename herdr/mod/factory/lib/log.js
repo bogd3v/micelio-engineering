@@ -28,7 +28,7 @@ export const emptyLogForm = (/** @type {number | string | null} */ issue = null)
  * @param {string} what
  * @returns {string}
  */
-export const escapeWhat = (what) => what.replaceAll(/\s+/g, ' ').trim().replaceAll('|', '\\|')
+const escapeWhat = (what) => what.replaceAll(/\s+/g, ' ').trim().replaceAll('|', '\\|')
 
 /**
  * The line to send, the line the master will post, and what is wrong with the form, if anything.

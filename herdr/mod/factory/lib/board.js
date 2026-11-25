@@ -21,7 +21,7 @@ import {
 import { toMs } from './time.js'
 
 /** The seven columns of the design, left to right. */
-export const COLUMNS = [
+const COLUMNS = [
   { key: 'ready', title: 'Ready' },
   { key: 'g2', title: 'G2 · Worker' },
   { key: 'g3', title: 'G3 · Review' },
@@ -32,7 +32,7 @@ export const COLUMNS = [
 ]
 
 /** The lane filters, after "All lanes". */
-export const LANE_FILTERS = ['EXPRESS', 'NORMAL', 'FULL']
+const LANE_FILTERS = ['EXPRESS', 'NORMAL', 'FULL']
 
 /** The agent each column shows first on a card. */
 const COLUMN_ROLE = { g2: 'worker', g3: 'reviewer', g4: 'verifier', g5: 'master', g6: 'master' }

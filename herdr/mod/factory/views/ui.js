@@ -8,7 +8,7 @@ import { div, image } from 'gpui-kit'
 import { h_flex, v_flex } from 'gpui-base'
 
 /** The family of headings, buttons and badges; the files are in `fonts/`. */
-export const DISPLAY = 'Chakra Petch'
+const DISPLAY = 'Chakra Petch'
 /** The family of everything else. */
 export const MONO = 'JetBrains Mono'
 

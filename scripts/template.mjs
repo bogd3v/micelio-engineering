@@ -204,6 +204,7 @@ export function createRepository(options) {
     'tsconfig-version': versionOf('tsconfig'),
     'types-node': root.devDependencies['@types/node'],
     eslint: root.devDependencies.eslint,
+    knip: root.devDependencies.knip,
     prettier: root.devDependencies.prettier,
     typescript: root.devDependencies.typescript,
     vitest: root.devDependencies.vitest,

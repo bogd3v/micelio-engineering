@@ -9,7 +9,7 @@ import { parseSlots } from './slots.js'
 import { ageMs } from './time.js'
 
 /** The four sources of the state. */
-export const SOURCES = ['slots', 'machine', 'agents', 'issues']
+const SOURCES = ['slots', 'machine', 'agents', 'issues']
 
 /**
  * @typedef {object} Source

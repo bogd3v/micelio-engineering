@@ -75,13 +75,13 @@ export function touchedPaths(diff: string): Set<string> {
 }
 
 /** One hunk of a file in the new version: `count` lines from `start`; 0 lines is a deletion after `start`. */
-export interface Hunk {
+interface Hunk {
   start: number
   count: number
 }
 
 /** The hunks of each path of a `git diff -U0 --no-renames`, as the new file has them. */
-export function hunksByPath(diff: string): Map<string, Hunk[]> {
+function hunksByPath(diff: string): Map<string, Hunk[]> {
   const byPath = new Map<string, Hunk[]>()
   let hunks: Hunk[] | undefined
   for (const line of diff.split('\n')) {
@@ -99,7 +99,7 @@ export function hunksByPath(diff: string): Map<string, Hunk[]> {
 }
 
 /** The paths of the diff that are neither Markdown nor tests, in order. */
-export function changedSources(diff: string): string[] {
+function changedSources(diff: string): string[] {
   return [...touchedPaths(diff)].filter((path) => !isMarkdown(path) && !isTestFile(path))
 }
 
@@ -108,7 +108,7 @@ export function changedSources(diff: string): string[] {
  * comment lines before its first line of code (`//`, `/* … *\/` and `#` comments; blank lines and a
  * `#!` line do not end it), or `undefined` when the first line of code comes first.
  */
-export function headerComment(text: string): { first: number; last: number } | undefined {
+function headerComment(text: string): { first: number; last: number } | undefined {
   let first = 0
   let last = 0
   let inBlock = false
@@ -199,7 +199,7 @@ export function findHits(terms: string[], documents: { path: string; text: strin
  * document's directory, once per file: `path`, `line` and the `changed` file, in the order of the
  * documents, their lines, then the changed files.
  */
-export function findNamed(
+function findNamed(
   changed: string[],
   documents: { path: string; text: string }[]
 ): { path: string; line: number; changed: string }[] {
