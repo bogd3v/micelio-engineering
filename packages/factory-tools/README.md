@@ -6,7 +6,7 @@ script), [`lint-log`](#lint-log) (a `factory-log |` line checked before it is po
 `project-fields-backfill`),
 [`metrics`](#metrics) (the factory's numbers for a milestone), [`lint-draft`](#lint-draft) (the
 shape of a draft's section "Instructions that were wrong or missing", and its "For review" answers
-for the existing tests the diff edits, and the check command in its Tests section),
+for the existing tests the diff edits, the check command in its Tests section, and a `wc -w` there),
 [`docs-hits`](#docs-hits) (the Markdown files that still name a term a diff removed or a file it changes, and the header comment of that file),
 [`lint-lane`](#lint-lane) (an issue's lane, and a diff checked against it),
 [`revert-proof`](#revert-proof) (a test run on the merge base's production code, to show it fails there) and
@@ -124,7 +124,7 @@ responses in `test/fixtures/ready/`, with no network.
 ## `lint-draft`
 
 Gate 2 reads the draft's section "Instructions that were wrong or missing" with this command, and
-checks the diff for edited tests against "For review". The shape of the first is in
+checks the diff for edited tests against "For review" and the "Tests" section for a `wc -w`. The shape of the first is in
 `docs/factory.md`, "The learning loop".
 
 ```bash
@@ -167,11 +167,13 @@ or a file cannot be read.
   (or a shorter `--w`), `wc -w<a.md`, and `wc` given by a path such as `/usr/bin/wc`. The total
   depends on the machine's locale. The word budgets are read from the test that holds them,
   `test/factory-files.test.ts` and `test/factory-docs.test.ts`. What counts as running it: the rule
-  ignores quoted text, splits the line on `|`, `;`, `&` and `$(`, skips leading `VAR=value` words and
-  `env`, and fails when the command is `wc` with a word-count flag. A line that only mentions
-  `wc -w` (in quotes, or after other words), `wc -l`, a plain sentence and a `wc -w` outside that
-  section pass. Its limits: it does not look inside `docker run`, `xargs` or `sh -c`, so a `wc -w`
-  they run passes.
+  ignores quoted text, drops the words from the first one that starts with `#` (a shell comment),
+  splits the line on `|`, `;`, `&` and `$(`, skips leading `VAR=value` words and `env`, and fails
+  when the command is `wc` with a word-count flag. It also looks inside `xargs`, `docker run`,
+  `docker exec`, `podman run` and `podman exec`: a later word that is `wc`, bare or with a path,
+  followed by a word-count flag, fails. For `sh -c` and `bash -c` it reads the quoted argument as a
+  line of its own. A line that only mentions `wc -w` (in quotes, or after other
+  words), `wc -l`, a plain sentence and a `wc -w` outside that section pass.
 
 - With `--logs <dir>` (without it the check below is skipped), each command of the "Tests" section
   needs a log in the packet, as `verify-draft` does. Two forms are read. A fenced block whose first
