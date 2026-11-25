@@ -51,7 +51,8 @@ describe('lint-log', () => {
     expect(reasons('factory-log | 2026-11-17 | #1 |  | test | -')).toEqual(['the what is empty'])
     expect(reasons('factory-log | 2026-11-17 | #1 | x | test | ')[0]).toContain('last field')
     expect(reasons('factory-log | 2026-11-17 | #1 | x | test |')[0]).toContain('last field')
-    expect(reasons('factory-log | 2026-11-17 | #1 | x | test')[0]).toContain('fields')
+    expect(reasons('factory-log | 2026-11-17 | #1 | x | y')[0]).toContain('"y"')
+    expect(reasons('factory-log | 2026-11-17 | #1 | x')[0]).toContain('fields')
     expect(reasons('factory-log |')[0]).toContain('last field')
   })
 
@@ -80,6 +81,38 @@ describe('lint-log', () => {
       ).toEqual(['the fields must be separated by " | " (a space on each side of every |)'])
     }
     expect(lintLog('factory-log | 2026-11-17 | #1 | what | here | test | #2')).toEqual([])
+  })
+
+  it('passes the older form without a destination, which parseLogLines reads with the category last', async () => {
+    const line = 'factory-log | 2026-11-18 | #291 | the draft left out the baseline | issue'
+    expect(lintLog(line)).toEqual([])
+    expect(parseLogLines(line)).toEqual([
+      {
+        date: '2026-11-18',
+        issue: '#291',
+        what: 'the draft left out the baseline',
+        category: 'issue',
+        destination: '',
+      },
+    ])
+    expect(lintLog('factory-log | 2026-11-18 | #291 | a | b | issue | -')).toEqual([])
+    const bad = lintLog('factory-log | 2026-11-18 | #291 | the draft | process')
+    expect(bad.map((p) => p.reason)).toHaveLength(1)
+    expect(bad[0]?.reason).toContain('"process"')
+    await inFile(`${line}\n`, async (path) => {
+      expect((await runLintLog(['lint-log', '--file', path])).code).toBe(0)
+    })
+  })
+
+  it('names an empty field before the category instead of the spaces', () => {
+    const reasons = (line: string): string[] => lintLog(line).map((p) => p.reason)
+    expect(
+      reasons('factory-log | 2026-11-18 | #291 | the draft left out the baseline | | issue | -')
+    ).toEqual(['a field between the what and the category is empty ("| |")'])
+    // a | without a space keeps the reason about spaces
+    expect(reasons('factory-log | 2026-11-18 | #291 | a |  | b| issue | -')).toEqual([
+      'the fields must be separated by " | " (a space on each side of every |)',
+    ])
   })
 
   it('runs as the bin: exit 1 on the process line, exit 0 on a right one', async () => {

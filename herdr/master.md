@@ -163,7 +163,7 @@ A correction that could become a check, a skill or a rule (`C.1`) is one line in
 factory-log | 2026-10-24 | #39 | the reviewer found a retry loop that never stops when `maxAttempts` is 0 | test | -
 ```
 
-The format is `factory-log | <date> | <issue> | <what> | <category> | <destination>`, the columns of `docs/factory-log.md` in order: date (`YYYY-MM-DD`), issue (`#n`, the issue it was found on), what was corrected (what was wrong, not how it was fixed), category (one of the six, `lint`, `test`, `skill`, `standard`, `issue` or `docs`, and no other: `test/factory-log.test.ts` fails on any other value) and destination (`-` until the retro gives one). Before `gh issue comment` the master runs `node <checkout>/packages/factory-tools/dist/cli.js lint-log --file <the comment's text>` and fixes the line when the command fails. The master never commits them.
+The format is `factory-log | <date> | <issue> | <what> | <category> | <destination>`, the columns of `docs/factory-log.md` in order: date (`YYYY-MM-DD`), issue (`#n`, the issue it was found on), what was corrected (what was wrong, not how it was fixed), category (one of the six, `lint`, `test`, `skill`, `standard`, `issue` or `docs`, and no other: `test/factory-log.test.ts` fails on any other value) and destination (`-` until the retro gives one). Before `gh issue comment` the master runs `node <checkout>/packages/factory-tools/dist/cli.js lint-log --file <comment file>` and fixes the line when the command fails. The master never commits them.
 
 ### The `scribe` step
 
