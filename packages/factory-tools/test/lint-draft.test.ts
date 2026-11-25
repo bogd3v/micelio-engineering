@@ -893,3 +893,79 @@ describe('lint-draft figures of the Tests section against their logs', () => {
     expect(run.stdout).toContain('700 passed')
   })
 })
+
+describe('lint-draft --issue', () => {
+  const ISSUE = (name: string): string =>
+    `# chore: x\n\n## Why\n\nx\n\n## Acceptance criteria\n\n- [ ] \`test/a.test.ts > "${name}"\`\n- [ ] \`npm run check\` exits 0.\n\n## Out of scope\n\nnothing\n`
+  const SOURCE = `describe('run-canary.sh', () => {\n  it('fails the apostrophe isn\\'t', () => {})\n  it.each([[1], [2]])('passes %s', () => {})\n  it.skip('skipped one', () => {})\n  test("quoted \\u2019", () => {})\n})\n`
+  const run = (issue: string, sources: Record<string, string>) =>
+    lintDraft(section('Nothing'), { ...context([]), issue, testSources: sources })
+
+  it('fails a named test whose title differs from the criterion by one character', () => {
+    const problems = run(ISSUE('fails the apostrophe isn’t'), { 'test/a.test.ts': SOURCE })
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.problem).toContain('no test of test/a.test.ts has the title')
+    expect(problems[0]?.problem).toContain('fails the apostrophe isn’t')
+    expect(problems[0]?.line).toContain('[ ] `test/a.test.ts')
+  })
+
+  it('fails a named test whose name is its describe and title joined', () => {
+    const problems = run(ISSUE("run-canary.sh fails the apostrophe isn't"), {
+      'test/a.test.ts': SOURCE,
+    })
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.problem).toContain('no test of test/a.test.ts')
+  })
+
+  it('fails a named test whose file does not exist', () => {
+    const problems = run(ISSUE('anything'), {})
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.problem).toContain('test file test/a.test.ts')
+    expect(problems[0]?.problem).toContain('does not exist')
+  })
+
+  it('passes a named test whose title equals the criterion byte for byte', () => {
+    const sources = { 'test/a.test.ts': SOURCE }
+    expect(run(ISSUE("fails the apostrophe isn't"), sources)).toEqual([])
+    expect(run(ISSUE('passes %s'), sources)).toEqual([])
+    expect(run(ISSUE('quoted ’'), sources)).toEqual([])
+    // the same file with a name that is not a title: the rule is on, so it fails
+    expect(run(ISSUE('passes'), sources)).toHaveLength(1)
+  })
+
+  it('does not read a skipped test, and leaves the issue alone without --issue', () => {
+    expect(run(ISSUE('skipped one'), { 'test/a.test.ts': SOURCE })).toHaveLength(1)
+    expect(lintDraft(section('Nothing'), context([]))).toEqual([])
+  })
+
+  it('reads the issue file and the test files through --issue', async () => {
+    const dir = tempDir('lint-draft-issue-')
+    mkdirSync(join(dir, 'test'))
+    await writeFile(join(dir, 'test/a.test.ts'), SOURCE)
+    await writeFile(join(dir, 'issue.md'), ISSUE('passes %s'))
+    await writeFile(join(dir, 'bad.md'), ISSUE('missing'))
+    const make = (): LintDraftDeps => ({
+      ...createDeps(dir),
+      readText: (path) => readFile(path, 'utf8'),
+      diffNames: () => Promise.resolve([]),
+      syncedFiles: () => Promise.resolve(SYNCED),
+      editedTests: () => Promise.resolve([]),
+      checkCommand: () => Promise.resolve(null),
+      home: () => Promise.resolve(false),
+    })
+    await writeFile(join(dir, 'd.md'), section('Nothing'))
+    const argv = (issue: string): string[] => [
+      'lint-draft',
+      '--file',
+      join(dir, 'd.md'),
+      '--base',
+      'x',
+      '--issue',
+      join(dir, issue),
+    ]
+    expect((await runLintDraft(argv('issue.md'), make())).code).toBe(0)
+    const bad = await runLintDraft(argv('bad.md'), make())
+    expect(bad.code).toBe(1)
+    expect(bad.stdout).toContain('no test of test/a.test.ts')
+  })
+})

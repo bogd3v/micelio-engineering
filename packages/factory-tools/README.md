@@ -129,7 +129,7 @@ checks the diff for edited tests against "For review". The shape of the first is
 
 ```bash
 # In the worktree of the branch, after `git add -N .` so that new files are in the diff
-node <checkout>/packages/factory-tools/dist/cli.js lint-draft --file <draft> --base "$(git merge-base HEAD origin/main)" --logs <packet>/logs
+node <checkout>/packages/factory-tools/dist/cli.js lint-draft --file <draft> --base "$(git merge-base HEAD origin/main)" --logs <packet>/logs [--issue <file>]
 ```
 
 It reads the section (the lines under that heading, up to the next heading; a leading `-` is
@@ -203,6 +203,15 @@ or a file cannot be read.
   An entry that `verify-draft` prints as `earlier:` is compared with its own log too; a run shown
   failing `without the change` is exempt. A log that does not exist is the missing-log rule's.
   Without the log texts (`LintDraftDeps.logContents`, which `createDeps` sets), the rule is skipped.
+
+- With `--issue <file>` (the issue's body; its first line `# <title>` is allowed; without it the check
+  is skipped), each item of its "Acceptance criteria" that holds `` `<test file> > "<name>"` `` needs
+  the test file in the worktree and a call `it(`, `test(`, `it.each(…)(` or `test.each(…)(` (not
+  `.skip` or `.todo`) in it whose first argument is a string literal equal to `<name>`, byte for
+  byte, escapes read (`\u2019`, `\'`). A template literal with `${` is not a literal. Otherwise the
+  problem names the criterion, the file and the name, and says whether the file does not exist or no
+  title matches (a title written with another apostrophe, or a describe and a title joined, matches
+  none). A path that leaves the worktree is a file that does not exist.
 
 - A draft whose "Tests" section has no entry that runs the check command and reports `exit 0`
   fails, and the problem names the command and `G2.1` of `docs/factory.md`: the check command is
