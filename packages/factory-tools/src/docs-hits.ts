@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { dirname, posix, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { errorLine } from './errors.js'
 import { isTestFile, sectionLines } from './lint-draft.js'
@@ -74,6 +74,82 @@ export function touchedPaths(diff: string): Set<string> {
   return paths
 }
 
+/** One hunk of a file in the new version: `count` lines from `start`; 0 lines is a deletion after `start`. */
+export interface Hunk {
+  start: number
+  count: number
+}
+
+/** The hunks of each path of a `git diff -U0 --no-renames`, as the new file has them. */
+export function hunksByPath(diff: string): Map<string, Hunk[]> {
+  const byPath = new Map<string, Hunk[]>()
+  let hunks: Hunk[] | undefined
+  for (const line of diff.split('\n')) {
+    const path = /^diff --git a\/(.+) b\/\1$/.exec(line)?.[1]
+    if (path !== undefined) {
+      hunks = []
+      byPath.set(path, hunks)
+      continue
+    }
+    const match = /^@@ -\S+ \+(\d+)(?:,(\d+))? @@/.exec(line)
+    if (match !== null && hunks !== undefined)
+      hunks.push({ start: Number(match[1]), count: match[2] === undefined ? 1 : Number(match[2]) })
+  }
+  return byPath
+}
+
+/** The paths of the diff that are neither Markdown nor tests, in order. */
+export function changedSources(diff: string): string[] {
+  return [...touchedPaths(diff)].filter((path) => !isMarkdown(path) && !isTestFile(path))
+}
+
+/**
+ * The lines of the leading comment block of a source file: the first and the last line of the
+ * comment lines before its first line of code (`//`, `/* … *\/` and `#` comments; blank lines and a
+ * `#!` line do not end it), or `undefined` when the first line of code comes first.
+ */
+export function headerComment(text: string): { first: number; last: number } | undefined {
+  let first = 0
+  let last = 0
+  let inBlock = false
+  const lines = text.split('\n')
+  for (const [index, raw] of lines.entries()) {
+    const line = raw.trim()
+    const number = index + 1
+    if (inBlock) {
+      last = number
+      if (line.includes('*/')) inBlock = false
+    } else if (line === '' || (number === 1 && line.startsWith('#!'))) continue
+    else if (line.startsWith('/*')) {
+      if (first === 0) first = number
+      last = number
+      inBlock = !line.includes('*/')
+    } else if (line.startsWith('//') || line.startsWith('#')) {
+      if (first === 0) first = number
+      last = number
+    } else break
+  }
+  return first === 0 ? undefined : { first, last }
+}
+
+/** Whether a hunk of the new file lies in lines `first` to `last`, a deletion after `last` included. */
+function touchesLines(hunks: Hunk[], first: number, last: number): boolean {
+  return hunks.some(({ start, count }) =>
+    count === 0 ? start >= first && start <= last : start <= last && start + count - 1 >= first
+  )
+}
+
+/** Whether `text` names `path` as a path: no word character, `-` or `/` before it (a `./` is fine), no word character after. */
+function namesPath(text: string, path: string): boolean {
+  for (let at = text.indexOf(path); at !== -1; at = text.indexOf(path, at + 1)) {
+    const before = text[at - 1] ?? ''
+    const after = text[at + path.length] ?? ''
+    const dotSlash = before === '/' && text[at - 2] === '.' && !/[\w.-]/.test(text[at - 3] ?? '')
+    if ((dotSlash || !/[\w/-]/.test(before)) && !/\w/.test(after)) return true
+  }
+  return false
+}
+
 /** The paths a draft's "For review" section answers: `docs-hits: <path> - <why it is still true>`, a `:<line>` after the path ignored. */
 export function answeredPaths(draft: string): Set<string> {
   const answered = new Set<string>()
@@ -116,6 +192,31 @@ export function findHits(terms: string[], documents: { path: string; text: strin
           .map((term) => ({ path, line: index + 1, term }))
       )
   )
+}
+
+/**
+ * Each line of `documents` that names a changed file by its path from the root or from the
+ * document's directory, once per file: `path`, `line` and the `changed` file, in the order of the
+ * documents, their lines, then the changed files.
+ */
+export function findNamed(
+  changed: string[],
+  documents: { path: string; text: string }[]
+): { path: string; line: number; changed: string }[] {
+  return documents.flatMap(({ path, text }) => {
+    const directory = dirname(path)
+    const forms = changed.map((file) => ({
+      file,
+      names: new Set([file, posix.relative(directory, file)]),
+    }))
+    return text
+      .split('\n')
+      .flatMap((content, index) =>
+        forms
+          .filter(({ names }) => [...names].some((form) => namesPath(content, form)))
+          .map(({ file }) => ({ path, line: index + 1, changed: file }))
+      )
+  })
 }
 
 /** What `runDocsHits` needs from the outside world, so that tests can replace git and the disk. */
@@ -192,9 +293,13 @@ const USAGE = 'Usage:\n  factory-tools docs-hits --base <rev> [--cwd <worktree>]
 
 /**
  * `factory-tools docs-hits --base <rev> [--cwd <worktree>] [--draft <file>]`: the places a tracked
- * Markdown file that the diff does not touch names a term the diff removed from code, one line
- * `<path>:<line>: <term>` each and a verdict line. With `--draft`, a path answered in "For review"
- * is not listed. It only reads.
+ * Markdown file that the diff does not touch names a term the diff removed from code
+ * (`<path>:<line>: <term>`); each line of a tracked Markdown file, touched or not, that names a
+ * changed file that is neither Markdown nor a test (`<path>:<line>: names <changed file>`); and the
+ * leading comment block of each such file that the diff does not touch
+ * (`<changed file>:<line>: header comment`); then a verdict line. With `--draft`, a path answered
+ * in "For review" is not listed: a document's for its lines, a changed file's for its header
+ * comment. It only reads.
  *
  * @param argv - The arguments after the program name, starting with `docs-hits`.
  * @param deps - Replaces git and the disk; by default git in `--cwd` (else the current directory).
@@ -223,10 +328,11 @@ export async function runDocsHits(argv: string[], deps?: DocsHitsDeps): Promise<
     const diff = await real.diff(base)
     const touched = touchedPaths(diff)
     const terms = removedTerms(diff, await real.generatedFiles([...touched]))
+    const changed = changedSources(diff)
     const documents: { path: string; text: string }[] = []
-    if (terms.length > 0) {
+    if (terms.length > 0 || changed.length > 0) {
       for (const path of await real.markdownFiles()) {
-        if (touched.has(path) || answered.has(path)) continue
+        if (answered.has(path)) continue
         try {
           documents.push({ path, text: await real.readText(path) })
         } catch (error) {
@@ -234,8 +340,31 @@ export async function runDocsHits(argv: string[], deps?: DocsHitsDeps): Promise<
         }
       }
     }
-    const hits = findHits(terms, documents)
-    const body = hits.map((hit) => `${hit.path}:${hit.line}: ${hit.term}\n`).join('')
+    const unchanged = documents.filter(({ path }) => !touched.has(path))
+    const termHits = findHits(terms, unchanged)
+    const namedHits = findNamed(changed, documents)
+    const hunks = hunksByPath(diff)
+    const headers: string[] = []
+    for (const file of changed) {
+      if (answered.has(file)) continue
+      let text: string
+      try {
+        text = await real.readText(file)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
+        throw error
+      }
+      const header = headerComment(text)
+      if (header !== undefined && !touchesLines(hunks.get(file) ?? [], header.first, header.last))
+        headers.push(`${file}:${header.first}: header comment\n`)
+    }
+    const lines = [
+      ...termHits.map((hit) => `${hit.path}:${hit.line}: ${hit.term}\n`),
+      ...namedHits.map((hit) => `${hit.path}:${hit.line}: names ${hit.changed}\n`),
+      ...headers,
+    ]
+    const body = lines.join('')
+    const hits = lines
     const verdict =
       hits.length === 0
         ? `docs-hits · base ${base} · no hit\n`
