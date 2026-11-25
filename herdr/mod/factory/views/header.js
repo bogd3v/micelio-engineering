@@ -6,17 +6,47 @@ import { h_flex, v_flex } from 'gpui-base'
 import { display, displayBold, label } from './ui.js'
 
 /**
+ * The 32 px button that opens Customize (`Panel.png`): three bars with a knob each, drawn as bars.
+ * `ctx.ui.openCustomize()` opens the overlay.
+ *
  * @param {any} ctx
- * @param {any} model `panel.header`
+ */
+export function customizeButton(ctx) {
+  const bar = (/** @type {number} */ w) => div().h(2).w(w).bg(ctx.c['fg'])
+  return div()
+    .id('open-customize')
+    .w(32)
+    .h(32)
+    .flex_none()
+    .flex()
+    .flex_col()
+    .items_center()
+    .justify_center()
+    .gap(3)
+    .border_1()
+    .border_color(ctx.c['line'])
+    .bg(ctx.c['surface2'])
+    .cursor_pointer()
+    .tooltip('Customize')
+    .on_click(() => ctx.ui.openCustomize())
+    .child(bar(14))
+    .child(bar(10))
+    .child(bar(12))
+}
+
+/**
+ * @param {any} ctx
+ * @param {any} model `panel.header`, with `red` when a hidden section turned red
  * @param {any} strip the summary strip's element
  */
 export function header(ctx, model, strip) {
+  // A hidden section that turns red lights the header: the docked panel has no tab of its own.
   return v_flex()
     .w_full()
     .flex_none()
-    .bg(ctx.c['surface'])
-    .border_b(1)
-    .border_color(ctx.c['line'])
+    .bg(ctx.c[model.red === true ? 'red-bg' : 'surface'])
+    .border_b(model.red === true ? 2 : 1)
+    .border_color(ctx.c[model.red === true ? 'red' : 'line'])
     .child(
       h_flex()
         .items_center()
@@ -24,13 +54,19 @@ export function header(ctx, model, strip) {
         .px(16)
         .pt(12)
         .pb(10)
-        .child(displayBold(div()).text_size(16).text_color(ctx.c['fg']).child('FACTORY'))
+        .child(
+          displayBold(div())
+            .text_size(16)
+            .text_color(ctx.c[model.red === true ? 'red' : 'fg'])
+            .child('FACTORY')
+        )
         .child(div().flex_grow(1))
         .child(
           model.sync.stale
             ? displayBold(div()).text_size(11).text_color(ctx.c['red']).child(model.sync.text)
             : label(model.sync.text, ctx.c['muted'], 11)
         )
+        .child(customizeButton(ctx))
     )
     .child(strip)
 }

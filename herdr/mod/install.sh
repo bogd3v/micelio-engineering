@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # install.sh — installs the factory mod into the Herdr desktop app's configuration folder.
 #
-#   herdr/mod/install.sh [--maintainer <login>] [--spaces <file.json>] [--fixture <folder>]...
+#   herdr/mod/install.sh [--maintainer <login>] [--spaces <file.json>] [--side left|right] [--fixture <folder>]...
 #
 # Builds the agent cats (herdr/mod/build-cats.mjs) and copies the mod to <app>/mods/factory/ and the
-# layout, with the panel docked on the right of Herdr's `main`, to <app>/layouts/factory.json; <app> is
+# layout, with the panel docked on the right of Herdr's `main` (the left with --side), to <app>/layouts/factory.json; <app> is
 # $HERDR_APP_DIR, else ~/.config/herdr-app. It never overwrites a file it did not write: it records the
 # hash of each file it writes in <app>/factory-mod-install.json, and when one of the files it would write
 # exists with another hash (or is not recorded), it writes nothing, says which, and exits 1. A file it
@@ -14,6 +14,7 @@
 #
 #   --maintainer <login>   the GitHub login whose gate comments count (default $FACTORY_MAINTAINER)
 #   --spaces <file.json>   the layout's `spaces`: [{ "name", "repo", "milestone", "epic" }, …]
+#   --side left|right      the side of the panel in the layout (default right): the first or the last child of work-body
 #   --fixture <folder>     read the recordings of <folder> instead of the machine (repeat for a list)
 #
 # Needs bash, node, tar and the coreutils.
@@ -24,20 +25,23 @@ CHECKOUT="$(cd "$HERE/../.." && pwd)"
 APP="${HERDR_APP_DIR:-$HOME/.config/herdr-app}"
 MAINTAINER="${FACTORY_MAINTAINER:-}"
 SPACES=""
+SIDE="right"
 FIXTURES=()
 
 die() { echo "install.sh: $*" >&2; exit 2; }
-usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --maintainer) MAINTAINER="${2:-}"; shift 2 ;;
     --spaces) SPACES="${2:-}"; shift 2 ;;
+    --side) SIDE="${2:-}"; shift 2 ;;
     --fixture) FIXTURES+=("${2:-}"); shift 2 ;;
     -h|--help) usage ;;
     *) usage ;;
   esac
 done
+[[ "$SIDE" == left || "$SIDE" == right ]] || die "--side takes left or right, not: $SIDE"
 [[ -z "$SPACES" || -f "$SPACES" ]] || die "no such file: $SPACES"
 
 STAGE="$(mktemp -d "${TMPDIR:-/tmp}/factory-mod-install.XXXXXX")"
@@ -49,12 +53,18 @@ tar -C "$HERE/factory" --exclude=./cats --exclude='*.d.ts' --exclude=jsconfig.js
 node "$HERE/build-cats.mjs" --out "$STAGE/mods/factory/cats" >/dev/null
 FIXTURE_LIST="$(printf '%s\n' "${FIXTURES[@]+"${FIXTURES[@]}"}")"
 DOCKER_HOST_VALUE="unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
-DOCKER_HOST_VALUE="$DOCKER_HOST_VALUE" CHECKOUT="$CHECKOUT" MAINTAINER="$MAINTAINER" SPACES="$SPACES" FIXTURE_LIST="$FIXTURE_LIST" \
+DOCKER_HOST_VALUE="$DOCKER_HOST_VALUE" CHECKOUT="$CHECKOUT" MAINTAINER="$MAINTAINER" SPACES="$SPACES" SIDE="$SIDE" FIXTURE_LIST="$FIXTURE_LIST" \
   LAYOUT_IN="$HERE/layouts/factory.json" LAYOUT_OUT="$STAGE/layouts/factory.json" node -e '
 const fs = require("node:fs");
 const layout = JSON.parse(fs.readFileSync(process.env.LAYOUT_IN, "utf8"));
 const find = (n) => (n.id === "factory" ? n : (n.children ?? []).map(find).find(Boolean));
 const props = find(layout).content.props;
+const findParent = (n) => ((n.children ?? []).some((c) => c.id === "factory") ? n : (n.children ?? []).map(findParent).find(Boolean));
+const body = findParent(layout);
+const block = body.children.find((c) => c.id === "factory");
+body.children = body.children.filter((c) => c !== block);
+if (process.env.SIDE === "left") body.children.unshift(block); else body.children.push(block);
+props.side = process.env.SIDE;
 props.checkout = process.env.CHECKOUT;
 props.maintainer = process.env.MAINTAINER;
 props.dockerHost = process.env.DOCKER_HOST_VALUE;

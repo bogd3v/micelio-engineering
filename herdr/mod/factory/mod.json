@@ -1,1 +1,1 @@
-{ "place": "right", "size": 380 }
+{ "place": "right", "size": 380, "focusable": true }

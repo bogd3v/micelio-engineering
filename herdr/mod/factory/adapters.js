@@ -34,6 +34,8 @@ export function readConfig(raw) {
     checkout: typeof props['checkout'] === 'string' ? props['checkout'] : '',
     maintainer: typeof props['maintainer'] === 'string' ? props['maintainer'] : '',
     dockerHost: typeof props['dockerHost'] === 'string' ? props['dockerHost'] : '',
+    /** The side `install.sh --side` put the panel on: Customize shows it and never changes it. */
+    side: props['side'] === 'left' ? 'left' : 'right',
     fixture:
       typeof fixture === 'string'
         ? [fixture]

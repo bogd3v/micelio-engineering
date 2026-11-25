@@ -22,7 +22,10 @@ export function milestones(ctx, m) {
     .tooltip('Open the Board in a tab')
     .on_click(() => ctx.ui.openBoard())
     .child('OPEN BOARD >')
-  const box = section(ctx).child(heading(ctx, 'milestones', 'Milestones', m.open, open))
+  // With the Board tab off in Customize the button is gone.
+  const box = section(ctx).child(
+    heading(ctx, 'milestones', 'Milestones', m.open, ctx.ui.boardOn === false ? div() : open)
+  )
   if (!m.open) return box
   if (m.note !== null) box.child(label(`! ${m.note}`, ctx.c['red'], 11).mt(8))
   for (const space of m.spaces) {

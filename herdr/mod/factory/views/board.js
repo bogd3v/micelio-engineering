@@ -4,6 +4,7 @@
 
 import { div } from 'gpui-kit'
 import { h_flex, v_flex } from 'gpui-base'
+import { customizeButton } from './header.js'
 import { badge, cat, displayBold, label, laneTag } from './ui.js'
 
 /**
@@ -141,6 +142,7 @@ export function board(ctx, model) {
     .child(displayBold(div()).text_size(22).text_color(ctx.c['fg']).child('FACTORY BOARD'))
     .child(div().flex_grow(1))
     .child(stats)
+    .child(customizeButton(ctx))
   const filters = h_flex()
     .flex_wrap()
     .gap(8)

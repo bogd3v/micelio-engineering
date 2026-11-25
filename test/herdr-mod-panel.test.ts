@@ -536,6 +536,7 @@ describe('the views', () => {
     expect(readdirSync(join(MOD, 'views')).toSorted()).toEqual([
       'banners.js',
       'board.js',
+      'customize.js',
       'detail.js',
       'header.js',
       'leases.js',
@@ -558,6 +559,7 @@ describe('the views', () => {
     expect(JSON.parse(readFileSync(join(MOD, 'mod.json'), 'utf8'))).toEqual({
       place: 'right',
       size: 380,
+      focusable: true,
     })
   })
 })
