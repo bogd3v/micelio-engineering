@@ -154,11 +154,24 @@ jobs:
           fi
 
       # A command such as `npm run verify:template -- --profile rust` calls cargo-deny, which
-      # ubuntu-latest does not have. The version is the one check.yml installs.
+      # ubuntu-latest does not have. The version is the one check.yml installs; the release's static
+      # binary is installed instead of building it, and only after its SHA-256, written here and never
+      # fetched, matches: a changed release asset fails the step.
       - name: Install cargo-deny
         if: ${{ inputs.cargo-deny && steps.lane.outputs.normal == 'true' }}
         run: |
-          cargo install cargo-deny --locked --version 0.21.0
+          VERSION=0.21.0
+          SHA256=a2170b854ff697e79e39c4c538981c9c1bdd803addbae6719a4cb66b4585a903
+          NAME="cargo-deny-$VERSION-x86_64-unknown-linux-musl"
+          ARCHIVE="$RUNNER_TEMP/$NAME.tar.gz"
+          curl -fsSL --retry 3 -o "$ARCHIVE" "https://github.com/EmbarkStudios/cargo-deny/releases/download/$VERSION/$NAME.tar.gz"
+          echo "$SHA256  $ARCHIVE" | sha256sum -c -
+          tar -xzf "$ARCHIVE" -C "$RUNNER_TEMP" "$NAME/cargo-deny"
+          BIN="$RUNNER_TEMP/cargo-deny-bin"
+          mkdir -p "$BIN"
+          mv "$RUNNER_TEMP/$NAME/cargo-deny" "$BIN/cargo-deny"
+          echo "$BIN" >> "$GITHUB_PATH"
+          PATH="$BIN:$PATH" cargo-deny --version
 
       # The description is data: it is written to a file from the environment and read by the tool.
       - name: Verify the draft

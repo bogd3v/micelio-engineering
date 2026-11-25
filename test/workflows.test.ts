@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -560,6 +561,69 @@ function verifyScript(name: string): string {
   return (step.split('run: |\n')[1] ?? '').replace(/^ {10}/gm, '')
 }
 
+/** The release archive of cargo-deny that `Install cargo-deny` downloads, without `.tar.gz`. */
+const CARGO_DENY_ARCHIVE =
+  /\/releases\/download\/([^/\s]+)\/(cargo-deny-\1-x86_64-unknown-linux-musl)\.tar\.gz$/m
+
+/**
+ * Runs `script` (the shell of `Install cargo-deny` unless given) as Actions does, with a stub `curl`
+ * that records its arguments in `calls` and writes the file `served` to its `-o` path, and returns
+ * the exit status, the output, the calls, what the script added to `$GITHUB_PATH`, its `RUNNER_TEMP`
+ * and whether it left a `cargo-deny` in its directory of binaries.
+ */
+function installCargoDeny(
+  served: string,
+  script = verifyScript('Install cargo-deny')
+): {
+  status: number | null
+  output: string
+  calls: string
+  githubPath: string
+  temp: string
+  installed: boolean
+} {
+  const dir = tempDir('micelio-verify-')
+  const bin = join(dir, 'bin')
+  const temp = join(dir, 'temp')
+  mkdirSync(bin)
+  mkdirSync(temp)
+  const calls = join(dir, 'calls')
+  writeFileSync(
+    join(bin, 'curl'),
+    `#!/bin/sh\necho "curl $*" >> "${calls}"\nwhile [ $# -gt 0 ]; do\n  if [ "$1" = -o ]; then cp "${served}" "$2"; fi\n  shift\ndone\n`
+  )
+  chmodSync(join(bin, 'curl'), 0o755)
+  const githubPath = join(dir, 'github-path')
+  const result = run(
+    script,
+    { PATH: `${bin}:${process.env.PATH ?? ''}`, RUNNER_TEMP: temp, GITHUB_PATH: githubPath },
+    dir
+  )
+  const read = (path: string): string => (existsSync(path) ? readFileSync(path, 'utf8') : '')
+  return {
+    ...result,
+    calls: read(calls),
+    githubPath: read(githubPath),
+    temp,
+    installed: existsSync(join(temp, 'cargo-deny-bin', 'cargo-deny')),
+  }
+}
+
+/**
+ * A `.tar.gz` laid out as cargo-deny's release archive `name`, whose `cargo-deny` prints
+ * `cargo-deny <version>`, and its SHA-256.
+ */
+function fakeCargoDenyArchive(name: string, version: string): { path: string; sha256: string } {
+  const dir = tempDir('micelio-verify-')
+  mkdirSync(join(dir, name))
+  writeFileSync(join(dir, name, 'cargo-deny'), `#!/bin/sh\necho "cargo-deny ${version}"\n`)
+  chmodSync(join(dir, name, 'cargo-deny'), 0o755)
+  const path = join(dir, `${name}.tar.gz`)
+  const tar = spawnSync('tar', ['-czf', path, '-C', dir, name], { encoding: 'utf8' })
+  expect(tar.status, tar.stderr).toBe(0)
+  return { path, sha256: createHash('sha256').update(readFileSync(path)).digest('hex') }
+}
+
 describe('verify-draft.yml', () => {
   it('verify-draft.yml runs on pull_request only, with read-only permissions and no secrets', () => {
     expect(VERIFY).toMatch(/^on:\n {2}workflow_call:\n/m)
@@ -796,16 +860,40 @@ describe('verify-draft.yml', () => {
     ])
     const script = verifyScript('Install cargo-deny')
     expect(script).not.toMatch(/\$\{\{/)
-    const dir = tempDir('micelio-verify-')
-    const bin = join(dir, 'bin')
-    mkdirSync(bin)
-    writeFileSync(join(bin, 'cargo'), `#!/bin/sh\necho "cargo $*" >> "${join(dir, 'calls')}"\n`)
-    chmodSync(join(bin, 'cargo'), 0o755)
-    const result = run(script, { PATH: `${bin}:${process.env.PATH ?? ''}` }, dir)
-    expect(result.status).toBe(0)
-    expect(readFileSync(join(dir, 'calls'), 'utf8')).toBe(
-      'cargo install cargo-deny --locked --version 0.21.0\n'
+    // the step's one download, the release archive, served here as an empty file
+    const served = join(tempDir('micelio-verify-'), 'served')
+    writeFileSync(served, '')
+    const result = installCargoDeny(served, script)
+    const name = 'cargo-deny-0.21.0-x86_64-unknown-linux-musl.tar.gz'
+    expect(result.calls).toBe(
+      `curl -fsSL --retry 3 -o ${join(result.temp, name)} https://github.com/EmbarkStudios/cargo-deny/releases/download/0.21.0/${name}\n`
     )
+  })
+
+  it('verify-draft.yml installs the cargo-deny release binary only after its sha256 matches', () => {
+    // the checksum is written in the step once, never fetched
+    const script = verifyScript('Install cargo-deny')
+    const sums = [...script.matchAll(/^SHA256=([0-9a-f]{64})$/gm)].map((m) => m[1] ?? '')
+    expect(sums).toEqual(['a2170b854ff697e79e39c4c538981c9c1bdd803addbae6719a4cb66b4585a903'])
+    const name = 'cargo-deny-0.21.0-x86_64-unknown-linux-musl'
+    const archive = fakeCargoDenyArchive(name, '0.21.0')
+    expect(archive.sha256).not.toBe(sums[0])
+    // a download of another checksum fails the step before anything is installed
+    const changed = installCargoDeny(archive.path, script)
+    expect(changed.status).not.toBe(0)
+    expect(changed.output).toContain('FAILED')
+    expect(changed.installed).toBe(false)
+    expect(changed.githubPath).toBe('')
+    expect(changed.output).not.toContain('cargo-deny 0.21.0')
+    // the same archive, with its own checksum written in the step, is installed on the PATH
+    const matching = installCargoDeny(
+      archive.path,
+      script.replace(`SHA256=${String(sums[0])}`, `SHA256=${archive.sha256}`)
+    )
+    expect(matching.status, matching.output).toBe(0)
+    expect(matching.installed).toBe(true)
+    expect(matching.githubPath).toBe(`${join(matching.temp, 'cargo-deny-bin')}\n`)
+    expect(matching.output).toContain('cargo-deny 0.21.0\n')
   })
 
   it('verify-draft.yml installs the cargo-deny version check.yml installs', () => {
@@ -815,7 +903,12 @@ describe('verify-draft.yml', () => {
       )
     const [installed] = versions(CHECK)
     expect(installed).toMatch(/^\d+\.\d+\.\d+$/)
-    expect(versions(verifyScript('Install cargo-deny'))).toEqual([installed])
+    // the version of the archive the step downloads, written in its script once
+    const served = join(tempDir('micelio-verify-'), 'served')
+    writeFileSync(served, '')
+    const download = CARGO_DENY_ARCHIVE.exec(installCargoDeny(served).calls)
+    expect(download?.[1]).toBe(installed)
+    expect(verifyScript('Install cargo-deny').split(String(installed))).toHaveLength(2)
     expect(VERIFY).toContain(`description: Install cargo-deny ${String(installed)} for the draft's`)
   })
 
@@ -839,8 +932,18 @@ describe('verify-draft.yml', () => {
       (m) => m[1] ?? ''
     )
     expect(tools).toEqual(['reuse', 'cargo-deny'])
-    const commands = (VERIFY.match(/^ +(?:pipx|cargo) install .*$/gm) ?? []).map((l) => l.trim())
-    expect(commands).toHaveLength(tools.length)
+    // reuse with pipx, cargo-deny from the release archive the step downloads
+    const commands = (VERIFY.match(/^ +pipx install .*$/gm) ?? []).map((l) => l.trim())
+    expect(VERIFY).not.toMatch(/cargo install/)
+    const served = join(tempDir('micelio-verify-'), 'served')
+    writeFileSync(served, '')
+    const archive = CARGO_DENY_ARCHIVE.exec(installCargoDeny(served).calls)?.[2] ?? ''
+    expect(archive).not.toBe('')
+    expect([...commands, archive]).toHaveLength(tools.length)
+    expect(section, 'the archive').toContain(`\`${archive}.tar.gz\``)
+    expect(section, 'its checksum').toContain(
+      '`sha256sum -c` against the SHA-256 written in the workflow'
+    )
     for (const tool of tools) {
       expect(section, `usage of ${tool}`).toContain(
         `      ${tool}: true # optional, default false\n`
