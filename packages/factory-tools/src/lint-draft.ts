@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
-import { access, readFile, readdir } from 'node:fs/promises'
-import { join, relative } from 'node:path'
+import { access, readFile, readdir, stat } from 'node:fs/promises'
+import { dirname, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { errorLine } from './errors.js'
 import {
@@ -40,6 +40,14 @@ export interface DraftContext {
    * the "Tests" section is not checked for logs.
    */
   logFiles?: string[]
+  /**
+   * The modification time (ms) of each file the "Tests" section names, keyed by the name the draft
+   * writes (`logs/npm-test.log`, `shots/a.png`); a file that does not exist has no key. With
+   * `changedTimes` it turns on the check that evidence is not older than the code; left out, skipped.
+   */
+  evidenceTimes?: Record<string, number>
+  /** The modification time (ms) of each file the diff changes and each untracked file git does not ignore, by path; left out, the check is skipped. */
+  changedTimes?: Record<string, number>
 }
 
 /** A line of the section that breaks the shape, and why. */
@@ -252,6 +260,91 @@ function logProblems(draft: string, files: string[] | undefined): DraftProblem[]
   return problems
 }
 
+/** A round named in a Tests entry or in the line above a fenced block: `round 2`. */
+const ROUND = /\brounds?\s+\d+/i
+
+/** The files an entry or block names: each `logs/<file>` and each path that ends `.png`. */
+function namedFiles(text: string): string[] {
+  const names = [
+    ...(text.match(/\blogs\/[^\s`),;]+/g) ?? []),
+    ...(text.match(/[^\s`(),;"']+\.png\b/g) ?? []),
+  ].map((name) => name.replace(/[.:]+$/, '').replace(/^\.?\/+/, ''))
+  return [...new Set(names)]
+}
+
+/**
+ * What the "Tests" section names as evidence, with the line to blame and whether the entry is
+ * exempt: a run shown failing without the change, or an entry (or the line above its block) that
+ * names its round.
+ */
+function evidenceItems(draft: string): { line: string; names: string[]; exempt: boolean }[] {
+  const items: { line: string; names: string[]; exempt: boolean }[] = []
+  for (const block of testsBlocks(draft)) {
+    const failing = WITHOUT_CHANGE.test(block.intro)
+    const named = block.lines.join(' ')
+    items.push({
+      line: (block.lines[0] ?? '').replace(/^\$\s+/, ''),
+      names: namedFiles(named),
+      exempt: failing || ROUND.test(block.intro),
+    })
+  }
+  for (const entry of testsEntries(draft) ?? []) {
+    const parsed = /^`([^`]+)`(.*)$/.exec(entry.text)
+    const failing =
+      (WITHOUT_CHANGE.test(entry.text) || WITHOUT_CHANGE.test(entry.intro)) &&
+      EXIT.exec(parsed?.[2] ?? '')?.[1] !== '0'
+    items.push({
+      line: (parsed?.[1] ?? entry.text).trim(),
+      names: namedFiles(entry.text),
+      exempt: failing || ROUND.test(entry.text),
+    })
+  }
+  return items
+}
+
+/** The files the "Tests" section names whose times the rule needs (`runLintDraft` reads them). */
+export function evidenceNames(draft: string): string[] {
+  return [
+    ...new Set(
+      evidenceItems(draft)
+        .filter((item) => !item.exempt)
+        .flatMap((item) => item.names)
+    ),
+  ]
+}
+
+const iso = (ms: number): string => new Date(ms).toISOString()
+
+/**
+ * One problem for each log or image a "Tests" entry names that is older than the newest file the
+ * diff changes, unless the entry names its round (`G2.6`). Skipped without both sets of times.
+ */
+function staleEvidenceProblems(
+  draft: string,
+  evidence: Record<string, number> | undefined,
+  changed: Record<string, number> | undefined
+): DraftProblem[] {
+  if (evidence === undefined || changed === undefined) return []
+  const newest = Object.entries(changed).reduce<[string, number] | null>(
+    (best, entry) => (best === null || entry[1] > best[1] ? entry : best),
+    null
+  )
+  if (newest === null) return []
+  const problems: DraftProblem[] = []
+  for (const item of evidenceItems(draft)) {
+    if (item.exempt) continue
+    for (const name of item.names) {
+      const time = evidence[name]
+      if (time === undefined || time >= newest[1]) continue
+      problems.push({
+        line: item.line,
+        problem: `\`${name}\` (${iso(time)}) is older than \`${newest[0]}\` (${iso(newest[1])}), a file the diff changes (G2.6): run the command again, or name its round as "round <k>" in the entry`,
+      })
+    }
+  }
+  return problems
+}
+
 /**
  * The check command of a repository: the `check:` line of the first `## Commands` block of its
  * `AGENTS.md`; else `npm run check` when its manifest has a `check` script; else `null`.
@@ -306,6 +399,7 @@ export function lintDraft(draft: string, context: DraftContext): DraftProblem[] 
     ...wordCountProblems(draft),
     ...checkCommandProblems(draft, context.checkCommand),
     ...logProblems(draft, context.logFiles),
+    ...staleEvidenceProblems(draft, context.evidenceTimes, context.changedTimes),
   ]
 }
 
@@ -380,6 +474,13 @@ export interface LintDraftDeps {
   home?: () => Promise<boolean>
   /** The files under a logs directory, relative to it, in any depth. Optional; used with `--logs`. */
   logFiles?: (dir: string) => Promise<string[]>
+  /**
+   * The modification times (ms) of the files `names` the draft writes, read under the packet
+   * directory that holds `dir` (`<dir>/..`); a file that is not there has no key. Optional; used with `--logs`.
+   */
+  evidenceTimes?: (dir: string, names: string[]) => Promise<Record<string, number>>
+  /** The modification times (ms) of the files `git diff --name-only <base>` lists and of the untracked files git does not ignore, by path. Optional; used with `--logs`. */
+  changedTimes?: (base: string) => Promise<Record<string, number>>
 }
 
 /** The outcome of `runLintDraft`: 0 when the draft is right, 1 when a line breaks a rule, 2 on a usage or read error. */
@@ -445,6 +546,35 @@ export function createDeps(cwd: string, syncList: URL = OWN_SYNC_LIST): LintDraf
       (await readdir(dir, { recursive: true, withFileTypes: true }))
         .filter((entry) => entry.isFile())
         .map((entry) => relative(dir, join(entry.parentPath, entry.name))),
+    evidenceTimes: async (dir, names) => {
+      const packet = dirname(resolve(dir))
+      const times: Record<string, number> = {}
+      for (const name of names) {
+        try {
+          times[name] = (await stat(join(packet, name))).mtimeMs
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+        }
+      }
+      return times
+    },
+    changedTimes: async (base) => {
+      const tracked = await exec('git', ['diff', '--name-only', base], { cwd })
+      const untracked = await exec('git', ['ls-files', '--others', '--exclude-standard'], { cwd })
+      const paths = [...tracked.stdout.split('\n'), ...untracked.stdout.split('\n')].filter(
+        (line) => line !== ''
+      )
+      const times: Record<string, number> = {}
+      for (const path of paths) {
+        try {
+          times[path] = (await stat(join(cwd, path))).mtimeMs
+        } catch (error) {
+          // a file the diff deletes has no time
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+        }
+      }
+      return times
+    },
     syncedFiles: async () => {
       const json = JSON.parse(await readFile(syncList, 'utf8')) as { files?: unknown }
       if (!Array.isArray(json.files)) throw new Error('.github/standard-sync.json has no "files"')
@@ -483,7 +613,8 @@ export async function runLintDraft(
   }
   const logs = values.get('--logs')
   try {
-    const problems = lintDraft(await deps.readText(file), {
+    const draft = await deps.readText(file)
+    const problems = lintDraft(draft, {
       changed: await deps.diffNames(base),
       synced: await deps.syncedFiles(),
       editedTests: (await deps.editedTests?.(base)) ?? [],
@@ -492,6 +623,12 @@ export async function runLintDraft(
       ...(logs === undefined || deps.logFiles === undefined
         ? {}
         : { logFiles: await deps.logFiles(logs) }),
+      ...(logs === undefined || deps.evidenceTimes === undefined || deps.changedTimes === undefined
+        ? {}
+        : {
+            evidenceTimes: await deps.evidenceTimes(logs, evidenceNames(draft)),
+            changedTimes: await deps.changedTimes(base),
+          }),
     })
     if (problems.length === 0) {
       return { code: 0, stdout: `lint-draft · ${file} · the draft is right\n`, stderr: '' }

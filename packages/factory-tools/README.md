@@ -183,6 +183,16 @@ or a file cannot be read.
   under a line that does and does not report `exit 0`, are runs shown failing: they stay inline and
   need no log. The problem names the command.
 
+- With `--logs <dir>`, each file a "Tests" entry names, a `logs/<file>` or a path that ends `.png`
+  (read under the packet directory that holds `<dir>`, so `<dir>/..`), whose modification time is
+  older than the newest modification time of the files the diff changes (the paths of
+  `git diff --name-only <base>` plus the untracked files git does not ignore) fails (`G2.6` of
+  `docs/factory.md`). The problem names the file, its time and the changed file that is newer. An
+  entry that names its round as `round <k>`, or that sits under a line above its fenced block that
+  does, is exempt, and so is a run shown failing `without the change`, as for a missing log. A file
+  that does not exist is the missing-log rule's, and a changed file the diff deletes has no time.
+  Without the times (a test's dependencies leave them out), the rule is skipped.
+
 - A draft whose "Tests" section has no entry that runs the check command and reports `exit 0`
   fails, and the problem names the command and `G2.1` of `docs/factory.md`: the check command is
   green in every lane, whatever the change touches. The command is the `check:` line of the first
