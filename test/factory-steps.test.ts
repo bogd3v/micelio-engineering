@@ -79,6 +79,8 @@ const STEPS: Record<string, string[]> = {
     'herdr/master.md',
     'docs/factory.md',
   ],
+  'packet directory': ['herdr/master.md', 'herdr/mod/README.md', 'herdr/mod/factory/lib/detail.js'],
+  '`## Progress`': ['herdr/master.md', 'herdr/mod/README.md'],
   'test-edit:': ['packages/factory-tools/README.md', 'packages/factory-tools/src/lint-draft.ts'],
   'previous.patch': [
     `${AGENTS}reviewer.md`,

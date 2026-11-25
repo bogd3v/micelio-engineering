@@ -48,7 +48,34 @@ function unknownCitations(
 describe('the factory documents', () => {
   it('docs/factory.md and herdr/master.md stay under their word caps', () => {
     expect(words(read('docs/factory.md'))).toBeLessThanOrEqual(6181)
-    expect(words(read('herdr/master.md'))).toBeLessThanOrEqual(4732)
+    expect(words(read('herdr/master.md'))).toBeLessThanOrEqual(4814)
+  })
+
+  it("herdr/master.md has the master write the worktree, packet directory, branch and draft to the issue's Progress before the worker's brief, and check it at gate 5", () => {
+    const runbook = read('herdr/master.md')
+    const start = runbook.indexOf('## Starting an agent')
+    const starting = runbook.slice(start, runbook.indexOf('\n## ', start + 1))
+    const item = starting.split('\n').find((line) => line.startsWith('3. '))
+    expect(item).toMatch(/Before it sends the worker's brief in round 1/)
+    for (const term of [
+      'worktree',
+      'packet directory',
+      'branch',
+      'draft',
+      '`## Progress`',
+      '`M.3`',
+    ])
+      expect(item, term).toContain(term)
+    const brief = starting.split('\n').find((line) => line.startsWith('2. The brief'))
+    expect(starting.indexOf(item ?? '')).toBeGreaterThan(starting.indexOf(brief ?? ''))
+    const gate5 = runbook.slice(runbook.indexOf('## Gate 5 — delivery'))
+    expect(gate5.split('\n').find((l) => l.startsWith('1. '))).toMatch(
+      /check that Progress names the worktree, and add it first if not/
+    )
+    const session = runbook.slice(runbook.indexOf('## Session length'))
+    expect(session.split('\n').find((l) => l.startsWith('2. '))).toMatch(
+      /checks that the Progress of each issue in flight names its worktree, packet directory and draft path, adds what is missing/
+    )
   })
 
   it('every rule id cited outside docs/factory.md exists in it', () => {
