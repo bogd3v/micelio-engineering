@@ -56,6 +56,14 @@ export interface DraftContext {
    * the entry names, by `verify-draft`'s rules; left out, skipped.
    */
   logContents?: Record<string, string>
+  /**
+   * The issue's body (its first line `# <title>` is allowed). With it, each item of its "Acceptance
+   * criteria" that holds the form `<test file> > "<name>"` in backticks needs a test of that file titled `<name>`
+   * (`namedTestProblems`); left out, skipped.
+   */
+  issue?: string
+  /** The text of each test file the criteria of `issue` name, keyed by the path they write; a file that does not exist has no key. */
+  testSources?: Record<string, string>
 }
 
 /** A line of the section that breaks the shape, and why. */
@@ -475,7 +483,149 @@ export function lintDraft(draft: string, context: DraftContext): DraftProblem[] 
     ...logProblems(draft, context.logFiles),
     ...staleEvidenceProblems(draft, context.evidenceTimes, context.changedTimes),
     ...figureProblems(draft, context.logContents),
+    ...(context.issue === undefined
+      ? []
+      : namedTestProblems(context.issue, context.testSources ?? {})),
   ]
+}
+
+/** The heading of the issue's section that lists the criteria. */
+const CRITERIA = 'Acceptance criteria'
+
+/** A criterion names a test as a test file, then the name in double quotes, all in backticks. */
+const NAMED_TEST = /`([^\s`]+) > "(.*?)"`/g
+
+/**
+ * The test files and names the criteria of an issue's body give (a file and a name), with
+ * the item each comes from, in order.
+ *
+ * @param issue - The issue's body.
+ */
+export function namedTests(issue: string): { item: string; file: string; name: string }[] {
+  const named: { item: string; file: string; name: string }[] = []
+  for (const item of sectionLines(issue, CRITERIA) ?? []) {
+    for (const match of item.matchAll(NAMED_TEST)) {
+      named.push({ item, file: match[1] ?? '', name: match[2] ?? '' })
+    }
+  }
+  return named
+}
+
+/** The value of the escape that starts at `text[i]` (after the backslash) and where it ends. */
+function unescape(text: string, i: number): { value: string; end: number } {
+  const c = text[i] ?? ''
+  const simple: Record<string, string> = {
+    n: '\n',
+    t: '\t',
+    r: '\r',
+    b: '\b',
+    f: '\f',
+    v: '\v',
+    '0': '\0',
+  }
+  if (c === 'x' && /^[0-9a-fA-F]{2}/.test(text.slice(i + 1, i + 3))) {
+    return { value: String.fromCharCode(parseInt(text.slice(i + 1, i + 3), 16)), end: i + 3 }
+  }
+  if (c === 'u') {
+    const braced = /^\{([0-9a-fA-F]+)\}/.exec(text.slice(i + 1))
+    if (braced) {
+      return {
+        value: String.fromCodePoint(parseInt(braced[1] ?? '0', 16)),
+        end: i + 1 + braced[0].length,
+      }
+    }
+    if (/^[0-9a-fA-F]{4}/.test(text.slice(i + 1, i + 5))) {
+      return { value: String.fromCharCode(parseInt(text.slice(i + 1, i + 5), 16)), end: i + 5 }
+    }
+  }
+  return { value: simple[c] ?? c, end: i + 1 }
+}
+
+/**
+ * The string literal that starts at `source[at]` (a quote) when it is the whole first argument: its
+ * value and the index after it, or `null` for a template with `${`, or a literal that is followed
+ * by anything but `,` or `)`.
+ */
+function stringLiteralAt(source: string, at: number): { value: string; end: number } | null {
+  const quote = source[at]
+  let value = ''
+  let i = at + 1
+  while (i < source.length) {
+    const c = source[i] ?? ''
+    if (c === '\\') {
+      const escape = unescape(source, i + 1)
+      value += escape.value
+      i = escape.end
+      continue
+    }
+    if (c === quote) {
+      const after = /^\s*([,)])/.exec(source.slice(i + 1))
+      return after ? { value, end: i + 1 } : null
+    }
+    if (quote === '`' && c === '$' && source[i + 1] === '{') return null
+    if (c === '\n' && quote !== '`') return null
+    value += c
+    i++
+  }
+  return null
+}
+
+/** The index after the bracket group that opens at `source[at]`, skipping the strings in it; `-1` when it never closes. */
+function skipGroup(source: string, at: number): number {
+  let depth = 0
+  for (let i = at; i < source.length; i++) {
+    const c = source[i] ?? ''
+    if (c === "'" || c === '"' || c === '`') {
+      for (i++; i < source.length && source[i] !== c; i++) if (source[i] === '\\') i++
+    } else if ('([{'.includes(c)) depth++
+    else if (')]}'.includes(c) && --depth === 0) return i + 1
+  }
+  return -1
+}
+
+/**
+ * The titles of the tests of a file: the first argument, when it is a string literal, of each call
+ * `it(`, `test(`, `it.each(…)(` and `test.each(…)(`; `.skip`, `.todo` and the rest are not read.
+ *
+ * @param source - The text of a test file.
+ */
+export function testTitles(source: string): string[] {
+  const titles: string[] = []
+  for (const call of source.matchAll(/(?<![\w$.])(?:it|test)(\.each)?\s*(?=[(`])/g)) {
+    let at = (call.index ?? 0) + call[0].length
+    if (call[1] !== undefined) {
+      at = skipGroup(source, at)
+      if (at === -1) continue
+      while (/\s/.test(source[at] ?? '')) at++
+    }
+    if (source[at] !== '(') continue
+    at++
+    while (/\s/.test(source[at] ?? '')) at++
+    if (!'\'"`'.includes(source[at] ?? '\0')) continue
+    const literal = stringLiteralAt(source, at)
+    if (literal) titles.push(literal.value)
+  }
+  return titles
+}
+
+/** Each named test of the issue's criteria whose file is missing or holds no title equal to the name. */
+function namedTestProblems(issue: string, sources: Record<string, string>): DraftProblem[] {
+  const problems: DraftProblem[] = []
+  for (const { item, file, name } of namedTests(issue)) {
+    const source = sources[file]
+    if (source === undefined) {
+      problems.push({
+        line: item,
+        problem: `the test file ${file} that the criterion names does not exist (test "${name}")`,
+      })
+    } else if (!testTitles(source).includes(name)) {
+      problems.push({
+        line: item,
+        problem: `no test of ${file} has the title "${name}", byte for byte, that the criterion names`,
+      })
+    }
+  }
+  return problems
 }
 
 function instructionProblems(draft: string, context: DraftContext): DraftProblem[] {
@@ -558,6 +708,8 @@ export interface LintDraftDeps {
   changedTimes?: (base: string) => Promise<Record<string, number>>
   /** The text of the logs `names` (files under `dir`, as the draft writes them after `logs/`); a log that is not there has no key. Optional; used with `--logs`. */
   logContents?: (dir: string, names: string[]) => Promise<Record<string, string>>
+  /** The text of the test files `paths` (relative to the worktree); a file that is not there, or outside it, has no key. Optional; used with `--issue`. */
+  testSources?: (paths: string[]) => Promise<Record<string, string>>
 }
 
 /** The outcome of `runLintDraft`: 0 when the draft is right, 1 when a line breaks a rule, 2 on a usage or read error. */
@@ -663,6 +815,20 @@ export function createDeps(cwd: string, syncList: URL = OWN_SYNC_LIST): LintDraf
       }
       return texts
     },
+    testSources: async (paths) => {
+      const texts: Record<string, string> = {}
+      for (const path of paths) {
+        const full = resolve(cwd, path)
+        if (relative(cwd, full).startsWith('..') || full === resolve(cwd)) continue
+        try {
+          texts[path] = await readFile(full, 'utf8')
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code
+          if (code !== 'ENOENT' && code !== 'EISDIR') throw error
+        }
+      }
+      return texts
+    },
     syncedFiles: async () => {
       const json = JSON.parse(await readFile(syncList, 'utf8')) as { files?: unknown }
       if (!Array.isArray(json.files)) throw new Error('.github/standard-sync.json has no "files"')
@@ -671,10 +837,11 @@ export function createDeps(cwd: string, syncList: URL = OWN_SYNC_LIST): LintDraf
   }
 }
 
-const USAGE = 'Usage:\n  factory-tools lint-draft --file <draft> --base <ref> [--logs <dir>]\n'
+const USAGE =
+  'Usage:\n  factory-tools lint-draft --file <draft> --base <ref> [--logs <dir>] [--issue <file>]\n'
 
 /**
- * `factory-tools lint-draft --file <draft> --base <ref> [--logs <dir>]`: run in the worktree of the draft, with
+ * `factory-tools lint-draft --file <draft> --base <ref> [--logs <dir>] [--issue <file>]`: run in the worktree of the draft, with
  * the branch checked out, by the command built in the `micelio-engineering` checkout.
  *
  * @param argv - The arguments after the program name, starting with `lint-draft`.
@@ -688,7 +855,7 @@ export async function runLintDraft(
   for (let i = 0; i < args.length; i++) {
     const name = args[i] ?? ''
     const value = args[i + 1]
-    if (!['--file', '--base', '--logs'].includes(name) || value === undefined) {
+    if (!['--file', '--base', '--logs', '--issue'].includes(name) || value === undefined) {
       return { code: 2, stdout: '', stderr: `error: bad argument "${name}"\n${USAGE}` }
     }
     values.set(name, value)
@@ -700,8 +867,10 @@ export async function runLintDraft(
     return { code: 2, stdout: '', stderr: `error: lint-draft needs --file and --base\n${USAGE}` }
   }
   const logs = values.get('--logs')
+  const issueFile = values.get('--issue')
   try {
     const draft = await deps.readText(file)
+    const issue = issueFile === undefined ? undefined : await deps.readText(issueFile)
     const problems = lintDraft(draft, {
       changed: await deps.diffNames(base),
       synced: await deps.syncedFiles(),
@@ -711,6 +880,12 @@ export async function runLintDraft(
       ...(logs === undefined || deps.logFiles === undefined
         ? {}
         : { logFiles: await deps.logFiles(logs) }),
+      ...(issue === undefined
+        ? {}
+        : {
+            issue,
+            testSources: await (deps.testSources?.(namedTests(issue).map((n) => n.file)) ?? {}),
+          }),
       ...(logs === undefined || deps.logContents === undefined
         ? {}
         : { logContents: await deps.logContents(logs, figureLogNames(draft)) }),
