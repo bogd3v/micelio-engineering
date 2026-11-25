@@ -8,6 +8,8 @@ import {
   LOG,
   WITHOUT_CHANGE,
   agentsCommandLines,
+  figures,
+  numbersBefore,
   testsEntries,
   withoutSlotPrefix,
 } from './verify-draft.js'
@@ -48,6 +50,12 @@ export interface DraftContext {
   evidenceTimes?: Record<string, number>
   /** The modification time (ms) of each file the diff changes and each untracked file git does not ignore, by path; left out, the check is skipped. */
   changedTimes?: Record<string, number>
+  /**
+   * The text of each log the "Tests" section names, keyed by the file after `logs/` (`npm-test.log`);
+   * a log that does not exist has no key. With it, each figure of an entry is compared with the log
+   * the entry names, by `verify-draft`'s rules; left out, skipped.
+   */
+  logContents?: Record<string, string>
 }
 
 /** A line of the section that breaks the shape, and why. */
@@ -345,6 +353,72 @@ function staleEvidenceProblems(
   return problems
 }
 
+/** The log an entry names, as the file after `logs/` (`npm-test.log`); `undefined` when it names none. */
+function namedLog(summary: string): string | undefined {
+  return LOG.exec(summary)?.[1]
+    ?.replace(/[.:]+$/, '')
+    .replace(/^\.?\/+/, '')
+}
+
+/** The logs the figures rule needs (`runLintDraft` reads them): those named by an entry that is not a run shown failing. */
+export function figureLogNames(draft: string): string[] {
+  const names: string[] = []
+  for (const entry of testsEntries(draft) ?? []) {
+    const parsed = /^`([^`]+)`(.*)$/.exec(entry.text)
+    if (parsed === null) continue
+    const summary = parsed[2] ?? ''
+    if (
+      (WITHOUT_CHANGE.test(entry.text) || WITHOUT_CHANGE.test(entry.intro)) &&
+      EXIT.exec(summary)?.[1] !== '0'
+    )
+      continue
+    const name = namedLog(summary)
+    if (name !== undefined) names.push(name)
+  }
+  return [...new Set(names)]
+}
+
+/**
+ * One problem for each figure of a "Tests" entry that the log the entry names does not hold, with
+ * `verify-draft`'s rules (`figures` and `numbersBefore`): a word the log never counts is prose,
+ * unless no figure of the line is counted at all. A run shown failing and a log that is not there
+ * (`logProblems` reports it) are skipped, as is the whole rule without `logs`.
+ */
+function figureProblems(draft: string, logs: Record<string, string> | undefined): DraftProblem[] {
+  if (logs === undefined) return []
+  const problems: DraftProblem[] = []
+  for (const entry of testsEntries(draft) ?? []) {
+    const parsed = /^`([^`]+)`(.*)$/.exec(entry.text)
+    if (parsed === null) continue
+    const summary = parsed[2] ?? ''
+    if (
+      (WITHOUT_CHANGE.test(entry.text) || WITHOUT_CHANGE.test(entry.intro)) &&
+      EXIT.exec(summary)?.[1] !== '0'
+    )
+      continue
+    const name = namedLog(summary)
+    const text = name === undefined ? undefined : logs[name]
+    if (name === undefined || text === undefined) continue
+    const counted = figures(summary).map(
+      ([number, word]) => [number, word, numbersBefore(text, word)] as const
+    )
+    const compared = counted.some(([, , got]) => got.length > 0)
+      ? counted.filter(([, , got]) => got.length > 0)
+      : counted
+    for (const [number, word, got] of compared) {
+      if (got.includes(number)) continue
+      problems.push({
+        line: (parsed[1] ?? '').trim(),
+        problem:
+          got.length === 0
+            ? `the figure "${number} ${word}" is not in \`logs/${name}\`: it has no "<n> ${word}"`
+            : `the figure "${number} ${word}" is not in \`logs/${name}\`: it has ${[...new Set(got)].join(' or ')}`,
+      })
+    }
+  }
+  return problems
+}
+
 /**
  * The check command of a repository: the `check:` line of the first `## Commands` block of its
  * `AGENTS.md`; else `npm run check` when its manifest has a `check` script; else `null`.
@@ -400,6 +474,7 @@ export function lintDraft(draft: string, context: DraftContext): DraftProblem[] 
     ...checkCommandProblems(draft, context.checkCommand),
     ...logProblems(draft, context.logFiles),
     ...staleEvidenceProblems(draft, context.evidenceTimes, context.changedTimes),
+    ...figureProblems(draft, context.logContents),
   ]
 }
 
@@ -481,6 +556,8 @@ export interface LintDraftDeps {
   evidenceTimes?: (dir: string, names: string[]) => Promise<Record<string, number>>
   /** The modification times (ms) of the files `git diff --name-only <base>` lists and of the untracked files git does not ignore, by path. Optional; used with `--logs`. */
   changedTimes?: (base: string) => Promise<Record<string, number>>
+  /** The text of the logs `names` (files under `dir`, as the draft writes them after `logs/`); a log that is not there has no key. Optional; used with `--logs`. */
+  logContents?: (dir: string, names: string[]) => Promise<Record<string, string>>
 }
 
 /** The outcome of `runLintDraft`: 0 when the draft is right, 1 when a line breaks a rule, 2 on a usage or read error. */
@@ -575,6 +652,17 @@ export function createDeps(cwd: string, syncList: URL = OWN_SYNC_LIST): LintDraf
       }
       return times
     },
+    logContents: async (dir, names) => {
+      const texts: Record<string, string> = {}
+      for (const name of names) {
+        try {
+          texts[name] = await readFile(join(dir, name), 'utf8')
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+        }
+      }
+      return texts
+    },
     syncedFiles: async () => {
       const json = JSON.parse(await readFile(syncList, 'utf8')) as { files?: unknown }
       if (!Array.isArray(json.files)) throw new Error('.github/standard-sync.json has no "files"')
@@ -623,6 +711,9 @@ export async function runLintDraft(
       ...(logs === undefined || deps.logFiles === undefined
         ? {}
         : { logFiles: await deps.logFiles(logs) }),
+      ...(logs === undefined || deps.logContents === undefined
+        ? {}
+        : { logContents: await deps.logContents(logs, figureLogNames(draft)) }),
       ...(logs === undefined || deps.evidenceTimes === undefined || deps.changedTimes === undefined
         ? {}
         : {
