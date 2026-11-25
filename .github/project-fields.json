@@ -11,6 +11,10 @@
   "Micelio · Corte 0.9 — El núcleo 0.5": { "releaseLine": "0.9", "front": "Plugin core" },
   "Micelio · Catálogo de bloques": { "releaseLine": "later", "front": "Plugin core" },
   "Micelio · Fábrica en otros lenguajes": { "releaseLine": "later", "front": "Foundations" },
+  "Micelio · Fábrica en otros lenguajes — pendientes": {
+    "releaseLine": "later",
+    "front": "Foundations"
+  },
   "Micelio · Fábrica sobre Podman": { "releaseLine": "later", "front": "Foundations" },
   "Micelio · Fábrica por carriles": { "releaseLine": "later", "front": "Foundations" },
   "Micelio · Fábrica — Mod de Herdr": { "releaseLine": "later", "front": "Foundations" },
