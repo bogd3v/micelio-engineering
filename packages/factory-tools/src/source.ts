@@ -2,6 +2,8 @@ import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
+import { at } from './fields.js'
+import { arrayOf } from './narrow.js'
 
 /**
  * Where `metrics` reads GitHub from. Every method returns what `gh api` printed for that
@@ -56,8 +58,7 @@ export function ghSource(repo: string): Source {
     return JSON.parse(stdout) as unknown
   }
   const list = async (path: string): Promise<unknown[]> => {
-    const pages = await get(path, true)
-    return Array.isArray(pages) ? pages.flat() : []
+    return arrayOf(await get(path, true)).flat()
   }
   return {
     commentEdits: async (id) => {
@@ -70,10 +71,8 @@ export function ghSource(repo: string): Source {
           maxBuffer: 256 * 1024 * 1024,
         }
       )
-      const nodes = (
-        JSON.parse(stdout) as { data?: { node?: { userContentEdits?: { nodes?: unknown } } } }
-      ).data?.node?.userContentEdits?.nodes
-      return Array.isArray(nodes) ? nodes : []
+      const answer: unknown = JSON.parse(stdout)
+      return arrayOf(at(answer, 'data', 'node', 'userContentEdits', 'nodes'))
     },
     milestones: () => list(`${base}/milestones?state=all&per_page=100`),
     milestoneIssues: (n) => list(`${base}/issues?milestone=${n}&state=all&per_page=100`),
@@ -124,12 +123,12 @@ export function fixtureSource(dir: string): Source {
   const list = async (file: string): Promise<unknown[]> => {
     const recorded = await parse(dir, file)
     const added = await parse(overlay, file)
-    const rows = Array.isArray(recorded) ? recorded : []
+    const rows = arrayOf(recorded)
     if (!Array.isArray(added)) return rows
-    const numbers = new Set(added.map(numberOf))
+    const numbers = new Set(arrayOf(added).map(numberOf))
     return [
       ...rows.filter((row) => numberOf(row) === null || !numbers.has(numberOf(row))),
-      ...added,
+      ...arrayOf(added),
     ]
   }
   return {
@@ -161,8 +160,7 @@ function requiredOf(rules: unknown[]): string[] {
       'required_status_checks' in parameters
         ? parameters.required_status_checks
         : []
-    if (!Array.isArray(checks)) continue
-    for (const check of checks) {
+    for (const check of arrayOf(checks)) {
       if (typeof check === 'object' && check !== null && 'context' in check) {
         if (typeof check.context === 'string') names.push(check.context)
       }

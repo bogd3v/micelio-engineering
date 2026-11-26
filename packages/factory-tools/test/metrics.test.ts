@@ -366,7 +366,9 @@ describe('factory log', () => {
     const fixtures = await readFile(`${RECORDED}/factory-log.md`, 'utf8')
     const comments: { body: string; created_at: string }[] = []
     for (const file of await readdir(`${RECORDED}/comments`)) {
-      comments.push(...JSON.parse(await readFile(`${RECORDED}/comments/${file}`, 'utf8')))
+      comments.push(
+        ...(JSON.parse(await readFile(`${RECORDED}/comments/${file}`, 'utf8')) as typeof comments)
+      )
     }
     const cells = (row: string): string[] =>
       row
@@ -530,7 +532,7 @@ describe('metrics', () => {
     const walk = async (dir: string): Promise<string[]> => {
       const names = await readdir(dir, { withFileTypes: true })
       const nested = await Promise.all(
-        names.map((e) => (e.isDirectory() ? walk(`${dir}/${e.name}`) : [`${dir}/${e.name}`]))
+        names.map(async (e) => (e.isDirectory() ? walk(`${dir}/${e.name}`) : [`${dir}/${e.name}`]))
       )
       return nested.flat().filter((file) => file.endsWith('.json'))
     }

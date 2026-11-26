@@ -1049,7 +1049,7 @@ describe('the tools of issue-ready.yml and verify-draft.yml come from the workfl
       const names = Object.keys(
         Object.fromEntries(
           workflow.split(/\n(?= {6}- name: )/).map((s) => [/- name: (.*)/.exec(s)?.[1], 1])
-        )
+        ) as Record<string, number>
       )
       expect(
         names.indexOf('Warn when tools-ref or tools-repository differs from the workflow'),

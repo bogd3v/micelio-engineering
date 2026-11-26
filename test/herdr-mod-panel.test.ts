@@ -101,7 +101,10 @@ function click(e: Element, cx: unknown): void {
 const TOKENS = Object.fromEntries(Object.keys(THEMES.dark).map((name) => [name, name]))
 
 /** The `ctx` of a view, with a spy for each thing the view may call. */
-function viewContext({ dark = true, confirmation = null as unknown } = {}) {
+function viewContext({
+  dark = true,
+  confirmation = null,
+}: { dark?: boolean; confirmation?: unknown } = {}) {
   const ctx = {
     c: TOKENS,
     dark,

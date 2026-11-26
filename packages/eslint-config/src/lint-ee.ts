@@ -5,10 +5,9 @@ import { lintEe } from './ee.js'
 const allow: string[] = []
 let root = process.cwd()
 const args = process.argv.slice(2)
-for (let i = 0; i < args.length; i++) {
-  const arg = args[i] as string
+for (let arg = args.shift(); arg !== undefined; arg = args.shift()) {
   if (arg === '--allow') {
-    const path = args[++i]
+    const path = args.shift()
     if (path === undefined) {
       console.error('error: --allow needs a path')
       process.exit(2)

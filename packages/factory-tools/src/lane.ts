@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { dirname, posix, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { errorLine } from './errors.js'
+import { isRecord } from './narrow.js'
 import { issueFromGh, issueFromMarkdown, parseTarget, proseOnly } from './issue.js'
 import type { Issue, IssueRef } from './issue.js'
 
@@ -11,6 +12,14 @@ export const LANES = ['express', 'normal', 'full'] as const
 
 /** One of the three lanes. */
 export type Lane = (typeof LANES)[number]
+
+/** Whether `value` names one of the {@link LANES}. */
+function isLane(value: string): value is Lane {
+  return LANES.some((lane) => lane === value)
+}
+
+/** The three keys of the `## Lanes` block, in the order {@link LaneGlobs} has them. */
+const LANE_KEYS = ['stack', 'contract', 'express'] as const
 
 /** The globs of the `## Lanes` block of `AGENTS.md`. */
 export interface LaneGlobs {
@@ -58,10 +67,10 @@ export function parseLanes(agents: string): LaneGlobs | null {
   for (const line of lines.slice(start + 1)) {
     if (/^#{1,2}\s/.test(line)) break
     const match = /^\s*(?:[-*]\s+)?(stack|contract|express):(.*)$/.exec(line)
-    if (match?.[1] === undefined) continue
-    const key = match[1] as keyof LaneGlobs
+    const key = LANE_KEYS.find((name) => name === match?.[1])
+    if (key === undefined) continue
     globs[key].push(
-      ...(match[2] ?? '')
+      ...(match?.[2] ?? '')
         .split(',')
         .map((glob) =>
           glob
@@ -210,15 +219,14 @@ function stringChanges(a: unknown, b: unknown, keys: string[] = []): Change[] | 
     }
     return found
   }
-  if (typeof a === 'object' && typeof b === 'object' && a !== null && b !== null) {
-    const left = a as Record<string, unknown>
-    const right = b as Record<string, unknown>
-    const names = Object.keys(left)
+  // Arrays returned above, so a record here is any other object
+  if (isRecord(a) && isRecord(b)) {
+    const names = Object.keys(a)
     // The order of the keys carries meaning (the conditions of `exports`), so it must be the same.
-    if (names.join('\0') !== Object.keys(right).join('\0')) return null
+    if (names.join('\0') !== Object.keys(b).join('\0')) return null
     const found: Change[] = []
     for (const name of names) {
-      const inner = stringChanges(left[name], right[name], [...keys, name])
+      const inner = stringChanges(a[name], b[name], [...keys, name])
       if (inner === null) return null
       found.push(...inner)
     }
@@ -335,7 +343,7 @@ export async function versionFiles(
     const candidate: VersionCandidate = { path, dir, lock: file === 'package-lock.json', changes }
     candidates.push(candidate)
     const own = changes.find((c) => c.keys.length === 1 && c.keys[0] === 'version')
-    const name = (next as { name?: unknown } | null)?.name
+    const name = isRecord(next) ? next.name : undefined
     if (!candidate.lock && own !== undefined && typeof name === 'string') {
       released.set(path, { name, dir, old: own.old, new: own.new })
     }
@@ -515,7 +523,7 @@ export async function runLintLane(
       if (diff === undefined || lane === undefined || file !== undefined || positional.length > 0) {
         return usage('--diff and --lane go together and take no issue')
       }
-      if (!LANES.includes(lane as Lane)) return usage(`unknown lane "${lane}"`)
+      if (!isLane(lane)) return usage(`unknown lane "${lane}"`)
       const names = await deps.diffNames(diff)
       const globs = await readGlobs(deps)
       const moved = await versionFiles(
@@ -525,11 +533,11 @@ export async function runLintLane(
         deps.readText
       )
       const result = diffLane(names, globs, moved)
-      if (rank(result.lane) <= rank(lane as Lane)) {
+      if (rank(result.lane) <= rank(lane)) {
         return { code: 0, stdout: `lane: ${lane}\nthe diff fits the lane\n`, stderr: '' }
       }
       const raised = result.raised
-        .filter((p) => rank(p.lane) > rank(lane as Lane))
+        .filter((p) => rank(p.lane) > rank(lane))
         .map((p) => `- ${p.path} (${p.lane})\n`)
       return {
         code: 1,

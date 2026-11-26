@@ -144,7 +144,8 @@ export function issueFromMarkdown(text: string, repo: string | null): Issue {
  */
 export function issueFromGh(json: unknown, repo: string): Issue {
   if (typeof json !== 'object' || json === null) throw new Error('gh did not print an object')
-  const { title, body } = json as Record<string, unknown>
+  const title = 'title' in json ? json.title : undefined
+  const body = 'body' in json ? json.body : undefined
   if (typeof title !== 'string' || typeof body !== 'string') {
     throw new Error('gh printed no title or body')
   }

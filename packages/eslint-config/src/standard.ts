@@ -104,10 +104,16 @@ export function standardVersion(standard: string): string | null {
   return HEADER.exec(standard)?.[1] ?? null
 }
 
-/** Reads `standard-hashes.json`, bundled in this package. */
+/** Reads `standard-hashes.json`, bundled in this package; an empty object when it holds no object. */
 function readHashesFile(): Record<string, unknown> {
   const file = new URL('../standard-hashes.json', import.meta.url)
-  return JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>
+  const parsed: unknown = JSON.parse(readFileSync(file, 'utf8'))
+  return isObject(parsed) ? parsed : {}
+}
+
+/** Whether `value` is an object, so its keys can be read as `unknown` values. */
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }
 
 /** True when `value` is a map of strings to strings. */
@@ -121,9 +127,7 @@ function isStringMap(value: unknown): value is Record<string, string> {
 
 /** True when `value` is the entry of a version in the new form. */
 function isVersionHashes(value: unknown): value is VersionHashes {
-  if (typeof value !== 'object' || value === null) return false
-  const entry = value as Record<string, unknown>
-  return typeof entry.core === 'string' && isStringMap(entry.profiles)
+  return isObject(value) && typeof value.core === 'string' && isStringMap(value.profiles)
 }
 
 /**

@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { dirname, posix, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { errorLine } from './errors.js'
+import { errorCode } from './narrow.js'
 import { isTestFile, sectionLines } from './lint-draft.js'
 
 /** One place a tracked Markdown file names a term the diff removed. */
@@ -336,7 +337,7 @@ export async function runDocsHits(argv: string[], deps?: DocsHitsDeps): Promise<
         try {
           documents.push({ path, text: await real.readText(path) })
         } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+          if (errorCode(error) !== 'ENOENT') throw error
         }
       }
     }
@@ -351,7 +352,7 @@ export async function runDocsHits(argv: string[], deps?: DocsHitsDeps): Promise<
       try {
         text = await real.readText(file)
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
+        if (errorCode(error) === 'ENOENT') continue
         throw error
       }
       const header = headerComment(text)

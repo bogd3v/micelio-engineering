@@ -122,7 +122,7 @@ describe('verify-draft', () => {
     )
     expect(none?.[0]).toMatchObject({
       kind: 'mismatch',
-      reasons: expect.arrayContaining(['no log']),
+      reasons: expect.arrayContaining(['no log']) as unknown,
     })
   })
 
