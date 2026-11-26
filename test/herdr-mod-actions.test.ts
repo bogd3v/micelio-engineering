@@ -437,6 +437,20 @@ describe('the orphans', () => {
     expect(args.at(-1)).toBe('4242')
   })
 
+  it('confirming Terminate runs nothing when the pid left the orphans after it was asked', async () => {
+    const { calls, exec } = recorder()
+    let left = false
+    const actions = createActions({
+      exec,
+      config,
+      facts: () => ({ ...facts(), orphans: left ? [] : facts().orphans }),
+    })
+    expect(actions.askTerminate(4242).ok).toBe(true)
+    left = true
+    expect(await actions.confirm()).toEqual({ ok: false, note: 'pid 4242 is no longer an orphan' })
+    expect(calls).toEqual([])
+  })
+
   it("Show process reads the process's cores and age with ps, and a fixture reads its file", async () => {
     const { calls, exec } = recorder(() => ({ stdout: '  2820  1000.0\n' }))
     const adapters = createAdapters({
