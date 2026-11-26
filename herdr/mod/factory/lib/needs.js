@@ -284,12 +284,6 @@ export const emptyTimeLogForm = () => ({
   timerAt: null,
 })
 
-/** The issue a pull request closes or refers to: `Closes #N`, `Fixes #N`, `Refs #N`. @param {string | null | undefined} body @returns {number | null} */
-export function pullIssue(body) {
-  const match = /\b(?:closes|fixes|resolves|refs)\s+#(\d+)/i.exec(body ?? '')
-  return match === null ? null : Number(match[1])
-}
-
 /**
  * The cards of "Needs you".
  *
@@ -376,7 +370,7 @@ export function buildNeeds({
       // card for each issue, the first pull request that names it. With no maintainer login, a pull
       // request with a note cannot be told from one without, so there is no card.
       for (const pull of raw.maintainer === '' ? [] : raw.pulls) {
-        const number = pullIssue(pull.body)
+        const number = pull.issue
         const row = number === null ? undefined : rows.find((r) => r.number === number)
         if (number === null || row === undefined) continue
         const noted = [...pull.comments, ...pull.reviews].some(

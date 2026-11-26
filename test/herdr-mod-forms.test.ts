@@ -8,9 +8,8 @@ import {
   cardMessages,
   createOutbox,
   emptyTimeLogForm,
-  pullIssue,
 } from '../herdr/mod/factory/lib/needs.js'
-import { buildGithub } from '../herdr/mod/factory/lib/panel.js'
+import { buildGithub, pullIssue } from '../herdr/mod/factory/lib/panel.js'
 import { parseAgents } from '../herdr/mod/factory/lib/agents.js'
 import { buildState } from '../herdr/mod/factory/lib/state.js'
 import {
@@ -131,14 +130,14 @@ describe('the time line of the form', () => {
 
 interface Pull {
   number: number
-  body: string | null
+  issue: number | null
   created_at: string
   comments: { user: { login: string }; body: string }[]
   reviews: { user: { login: string }; body: string }[]
 }
-const pull = (number: number, body: string, extra: Partial<Pull> = {}): Pull => ({
+const pull = (number: number, issue: number | null, extra: Partial<Pull> = {}): Pull => ({
   number,
-  body,
+  issue,
   created_at: iso(5),
   comments: [],
   reviews: [],
@@ -208,16 +207,13 @@ const firstTimeCard = (needs: { cards: { kind: string }[] }): TimeCard => {
 
 describe('Log time on an open pull request', () => {
   it('with no maintainer login, an open pull request gets no time card', () => {
-    const pulls = [
-      pull(7, 'Closes #410'),
-      pull(8, 'Closes #411', { reviews: [comment('time: 15m diff')] }),
-    ]
+    const pulls = [pull(7, 410), pull(8, 411, { reviews: [comment('time: 15m diff')] })]
     expect(timeCards(needsWith(pulls))).toHaveLength(1)
     expect(timeCards(needsWith(pulls, {}, ''))).toEqual([])
   })
 
   it('a pull request that has a time note from the maintainer gets no card', () => {
-    const none = timeCards(needsWith([pull(1001, 'Closes #410')]))
+    const none = timeCards(needsWith([pull(1001, 410)]))
     expect(none.map((c) => c.key)).toEqual(['time:micelio#410'])
     expect(none[0]).toMatchObject({
       text: 'No time note from you on this pull request yet.',
@@ -228,13 +224,11 @@ describe('Log time on an open pull request', () => {
     })
     // A note in a comment, or in a review, from the maintainer.
     expect(
-      timeCards(needsWith([pull(1001, 'Closes #410', { comments: [comment('time: 8m diff')] })]))
+      timeCards(needsWith([pull(1001, 410, { comments: [comment('time: 8m diff')] })]))
     ).toEqual([])
     expect(
       timeCards(
-        needsWith([
-          pull(1001, 'Closes #410', { reviews: [comment('Fine.\ntime: 2m report, 3m stack')] }),
-        ])
+        needsWith([pull(1001, 410, { reviews: [comment('Fine.\ntime: 2m report, 3m stack')] })])
       )
     ).toEqual([])
     // Not a note: someone else's, a remark with no minutes, a line the parser does not read.
@@ -243,18 +237,16 @@ describe('Log time on an open pull request', () => {
       comment('time: soon'),
       comment('I will time: 8m diff later'),
     ]) {
-      expect(timeCards(needsWith([pull(1001, 'Closes #410', { comments: [other] })]))).toHaveLength(
-        1
-      )
+      expect(timeCards(needsWith([pull(1001, 410, { comments: [other] })]))).toHaveLength(1)
     }
     // A pull request of no issue of the milestone has no card, nor one that names none.
-    expect(timeCards(needsWith([pull(1002, 'Closes #999'), pull(1003, 'No issue')]))).toEqual([])
+    expect(timeCards(needsWith([pull(1002, 999), pull(1003, null)]))).toEqual([])
     expect(pullIssue('Refs #7\n\nCloses #8')).toBe(7)
     expect(pullIssue(null)).toBeNull()
   })
 
   it('"Log time" opens the form, and its line goes to the master as time #N: time: …', () => {
-    const closed = firstTimeCard(needsWith([pull(1001, 'Closes #410')]))
+    const closed = firstTimeCard(needsWith([pull(1001, 410)]))
     expect(closed.form).toBeNull()
     expect(cardMessages(closed)).toEqual([])
     const form = {
@@ -266,7 +258,7 @@ describe('Log time on an open pull request', () => {
         remark: 'the demo site',
       },
     }
-    const open = firstTimeCard(needsWith([pull(1001, 'Closes #410')], form))
+    const open = firstTimeCard(needsWith([pull(1001, 410)], form))
     expect(open.form).toMatchObject({ showHands: true, error: null, timer: 'START TIMER' })
     expect(open.posted).toBe('time: 4m stack (the demo site)')
     expect(cardMessages(open)).toEqual([
@@ -274,20 +266,20 @@ describe('Log time on an open pull request', () => {
     ])
     // A running timer has not added its minutes: nothing is sent until it stops.
     const running = timeCards(
-      needsWith([pull(1001, 'Closes #410')], { 410: { ...form[410], timerAt: NOW - MIN } })
+      needsWith([pull(1001, 410)], { 410: { ...form[410], timerAt: NOW - MIN } })
     )[0]
     expect(running?.form?.error).toBe('Stop the timer first.')
     expect(cardMessages(running)).toEqual([])
     // Two pull requests of one issue make one card.
-    expect(
-      timeCards(needsWith([pull(1001, 'Closes #410'), pull(1004, 'Refs #410')])).map((c) => c.pull)
-    ).toEqual([1001])
+    expect(timeCards(needsWith([pull(1001, 410), pull(1004, 410)])).map((c) => c.pull)).toEqual([
+      1001,
+    ])
     // An empty form sends nothing; the normal lane has no hands-on check.
-    const empty = firstTimeCard(needsWith([pull(1001, 'Closes #410')], { 410: { open: true } }))
+    const empty = firstTimeCard(needsWith([pull(1001, 410)], { 410: { open: true } }))
     expect(empty.form?.error).toBe('Give at least one time.')
     expect(cardMessages(empty)).toEqual([])
     const normal = firstTimeCard(
-      needsWith([pull(1001, 'Closes #411')], {
+      needsWith([pull(1001, 411)], {
         411: { open: true, read: 'diff', readMin: '6', hand: 'test', handMin: '3' },
       })
     )
@@ -385,7 +377,7 @@ describe('the open pull requests', () => {
     expect(pulls).toEqual([
       {
         number: 9,
-        body: 'Closes #4',
+        issue: 4,
         created_at: iso(1),
         comments: [{ user: { login: ME }, body: 'hi' }],
         reviews: [{ user: { login: ME }, body: 'time: 3m diff' }],
@@ -399,6 +391,120 @@ describe('the open pull requests', () => {
     // A failed read is no pull requests: the milestone's read does not fail with it.
     failing.current = true
     expect(await a.readPulls({ name: 'micelio', repo: 'bogd3v/micelio-engineering' })).toEqual([])
+  })
+})
+
+/** The adapters over `files` (a recording, by file name) or, with none, over these replies of `gh api`. */
+function pullsAdapters(
+  replies: Record<string, unknown>,
+  files: Record<string, unknown> | null = null
+) {
+  const calls: string[] = []
+  const adapters = createAdapters({
+    exec: async (_cmd: string, args: string[]) => {
+      const endpoint = String(args[1])
+      calls.push(endpoint)
+      return {
+        code: 0,
+        stdout: `HTTP/2.0 200 OK\r\nEtag: W/"x"\r\n\r\n${JSON.stringify(replies[endpoint] ?? [])}`,
+        stderr: '',
+      }
+    },
+    readTextFile: async (path: string) => {
+      const found = files?.[path.split('/').at(-1) ?? '']
+      return found === undefined ? null : JSON.stringify(found)
+    },
+    terminals: () => [],
+    config: readConfig({
+      checkout: ROOT,
+      maintainer: ME,
+      dockerHost: 'unix:///x',
+      fixture: files === null ? null : 'recording',
+      spaces: [
+        { name: 'micelio', repo: 'bogd3v/micelio-engineering', milestone: 1 },
+        { name: 'micelio', repo: 'bogd3v/micelio-cms', milestone: 12, tag: 'c' },
+      ],
+    }),
+  })
+  return { adapters, calls }
+}
+const REPO = 'bogd3v/micelio-engineering'
+const OTHER = 'bogd3v/micelio-cms'
+const BOTH = {
+  name: 'micelio',
+  repo: REPO,
+  pairs: [
+    { repo: REPO, milestone: 1, tag: '' },
+    { repo: OTHER, milestone: 12, tag: 'c' },
+  ],
+}
+const openOf = (repo: string) => `repos/${repo}/pulls?state=open&per_page=100`
+const commentsOfPull = (repo: string, n: number) =>
+  `repos/${repo}/issues/${n}/comments?per_page=100`
+const reviewsOfPull = (repo: string, n: number) => `repos/${repo}/pulls/${n}/reviews?per_page=100`
+
+describe('what is kept of an open pull request', () => {
+  const author = { login: ME, type: 'User' }
+  const github = (number: number, body: string | null) => ({
+    number,
+    body,
+    user: author,
+    created_at: iso(number),
+  })
+  const kept = (number: number, issue: number | null) => ({
+    number,
+    issue,
+    created_at: iso(number),
+    comments: [],
+    reviews: [],
+  })
+
+  it('readPulls keeps the number of the issue a pull request names, and not its body', async () => {
+    const first = [github(1, 'Closes #4'), github(2, 'No issue'), github(3, null)]
+    const second = [github(5, 'Text.\n\nresolves #8, refs #9')]
+    const expected = [kept(1, 4), kept(2, null), kept(3, null), { ...kept(5, 8), repo: OTHER }]
+    const live = pullsAdapters({ [openOf(REPO)]: first, [openOf(OTHER)]: second })
+    expect(await live.adapters.readPulls(BOTH)).toStrictEqual(expected)
+    // A recording keeps GitHub's `body`, and goes through the same mapping.
+    const recorded = (pulls: object[]) => pulls.map((p) => ({ ...p, comments: [], reviews: [] }))
+    const fixture = pullsAdapters(
+      {},
+      {
+        'pulls-micelio.json': recorded(first),
+        'pulls-micelio-c.json': recorded(second),
+      }
+    )
+    expect(await fixture.adapters.readPulls(BOTH)).toStrictEqual(expected)
+    expect(fixture.calls).toEqual([])
+  })
+
+  it('readPulls leaves out a pull request of a bot, by user.type Bot or a [bot] login, and reads none of its comments or reviews', async () => {
+    const pulls = [
+      { ...github(1, 'Fixes #4'), user: { login: 'dependabot', type: 'Bot' } },
+      { ...github(2, 'Fixes #4'), user: { login: 'renovate[bot]', type: 'User' } },
+      github(3, 'Closes #4'),
+    ]
+    const live = pullsAdapters({ [openOf(REPO)]: pulls })
+    const space = { name: 'micelio', repo: REPO, milestone: 1 }
+    expect(await live.adapters.readPulls(space)).toStrictEqual([kept(3, 4)])
+    expect(live.calls).toEqual([openOf(REPO), commentsOfPull(REPO, 3), reviewsOfPull(REPO, 3)])
+    const fixture = pullsAdapters(
+      {},
+      { 'pulls-micelio.json': pulls.map((p) => ({ ...p, comments: [], reviews: [] })) }
+    )
+    expect(await fixture.adapters.readPulls(space)).toStrictEqual([kept(3, 4)])
+  })
+
+  it("buildNeeds never reads a pull request's body: with a body of 65,536 characters that throws when read, it draws the card of the issue the read named", () => {
+    const body = 'Closes #411'.padEnd(65_536, '.')
+    const unreadable = Object.defineProperty(pull(1001, 410), 'body', {
+      enumerable: true,
+      get: (): string => {
+        throw new Error(`read a body of ${body.length} characters`)
+      },
+    })
+    expect(body).toHaveLength(65_536)
+    expect(timeCards(needsWith([unreadable])).map((c) => c.key)).toEqual(['time:micelio#410'])
   })
 })
 
@@ -470,7 +576,7 @@ describe('an issue of another repository of the space', () => {
           comments: { 410: gate1 },
           maintainer: ME,
           // `readPulls` marks a pull request of the other repository with it.
-          pulls: [{ ...pull(77, 'Closes #410'), repo: 'bogd3v/micelio-cms' }],
+          pulls: [{ ...pull(77, 410), repo: 'bogd3v/micelio-cms' }],
           others: [{ issues: [issue], comments: { 410: gate1 } }],
         },
       },

@@ -15,8 +15,25 @@
 // `comments-<tag><n>.json`, `commit-<tag><n>.txt` and `worktree-<tag><n>.json`.
 
 import { parseNumstat } from './lib/detail.js'
-import { pairsOf } from './lib/panel.js'
+import { pairsOf, pullIssue } from './lib/panel.js'
 import { commentsDue, parseReply } from './lib/quota.js'
+
+/**
+ * A pull request as GitHub gives it, and as a recording keeps it: the fields `readPulls` reads.
+ *
+ * @typedef {object} GithubPull
+ * @property {number} number
+ * @property {string | null} [body]
+ * @property {string} created_at
+ * @property {string} [updated_at]
+ * @property {{ login?: string, type?: string } | null} [user] its author
+ */
+
+/** Whether a bot opened it: it never names a factory issue, since the master opens those under the maintainer's account. @param {GithubPull} pull */
+const byBot = (pull) => pull.user?.type === 'Bot' || pull.user?.login?.endsWith('[bot]') === true
+
+/** What is kept of a pull request: the issue it names, worked out here once, and not its body. @param {GithubPull} pull */
+const named = ({ number, body, created_at }) => ({ number, issue: pullIssue(body), created_at })
 
 /** The tag of a pair as a recording names it: `-<tag>` after the space's name, `''` for an untagged pair. @param {{ tag: string }} pair */
 const tagged = (pair) => (pair.tag === '' ? '' : `-${pair.tag}`)
@@ -426,7 +443,8 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
    * The open pull requests of each repository of a space's pairs, each with its comments and its reviews,
    * so that "Needs you" can tell which has no `time:` note of the maintainer. A pull request of another
    * repository than the space's carries its `repo`. A failed read of the pull requests is no pull
-   * requests: it never fails the read of the milestone.
+   * requests: it never fails the read of the milestone. Each carries the issue its body names (`pullIssue`)
+   * and not the body; a bot's pull request is left out, and its comments and reviews are not read.
    *
    * @param {{ repo: string, milestone?: number, epic?: number | null, pairs?: import('./lib/panel.js').Pair[], name?: string }} space
    * @returns {Promise<import('./lib/panel.js').OpenPull[]>}
@@ -444,18 +462,27 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
         const mark = (pull) => (own ? pull : { ...pull, repo: pair.repo })
         if (dirs !== null) {
           const found = await fixtureJson(`pulls-${space.name}${tagged(pair)}.json`)
-          if (Array.isArray(found)) out.push(...found.map(mark))
+          if (Array.isArray(found)) {
+            const recorded =
+              /** @type {(GithubPull & Pick<import('./lib/panel.js').OpenPull, 'comments' | 'reviews'>)[]} */ (
+                found
+              )
+            out.push(
+              ...recorded
+                .filter((p) => !byBot(p))
+                .map((p) => mark({ ...named(p), comments: p.comments, reviews: p.reviews }))
+            )
+          }
           continue
         }
-        const open = await gh(`repos/${pair.repo}/pulls?state=open&per_page=100`)
-        if (!Array.isArray(open)) continue
+        const list = await gh(`repos/${pair.repo}/pulls?state=open&per_page=100`)
+        if (!Array.isArray(list)) continue
+        const open = /** @type {GithubPull[]} */ (list).filter((p) => !byBot(p))
         const at = await now()
         for (let i = 0; i < open.length; i += GH_AT_ONCE) {
           const got = await Promise.all(
             open.slice(i, i + GH_AT_ONCE).map(async (pull) => ({
-              number: pull.number,
-              body: pull.body ?? null,
-              created_at: pull.created_at,
+              ...named(pull),
               ...(await commentsOf(
                 `${pair.repo}#${pull.number}`,
                 pull.updated_at,
