@@ -8,3 +8,4 @@ Decisions about the Micelio engineering standard and the shared tooling, the one
 | [0002](0002-run-the-factory-stacks-on-rootless-podman.md)            | Run the factory host's stacks on rootless Podman behind `docker compose`              | Accepted |
 | [0003](0003-route-each-issue-through-a-lane-set-by-its-risk.md)      | Route each issue through a lane set by its risk                                       | Accepted |
 | [0004](0004-run-the-factory-from-a-herdr-mod.md)                     | Run the factory from a Herdr mod, whose click sends the maintainer's line to a master | Accepted |
+| [0005](0005-move-to-typescript-6-and-node-24.md)                     | Move to TypeScript 6 and Node 24, and wait for TypeScript 7 until the tools run on it | Proposed |
