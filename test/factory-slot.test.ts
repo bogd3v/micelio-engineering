@@ -49,6 +49,8 @@ const TOOLS = [
 let root: string
 let env: NodeJS.ProcessEnv
 const children: ChildProcess[] = []
+/** PIDs to kill after a test, negative for a process group: processes that are no child of this suite. */
+const strays: number[] = []
 
 function sleepMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -92,6 +94,34 @@ function holder(name: string): string[] {
 }
 const upOf = (name: string): string => join(root, `${name}.up`)
 const release = (name: string): void => writeFileSync(join(root, `${name}.go`), '')
+
+/**
+ * Starts `script` with `sh` in a group of its own through a parent that exits at once, so the process
+ * is reparented out of this suite's tree and its environment decides nothing for `status`.
+ */
+function detached(script: string, cwd: string, extra: NodeJS.ProcessEnv = {}): number {
+  const r = spawnSync('sh', ['-c', 'setsid sh -c "$STRAY" >/dev/null 2>&1 & echo $!'], {
+    cwd,
+    env: { ...env, ...extra, STRAY: script },
+    encoding: 'utf8',
+  })
+  const pid = Number(r.stdout.trim())
+  strays.push(-pid)
+  return pid
+}
+
+/** The PID a script wrote to `file`, once it has. */
+async function pidIn(file: string): Promise<number> {
+  await until(() => existsSync(file) && readFileSync(file, 'utf8').endsWith('\n'), file)
+  return Number(readFileSync(file, 'utf8'))
+}
+
+/** The PIDs of the `orphan` lines of `status`. */
+const orphanPids = (): number[] =>
+  slot(['status'])
+    .out.split('\n')
+    .filter((l) => l.startsWith('orphan'))
+    .map((l) => Number(l.split('\t')[1]))
 
 /** The `TMPDIR` that `run` gives the command of the wrapper with this PID. */
 const runTmpOf = (wrapper: number | undefined): string =>
@@ -199,6 +229,13 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  for (const pid of strays.splice(0)) {
+    try {
+      process.kill(pid, 'SIGKILL')
+    } catch {
+      // already gone
+    }
+  }
   for (const child of children.splice(0)) {
     if (child.pid === undefined) continue
     try {
@@ -881,9 +918,14 @@ describe('factory-slot.sh status', () => {
   it('status lists a process under the factory tmp directory that holds no slot as orphan', async () => {
     const dir = join(root, 'tmp/r4-late')
     mkdirSync(dir)
-    const loose = spawn('sleep', ['60'], { cwd: dir, detached: true, stdio: 'ignore' })
-    children.push(loose)
-    const pid = loose.pid as number
+    // Through a parent that exits at once: a child of this suite would be an agent's, under one.
+    const loose = spawnSync('sh', ['-c', 'sleep 60 >/dev/null 2>&1 & echo $!'], {
+      cwd: dir,
+      env,
+      encoding: 'utf8',
+    })
+    const pid = Number(loose.stdout.trim())
+    strays.push(pid)
 
     const run = start(['run', ...holder('a')], { FACTORY_AGENT: 'worker-1' }, dir)
     await until(() => existsSync(upOf('a')), 'the slot command')
@@ -914,6 +956,62 @@ describe('factory-slot.sh status', () => {
     release('a')
     await run.exited
     await waiting.exited
+  })
+
+  it("status does not list an ancestor of a slot's wrapper as orphan, even with its cwd under the tmp directory", async () => {
+    const dir = join(root, 'tmp/g4v')
+    mkdirSync(dir)
+    // Neither shell carries an agent's variables, so only the wrapper it started can hide it.
+    const wrapped = `bash ${SCRIPT} run -- sh -c '${holder('a')[3] as string}'; true`
+    const holding = detached(wrapped, dir)
+    await until(() => existsSync(upOf('a')), 'the slot command')
+    const waiting = detached(`bash ${SCRIPT} run -- true; true`, dir)
+    await until(() => readdirSync(join(root, 'slots/heavy/queue')).length === 1, 'a ticket')
+    const control = detached('sleep 60', dir)
+
+    const listed = orphanPids()
+    expect(listed).toContain(control)
+    expect(listed).not.toContain(holding)
+    expect(listed).not.toContain(waiting)
+    release('a')
+    await until(() => !groupAlive(holding) && !groupAlive(waiting), 'both shells to end')
+  })
+
+  it('status does not list a process that descends from a live process carrying FACTORY_AGENT or HC_TERMINAL_ID', async () => {
+    const dir = join(root, 'tmp/agent')
+    mkdirSync(dir)
+    const control = detached('sleep 60', dir)
+    const below: number[] = []
+    for (const name of ['FACTORY_AGENT', 'HC_TERMINAL_ID']) {
+      const child = join(root, `${name}.child`)
+      const grandchild = join(root, `${name}.grandchild`)
+      // The agent stays outside the tmp directory; what it runs drops the variable and is under it.
+      detached(
+        `(cd ${dir} && exec env -u ${name} sh -c 'sleep 60 & echo $! >${grandchild}; wait') & ` +
+          `echo $! >${child}; wait`,
+        root,
+        { [name]: 'worker-1' }
+      )
+      below.push(await pidIn(child), await pidIn(grandchild))
+    }
+
+    const listed = orphanPids()
+    expect(listed).toContain(control)
+    for (const pid of below) expect(listed).not.toContain(pid)
+  })
+
+  it('status lists as orphan the process an ended agent left under the tmp directory', () => {
+    const dir = join(root, 'tmp/ended')
+    mkdirSync(dir)
+    // The agent's shell exits at once; what it left still carries both variables.
+    const left = spawnSync('sh', ['-c', 'sleep 60 >/dev/null 2>&1 & echo $!'], {
+      cwd: dir,
+      env: { ...env, FACTORY_AGENT: 'worker-9', HC_TERMINAL_ID: 't9' },
+      encoding: 'utf8',
+    })
+    const pid = Number(left.stdout.trim())
+    strays.push(pid)
+    expect(orphanPids()).toContain(pid)
   })
 })
 

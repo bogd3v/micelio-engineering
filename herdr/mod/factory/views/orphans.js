@@ -34,13 +34,7 @@ export function orphans(ctx, o) {
         .bg(ctx.c['red-bg'])
         .border_1()
         .border_color(ctx.c['red'])
-        .child(
-          div()
-            .font_bold()
-            .text_size(12)
-            .text_color(ctx.c['red'])
-            .child(`${row.command} · ${row.cwd}`)
-        )
+        .child(div().font_bold().text_size(12).text_color(ctx.c['red']).truncate().child(row.title))
         .child(label(row.line, ctx.c['fg'], 12).mt(4))
         .child(
           ctx.ui.processes[row.pid] === undefined
@@ -48,7 +42,7 @@ export function orphans(ctx, o) {
             : v_flex()
                 .mt(6)
                 .gap(2)
-                .child(label(`command  ${row.command}`, ctx.c['fg'], 11.5))
+                .child(label(`command  ${row.brief}`, ctx.c['fg'], 11.5))
                 .child(label(`cwd      ${row.cwd}`, ctx.c['fg'], 11.5))
                 .child(label(`cores    ${ctx.ui.processes[row.pid].cores}`, ctx.c['fg'], 11.5))
                 .child(

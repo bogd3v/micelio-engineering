@@ -250,6 +250,30 @@ descends_from() { # $1 pid, $2 ancestor
   return 1
 }
 
+parent_of() { ps -o ppid= -p "$1" 2>/dev/null | tr -d ' '; }
+
+# True when the environment of the process holds FACTORY_AGENT or HC_TERMINAL_ID: an agent's
+# process. One that cannot be read (another user's, or gone) holds neither.
+agent_env() { # $1 pid
+  local entry
+  while IFS= read -r -d '' entry; do
+    [[ "$entry" == FACTORY_AGENT=* || "$entry" == HC_TERMINAL_ID=* ]] && return 0
+  done 2>/dev/null <"/proc/$1/environ"
+  return 1
+}
+
+# True when a live process above this one, PID 1 excepted, is an agent's. A process whose agent has
+# ended is reparented above the agent's tree, so its own copy of the variables does not count.
+in_agent_tree() { # $1 pid
+  local p
+  p=$(parent_of "$1")
+  while [[ -n "$p" && "$p" -gt 1 ]]; do
+    agent_env "$p" && return 0
+    p=$(parent_of "$p")
+  done
+  return 1
+}
+
 cmd_status() {
   [[ -e "$DIR/paused" ]] && echo paused
   list_entries
@@ -261,16 +285,26 @@ cmd_status() {
   for f in "$DIR"/heavy/queue/*; do
     [[ -e "$f" ]] && wrappers+=" ${f##*-}"
   done
+  # What started a wrapper is not an orphan either: it waits for the run it asked for.
+  local above="" w
+  for w in $wrappers; do
+    p=$(parent_of "$w")
+    while [[ -n "$p" && "$p" -gt 1 ]]; do
+      above+=" $p"
+      p=$(parent_of "$p")
+    done
+  done
   for p in /proc/[0-9]*; do
     p="${p#/proc/}"
     cwd=$(readlink "/proc/$p/cwd" 2>/dev/null) || continue
     [[ "$cwd" == "$root" || "$cwd" == "$root"/* ]] || continue
-    [[ "$p" == "$$" || " $wrappers " == *" $p "* ]] && continue
+    [[ "$p" == "$$" || " $wrappers $above " == *" $p "* ]] && continue
     descends_from "$p" "$$" && continue
     descends_from "$$" "$p" && continue
     local pg
     pg=$(ps -o pgid= -p "$p" 2>/dev/null | tr -d ' ')
     [[ -n "$pg" && " $pgids " == *" $pg "* ]] && continue
+    in_agent_tree "$p" && continue
     printf 'orphan\t%s\t%s\t%s\n' "$p" "$cwd" "$(tr '\0' ' ' <"/proc/$p/cmdline" 2>/dev/null)"
   done
 }

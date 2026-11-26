@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 // @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { createAdapters, dockerArgs, readConfig } from '../herdr/mod/factory/adapters.js'
 import {
@@ -25,6 +25,51 @@ import { heldOrRed } from '../herdr/mod/factory/lib/settings.js'
 import { buildState } from '../herdr/mod/factory/lib/state.js'
 // @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { colours, THEMES } from '../herdr/mod/factory/lib/tokens.js'
+// @ts-expect-error a plain JavaScript module of the mod, with no declarations
+import { orphans as orphansView } from '../herdr/mod/factory/views/orphans.js'
+
+// The app's UI modules exist only inside it: each element here records the calls made on it.
+const ui = vi.hoisted(() => {
+  const element = (): unknown => {
+    const calls: [string, unknown[]][] = []
+    const node: unknown = new Proxy(
+      {},
+      {
+        get: (_, name) =>
+          name === 'calls'
+            ? calls
+            : (...args: unknown[]) => {
+                calls.push([String(name), args])
+                return node
+              },
+      }
+    )
+    return node
+  }
+  return { element }
+})
+vi.mock('gpui-kit', () => ({ div: ui.element, image: ui.element }))
+vi.mock('gpui-base', () => ({ h_flex: ui.element, v_flex: ui.element }))
+
+/** An element of the stub above, as the view built it. */
+interface Element {
+  calls: [string, unknown[]][]
+}
+
+/** Every element in a drawn tree, the root included. */
+function elements(root: unknown): Element[] {
+  if (Array.isArray(root)) return root.flatMap(elements)
+  if (root === null || (typeof root !== 'object' && typeof root !== 'function')) return []
+  const calls = (root as Partial<Element>).calls
+  if (!Array.isArray(calls)) return []
+  return [root as Element, ...calls.flatMap(([, args]) => args.flatMap(elements))]
+}
+
+/** The texts drawn as children of an element. */
+const texts = (e: Element): string[] =>
+  e.calls
+    .filter(([name]) => name === 'child')
+    .flatMap(([, args]) => args.filter((a): a is string => typeof a === 'string'))
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const MOD = join(ROOT, 'herdr/mod/factory')
@@ -340,6 +385,44 @@ describe('the panel', () => {
       'verifier-810',
     ])
     expect(saturated.sections.workers.count).toBe('6/6 · next worker waits')
+  })
+
+  it("an orphan's row names its program and folder in its title and cuts its command to 120 characters", async () => {
+    const { panel } = await round([`${FIXTURES}/orphans`, FIXTURES])
+    const [row] = panel.sections.orphans.rows
+    expect(row.command.length).toBeGreaterThan(1000)
+    expect(row.title).toBe(`zsh · ${row.cwd}`)
+    expect(row.brief).toBe(`${row.command.slice(0, 120)}…`)
+    // A command of 120 characters or fewer is whole.
+    const short = (await round(NORMAL)).panel.sections.orphans.rows[0]
+    expect(short).toMatchObject({ title: `sleep · ${short.cwd}`, brief: 'sleep 602' })
+  })
+
+  it('the orphans view draws the title on one line and never the whole command', () => {
+    const command = `/usr/bin/zsh -c ${'x'.repeat(1000)}`
+    const row = {
+      pid: 498144,
+      command,
+      cwd: '/home/factory/tmp/repo',
+      title: 'zsh · /home/factory/tmp/repo',
+      brief: `${command.slice(0, 120)}…`,
+      line: 'pid 498144 · no slot · no owner',
+    }
+    const ctx = {
+      c: {},
+      ui: {
+        processes: { 498144: { cores: '0.0', ageMs: 1000 } },
+        confirmation: null,
+        formatAge,
+      },
+    }
+    const drawn = elements(orphansView(ctx, { open: true, count: '1', rows: [row] }))
+    const title = drawn.filter((e) => texts(e).includes(row.title))
+    expect(title).toHaveLength(1)
+    expect(title[0]?.calls.map(([name]) => name)).toContain('truncate')
+    const all = drawn.flatMap(texts)
+    expect(all).toContain(`command  ${row.brief}`)
+    expect(all.filter((text) => text.includes(command))).toEqual([])
   })
 })
 
