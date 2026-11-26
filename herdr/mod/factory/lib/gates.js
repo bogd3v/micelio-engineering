@@ -16,9 +16,15 @@ const MARK_LETTER = {
   omitted: 's',
 }
 
-/** The lanes, and the gates each one omits (`docs/factory.md`, `L.2`). */
+/** The lanes, and the gates each one omits (`docs/factory.md`, `L.2`). @type {Gates['lane'][]} */
 const LANES = ['express', 'normal', 'full']
 const OMITTED = { express: [3, 4], normal: [], full: [] }
+
+/**
+ * A comment as REST returns it, the fields the model reads.
+ *
+ * @typedef {{ user?: { login?: string }, body?: string, created_at?: string, id?: number }} Comment
+ */
 
 /**
  * @typedef {object} Round
@@ -134,7 +140,7 @@ function outcomeOf(gate, line) {
  * Reads an issue's comments.
  *
  * @param {object} input
- * @param {{ user?: { login?: string }, body?: string, created_at?: string, id?: number }[]} input.comments the issue's comments as REST returns them
+ * @param {Comment[]} input.comments the issue's comments as REST returns them
  * @param {string} input.maintainer the login whose comments count
  * @param {boolean} [input.closed] the issue is closed: its pull request merged, so G5 and G6 passed
  * @param {boolean} [input.needsYou] an agent of the issue is blocked: the gate that runs needs the maintainer

@@ -5,9 +5,12 @@ import { h_flex, v_flex } from 'gpui-base'
 import { badge, cat, heading, label, liveOrDim, section } from './ui.js'
 import { catFile } from '../lib/cat.js'
 
+/** @typedef {import('../../types/views.js').ViewContext} ViewContext */
+/** @typedef {import('../../types/views.js').PanelSections} PanelSections */
+
 /**
- * @param {any} ctx
- * @param {any} s `panel.sections.slots`
+ * @param {ViewContext} ctx
+ * @param {PanelSections['slots']} s `panel.sections.slots`
  */
 export function slots(ctx, s) {
   const box = section(ctx).child(
@@ -20,7 +23,7 @@ export function slots(ctx, s) {
         .gap(6)
         .mt(10)
         .children(
-          s.rows.map((/** @type {any} */ row) => {
+          s.rows.map((row) => {
             if (row.free) {
               return h_flex()
                 .items_center()
@@ -69,7 +72,7 @@ export function slots(ctx, s) {
         .child(`> ${s.queueTitle}`.toUpperCase())
     )
     .children(
-      s.queue.map((/** @type {any} */ q) =>
+      s.queue.map((q) =>
         h_flex()
           .items_center()
           .gap(8)

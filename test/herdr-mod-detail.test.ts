@@ -2,7 +2,6 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { createAdapters, readConfig } from '../herdr/mod/factory/adapters.js'
 import {
   buildDetail,
@@ -10,11 +9,8 @@ import {
   parseNumstat,
   parseProgress,
   sumTokens,
-  // @ts-expect-error a plain JavaScript module of the mod, with no declarations
 } from '../herdr/mod/factory/lib/detail.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { modelOf, parseAgents } from '../herdr/mod/factory/lib/agents.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { summaryOf } from '../herdr/mod/factory/lib/gates.js'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
@@ -66,16 +62,19 @@ async function fixtureDetail(number = 302): Promise<Detail> {
     terminals: () => [],
     config,
   })
-  const github = await a.readGithub(config.spaces[0])
+  const github = (await a.readGithub(config.spaces[0])) as Extract<
+    Awaited<ReturnType<typeof a.readGithub>>,
+    { at: string }
+  >
   const read = await a.readAgents()
   const issue = github.issues.find((i: { number: number }) => i.number === number)
   return buildDetail({
-    issue,
+    issue: issue!,
     comments: github.comments[number],
     maintainer: github.maintainer,
     space: SPACE,
-    agents: parseAgents(read.terminals),
-    terminals: read.terminals,
+    agents: parseAgents(read.terminals!),
+    terminals: read.terminals!,
     stacks: [],
     worktree: await a.readWorktree(number, '~/Git/wt-302'),
     theme: 'dark',
@@ -397,12 +396,15 @@ describe('an issue of another repository of the space', () => {
       terminals: () => [],
       config,
     })
-    const github = await a.readGithub(config.spaces[0])
-    const [other] = github.others
+    const github = (await a.readGithub(config.spaces[0])) as Extract<
+      Awaited<ReturnType<typeof a.readGithub>>,
+      { at: string }
+    >
+    const [other] = github.others!
     const issue = other.issues.find((i: { number: number }) => i.number === 5)
     const read = await a.readAgents()
     const detail = buildDetail({
-      issue,
+      issue: issue!,
       comments: other.comments[5],
       maintainer: github.maintainer,
       space: {
@@ -414,8 +416,8 @@ describe('an issue of another repository of the space', () => {
         ref: 'bogd3v/fixture-two#5',
         tags: ['tw'],
       },
-      agents: parseAgents(read.terminals),
-      terminals: read.terminals,
+      agents: parseAgents(read.terminals!),
+      terminals: read.terminals!,
       stacks: [{ name: 'wt-5' }, { name: 'wt-tw5' }],
       worktree: await a.readWorktree(5, '~/Git/fixture-two/wt-tw5', 'tw'),
       theme: 'dark',

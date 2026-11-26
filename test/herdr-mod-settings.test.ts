@@ -23,7 +23,6 @@ import {
   signOffCard,
   toggleAlert,
   toggleSection,
-  // @ts-expect-error a plain JavaScript module of the mod, with no declarations
 } from '../herdr/mod/factory/lib/settings.js'
 
 /** The pane `tab.new` just opened and focused, as `PaneInfo` gives it (no `props`). */

@@ -5,9 +5,12 @@ import { div } from 'gpui-kit'
 import { h_flex, v_flex } from 'gpui-base'
 import { displayBold, heading, label, liveOrDim, section } from './ui.js'
 
+/** @typedef {import('../../types/views.js').ViewContext} ViewContext */
+/** @typedef {import('../../types/views.js').PanelSections} PanelSections */
+
 /**
- * @param {any} ctx
- * @param {any} m `panel.sections.machine`
+ * @param {ViewContext} ctx
+ * @param {PanelSections['machine']} m `panel.sections.machine`
  */
 export function machine(ctx, m) {
   const pill = displayBold(div()).px(8).py(2).text_size(11).child(m.pill)

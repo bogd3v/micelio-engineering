@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { createAdapters, dockerArgs, readConfig } from '../herdr/mod/factory/adapters.js'
 import {
   buildGithub,
@@ -13,17 +12,11 @@ import {
   formatAge,
   loadBars,
   parseStacks,
-  // @ts-expect-error a plain JavaScript module of the mod, with no declarations
 } from '../herdr/mod/factory/lib/panel.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { parseAgents } from '../herdr/mod/factory/lib/agents.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { stackOwned } from '../herdr/mod/factory/lib/actions.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { heldOrRed } from '../herdr/mod/factory/lib/settings.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { buildState } from '../herdr/mod/factory/lib/state.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { colours, THEMES } from '../herdr/mod/factory/lib/tokens.js'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
@@ -161,7 +154,7 @@ describe('the panel', () => {
       temp: '94 °C',
       tone: 'red',
     })
-    expect(saturated.banners.saturated.title).toBe('Load 81 / 32 threads.')
+    expect(saturated.banners.saturated!.title).toBe('Load 81 / 32 threads.')
     expect(saturated.sections.machine.bars).toHaveLength(30)
     expect(saturated.sections.machine.bars.at(-1)).toEqual({ load: 81, tone: 'red' })
     const closed = (await round(SATURATED)).panel
@@ -180,8 +173,8 @@ describe('the panel', () => {
     expect(live.sections.milestones.dim).toBe(false)
     const stale = (await round(STALE, 2)).panel
     expect(stale.header.sync).toEqual({ text: 'GH STALE 3 MIN', stale: true })
-    expect(stale.banners.stale.title).toBe('GitHub: no data for 3 min.')
-    expect(stale.banners.stale.text).toContain('as of 15:57 UTC (gh: network error)')
+    expect(stale.banners.stale!.title).toBe('GitHub: no data for 3 min.')
+    expect(stale.banners.stale!.text).toContain('as of 15:57 UTC (gh: network error)')
     expect(stale.sections.milestones.dim).toBe(true)
     expect(stale.sections.milestones.note).toBe('as of 15:57 UTC · not live')
     // It keeps its last rows, and the machine, the slots and the stacks are the live ones.
@@ -311,9 +304,9 @@ describe('the panel', () => {
     const row = panel.sections.milestones.spaces[0].issues.find(
       (i: { id: string }) => i.id === '#792'
     )
-    expect(row.marks[1]).toBe('needs')
-    expect(row.note).toBe('worker is blocked: it may need you')
-    expect(row.cats[0]).toMatchObject({ role: 'worker', state: 'needs' })
+    expect(row!.marks[1]).toBe('needs')
+    expect(row!.note).toBe('worker is blocked: it may need you')
+    expect(row!.cats[0]).toMatchObject({ role: 'worker', state: 'needs' })
   })
 
   it('the stacks, the queue and the orphans come from the state', async () => {
@@ -788,8 +781,8 @@ describe('the adapters', () => {
       fetched: { slots: await a.readSlots(), machine: await a.readMachine() },
     })
     const panel = buildPanel({ now: first + 90_000, state, github, config })
-    expect(panel.banners.stale.title).toBe('GitHub: no data for 1 min.')
-    expect(panel.banners.stale.text).toContain('gh: network error')
+    expect(panel.banners.stale!.title).toBe('GitHub: no data for 1 min.')
+    expect(panel.banners.stale!.text).toContain('gh: network error')
     expect(panel.sections.machine.load).toBe('0.5')
     expect(panel.sections.slots.rows).toHaveLength(3)
   })

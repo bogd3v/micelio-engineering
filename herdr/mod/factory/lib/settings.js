@@ -23,7 +23,7 @@ export const PANEL_ORDER = [
 ]
 
 /** What each section is called in Customize, and the line under it (`Customize.dc.html`). */
-export const SECTION_INFO = {
+export const SECTION_INFO = /** @type {Record<string, [string, string]>} */ ({
   needs: ['Needs you', 'Decisions, sign-off with reports, held checks'],
   machine: ['Machine', 'Load, RAM, temperature, last 15 min'],
   slots: ['Heavy slots', 'Who runs a heavy command, who waits'],
@@ -31,9 +31,13 @@ export const SECTION_INFO = {
   milestones: ['Milestones', 'Issues per space with their gates'],
   stacks: ['Stacks up', 'Compose projects and their owner'],
   orphans: ['Orphans', 'Processes under factory/tmp with no slot'],
-}
+})
 
-/** The alerts: the key of each in `settings.alerts`, its title and its line (`Customize.dc.html`). */
+/**
+ * The alerts: the key of each in `settings.alerts`, its title and its line (`Customize.dc.html`).
+ *
+ * @type {[keyof Settings['alerts'], string, string][]}
+ */
 export const ALERTS = [
   ['needs', 'Something needs you', 'Desktop notification when an item enters Needs you'],
   ['saturated', 'Machine saturated', 'When the load stays above the core count for a minute'],
@@ -70,23 +74,24 @@ export function defaults() {
 export function readSettings(stored) {
   const base = defaults()
   if (stored === null || typeof stored !== 'object' || Array.isArray(stored)) return base
-  const value = /** @type {Record<string, any>} */ (stored)
+  const value = /** @type {Record<string, unknown>} */ (stored)
   const order = Array.isArray(value['order'])
-    ? value['order'].filter(
-        (/** @type {any} */ k, /** @type {number} */ i, /** @type {any[]} */ all) => {
+    ? /** @type {string[]} */ (value['order']).filter(
+        (/** @type {string} */ k, /** @type {number} */ i, /** @type {string[]} */ all) => {
           return PANEL_ORDER.includes(k) && all.indexOf(k) === i
         }
       )
     : []
-  const alerts =
+  const alerts = /** @type {Record<string, unknown>} */ (
     value['alerts'] !== null && typeof value['alerts'] === 'object' ? value['alerts'] : {}
+  )
   return {
     panel: typeof value['panel'] === 'boolean' ? value['panel'] : base.panel,
     board: typeof value['board'] === 'boolean' ? value['board'] : base.board,
     order: [...order, ...PANEL_ORDER.filter((k) => !order.includes(k))],
     hidden: Array.isArray(value['hidden'])
-      ? value['hidden'].filter(
-          (/** @type {any} */ k, /** @type {number} */ i, /** @type {any[]} */ all) =>
+      ? /** @type {string[]} */ (value['hidden']).filter(
+          (/** @type {string} */ k, /** @type {number} */ i, /** @type {string[]} */ all) =>
             PANEL_ORDER.includes(k) && all.indexOf(k) === i
         )
       : base.hidden,
@@ -113,7 +118,7 @@ export function moveSection(settings, name, by) {
   const to = at + by
   if (at === -1 || to < 0 || to >= settings.order.length) return settings
   const order = [...settings.order]
-  ;[order[at], order[to]] = [order[to], order[at]]
+  ;[order[at], order[to]] = /** @type {[string, string]} */ ([order[to], order[at]])
   return { ...settings, order }
 }
 
@@ -144,10 +149,12 @@ export function toggleAlert(settings, name) {
  * @returns {{ name: string, collapsed: boolean }[]}
  */
 export function panelSections(settings, needsCount) {
-  return settings.order.flatMap((name) => {
-    if (!settings.hidden.includes(name)) return [{ name, collapsed: false }]
-    return name === 'needs' && needsCount > 0 ? [{ name, collapsed: true }] : []
-  })
+  return settings.order.flatMap(
+    /** @returns {{ name: string, collapsed: boolean }[]} */ (name) => {
+      if (!settings.hidden.includes(name)) return [{ name, collapsed: false }]
+      return name === 'needs' && needsCount > 0 ? [{ name, collapsed: true }] : []
+    }
+  )
 }
 
 /** @param {Settings} settings @returns {string} "5/7": the sections shown over all of them. */
@@ -156,10 +163,20 @@ export function shownCount(settings) {
 }
 
 /**
+ * What `redSections` and `heldOrRed` read of `buildPanel(...).sections`.
+ *
+ * @typedef {object} SectionsLook
+ * @property {{ saturated?: boolean }} [machine]
+ * @property {{ spaces?: { name?: string, issues: { number?: number, id?: unknown, marks: string[] }[] }[] }} [milestones]
+ * @property {{ error?: unknown }} [stacks]
+ * @property {{ rows?: unknown[] }} [orphans]
+ */
+
+/**
  * The sections of a panel description that are red now: the machine saturated, a gate that is red in
  * Milestones, an orphan, and a stack list that cannot be read.
  *
- * @param {any} sections `buildPanel(...).sections`
+ * @param {SectionsLook} sections `buildPanel(...).sections`
  * @returns {string[]}
  */
 function redSections(sections) {
@@ -167,9 +184,7 @@ function redSections(sections) {
   const red = []
   if (sections.machine?.saturated === true) red.push('machine')
   if (
-    (sections.milestones?.spaces ?? []).some((/** @type {any} */ s) =>
-      s.issues.some((/** @type {any} */ i) => i.marks.includes('red'))
-    )
+    (sections.milestones?.spaces ?? []).some((s) => s.issues.some((i) => i.marks.includes('red')))
   )
     red.push('milestones')
   if (sections.stacks?.error != null) red.push('stacks')
@@ -182,7 +197,7 @@ function redSections(sections) {
  * own, so the header is where the design's "lights the Factory tab" shows.
  *
  * @param {Settings} settings
- * @param {any} sections `buildPanel(...).sections`
+ * @param {SectionsLook} sections `buildPanel(...).sections`
  */
 export function headerRed(settings, sections) {
   return redSections(sections).some((name) => settings.hidden.includes(name))
@@ -193,9 +208,9 @@ export function headerRed(settings, sections) {
  * is posted, and no sound plays, while the alert is off; Sound never plays on its own.
  *
  * @param {object} deps
- * @param {(n: any) => unknown} deps.notify
+ * @param {(n: Parameters<typeof import('herdr').notify>[0]) => unknown} deps.notify
  * @param {(sound: string) => unknown} deps.playSound
- * @returns {(settings: Settings, alert: 'needs' | 'saturated' | 'held', notification: any) => boolean}
+ * @returns {(settings: Settings, alert: 'needs' | 'saturated' | 'held', notification: Parameters<typeof import('herdr').notify>[0]) => boolean}
  */
 export function createPoster({ notify, playSound }) {
   return (settings, alert, notification) => {
@@ -234,8 +249,8 @@ export function createSaturation() {
  * you" that is a held check and `red:<space>#<n>` (`red:<space> owner/repo#<n>` for an issue of another
  * repository of the space) for an issue of Milestones whose gate is red.
  *
- * @param {any[]} cards `buildNeeds(...).cards`
- * @param {any} sections `buildPanel(...).sections`
+ * @param {{ kind: string, key?: string }[]} cards `buildNeeds(...).cards`
+ * @param {SectionsLook} sections `buildPanel(...).sections`
  * @returns {Set<string>}
  */
 export function heldOrRed(cards, sections) {
@@ -322,8 +337,9 @@ export function keyAction(press, map) {
  * an invalid time form and a space with no master send nothing (`cardMessages`), and `S` is the card's
  * button, so it sends nothing either.
  *
- * @param {any[]} cards `buildNeeds(...).cards`, oldest first
- * @returns {any | null}
+ * @template {{ kind: string }} C
+ * @param {C[]} cards `buildNeeds(...).cards`, oldest first
+ * @returns {C | null}
  */
 export function signOffCard(cards) {
   const card = cards.find((c) => c.kind === 'signoff')
@@ -338,8 +354,8 @@ export function signOffCard(cards) {
  * @param {object} deps
  * @param {(name: string, args: Record<string, unknown>) => unknown} deps.run
  * @param {(key: string, value: unknown) => unknown} deps.setShared
- * @param {() => any[]} deps.panes
- * @param {() => any} deps.props the props of this copy of the mod
+ * @param {() => unknown[]} deps.panes each a `ModPane`
+ * @param {() => unknown} deps.props the props of this copy of the mod
  * @param {() => unknown} deps.shared `shared("factory.settings")`
  * @param {boolean} deps.fixture
  */
@@ -380,6 +396,12 @@ export function createCustomize({ run, setShared, panes, props, shared, fixture 
   }
 }
 
+/**
+ * What the mod reads of a pane of `panes()`.
+ *
+ * @typedef {{ mod?: string, name?: string | null, focused?: boolean, pane?: string, tab?: string }} ModPane
+ */
+
 /** The name `pane.rename` gives the pane of a Board tab the mod opened: `PaneInfo` has no `props`. */
 export const BOARD_PANE = 'factory-board'
 
@@ -387,11 +409,12 @@ export const BOARD_PANE = 'factory-board'
  * The props a copy of the mod hands to the one it opens: its own without what only an overlay carries
  * (`overlay`, `customize`, `detail`, `log`) and without `board`, which the caller sets.
  *
- * @param {any} raw `props()`
+ * @param {unknown} raw `props()`
  * @returns {Record<string, unknown>}
  */
 export function baseProps(raw) {
-  const { overlay, customize, detail, log, board, ...rest } = raw ?? {}
+  const { overlay, customize, detail, log, board, ...rest } =
+    /** @type {Record<string, unknown>} */ (raw ?? {})
   void [overlay, customize, detail, log, board]
   return rest
 }
@@ -401,14 +424,16 @@ export function baseProps(raw) {
  * `panes()` and renamed by its id), so that `boardTabs` can tell it from any other pane of this mod.
  *
  * @param {(name: string, args: Record<string, unknown>) => unknown} run
- * @param {() => any} props the props of this copy of the mod
- * @param {() => any[]} panes `panes()`
+ * @param {() => unknown} props the props of this copy of the mod
+ * @param {() => unknown[]} panes `panes()`, each a `ModPane`
  */
 export function openBoardTab(run, props, panes) {
   run('tab.new', { name: 'Board', mod: 'factory', props: { ...baseProps(props()), board: true } })
   // The new pane is the focused pane of this mod that no one named. When there is none (`tab.new` failed),
   // nothing is renamed: a rename without a `pane` would name whatever pane has the focus.
-  const fresh = panes().find((p) => p.focused === true && p.mod === 'factory' && p.name === null)
+  const fresh = /** @type {ModPane[]} */ (panes()).find(
+    (p) => p.focused === true && p.mod === 'factory' && p.name === null
+  )
   if (fresh !== undefined) run('pane.rename', { pane: fresh.pane, name: BOARD_PANE })
 }
 
@@ -416,13 +441,13 @@ export function openBoardTab(run, props, panes) {
  * The tabs of the Board panes this mod opened: a pane of this mod that `pane.rename` named `factory-board`
  * (`PaneInfo` has `mod` and `name`, no `props`).
  *
- * @param {any[]} panes `panes()`
+ * @param {unknown[]} panes `panes()`, each a `ModPane`
  * @returns {string[]} the tab ids, each once
  */
 export function boardTabs(panes) {
   return [
     ...new Set(
-      panes
+      /** @type {ModPane[]} */ (panes)
         .filter((p) => p.mod === 'factory' && p.name === BOARD_PANE)
         .map((p) => /** @type {string} */ (p.tab))
     ),

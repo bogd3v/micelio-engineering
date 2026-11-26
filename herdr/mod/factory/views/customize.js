@@ -9,17 +9,20 @@ import { div } from 'gpui-kit'
 import { h_flex, v_flex } from 'gpui-base'
 import { displayBold, label } from './ui.js'
 
+/** @typedef {import('../../types/views.js').ViewContext} ViewContext */
+/** @typedef {import('../../types/views.js').ClickHandler} ClickHandler */
+
 /** A heading of a group: `// WHERE IT SHOWS`. */
-const group = (/** @type {any} */ ctx, /** @type {string} */ text) =>
+const group = (/** @type {ViewContext} */ ctx, /** @type {string} */ text) =>
   displayBold(div()).text_size(12).text_color(ctx.c['cyan']).child(`// ${text.toUpperCase()}`)
 
 /**
  * A switch: a 44 by 24 track and a 16 px knob, cyan when on.
  *
- * @param {any} ctx
+ * @param {ViewContext} ctx
  * @param {string} id
  * @param {boolean} on
- * @param {any} click
+ * @param {ClickHandler} click
  */
 function toggle(ctx, id, on, click) {
   return div()
@@ -46,7 +49,7 @@ function toggle(ctx, id, on, click) {
 
 /** A title with the line under it. */
 function titled(
-  /** @type {any} */ ctx,
+  /** @type {ViewContext} */ ctx,
   /** @type {string} */ title,
   /** @type {string} */ desc,
   /** @type {boolean} */ on = true
@@ -63,7 +66,11 @@ function titled(
 }
 
 /** A row of a group's box: the text and what sits at its right. */
-const row = (/** @type {any} */ ctx, /** @type {any} */ left, /** @type {any} */ right) =>
+const row = (
+  /** @type {ViewContext} */ ctx,
+  /** @type {import('gpui-kit').NativeElement} */ left,
+  /** @type {import('gpui-kit').NativeElement} */ right
+) =>
   h_flex()
     .items_center()
     .gap(12)
@@ -74,11 +81,15 @@ const row = (/** @type {any} */ ctx, /** @type {any} */ left, /** @type {any} */
     .child(left)
     .child(right)
 
-const box = (/** @type {any} */ ctx) =>
+const box = (/** @type {ViewContext} */ ctx) =>
   v_flex().border_1().border_color(ctx.c['line']).bg(ctx.c['surface'])
 
 /** A button of the two of "Panel side": filled cyan when it is the side the install wrote. */
-function side(/** @type {any} */ ctx, /** @type {string} */ name, /** @type {boolean} */ on) {
+function side(
+  /** @type {ViewContext} */ ctx,
+  /** @type {string} */ name,
+  /** @type {boolean} */ on
+) {
   const el = displayBold(div())
     .id(`side-${name}`)
     .min_h(36)
@@ -94,11 +105,11 @@ function side(/** @type {any} */ ctx, /** @type {string} */ name, /** @type {boo
 
 /** One of the two arrows that move a section; the first has no up and the last no down. */
 function arrow(
-  /** @type {any} */ ctx,
+  /** @type {ViewContext} */ ctx,
   /** @type {string} */ id,
   /** @type {string} */ glyph,
   /** @type {boolean} */ off,
-  /** @type {any} */ click
+  /** @type {ClickHandler} */ click
 ) {
   const el = displayBold(div())
     .id(id)
@@ -117,7 +128,7 @@ function arrow(
 }
 
 /**
- * @param {any} ctx
+ * @param {ViewContext} ctx
  * @param {{
  *   shown: string,
  *   side: string,
@@ -136,18 +147,14 @@ export function customize(ctx, model) {
       row(
         ctx,
         titled(ctx, 'Side panel', 'Docked beside your panes'),
-        toggle(ctx, 'place-panel', model.panel, (/** @type {any} */ _e, /** @type {any} */ cx) =>
-          c.panel(!model.panel, cx)
-        )
+        toggle(ctx, 'place-panel', model.panel, (_e, cx) => c.panel(!model.panel, cx))
       )
     )
     .child(
       row(
         ctx,
         titled(ctx, 'Board tab', 'Every milestone by gate, in its own tab'),
-        toggle(ctx, 'place-board', model.board, (/** @type {any} */ _e, /** @type {any} */ cx) =>
-          c.board(!model.board, cx)
-        )
+        toggle(ctx, 'place-board', model.board, (_e, cx) => c.board(!model.board, cx))
       )
     )
     .child(
@@ -178,31 +185,11 @@ export function customize(ctx, model) {
           v_flex()
             .flex_none()
             .gap(2)
-            .child(
-              arrow(
-                ctx,
-                `up-${s.name}`,
-                '^',
-                s.first,
-                (/** @type {any} */ _e, /** @type {any} */ cx) => c.move(s.name, -1, cx)
-              )
-            )
-            .child(
-              arrow(
-                ctx,
-                `down-${s.name}`,
-                'v',
-                s.last,
-                (/** @type {any} */ _e, /** @type {any} */ cx) => c.move(s.name, 1, cx)
-              )
-            )
+            .child(arrow(ctx, `up-${s.name}`, '^', s.first, (_e, cx) => c.move(s.name, -1, cx)))
+            .child(arrow(ctx, `down-${s.name}`, 'v', s.last, (_e, cx) => c.move(s.name, 1, cx)))
         )
         .child(titled(ctx, s.title, s.desc, s.on))
-        .child(
-          toggle(ctx, `section-${s.name}`, s.on, (/** @type {any} */ _e, /** @type {any} */ cx) =>
-            c.toggleSection(s.name, cx)
-          )
-        )
+        .child(toggle(ctx, `section-${s.name}`, s.on, (_e, cx) => c.toggleSection(s.name, cx)))
     )
   )
   const alerts = box(ctx).children(
@@ -210,9 +197,7 @@ export function customize(ctx, model) {
       row(
         ctx,
         titled(ctx, a.title, a.desc),
-        toggle(ctx, `alert-${a.name}`, a.on, (/** @type {any} */ _e, /** @type {any} */ cx) =>
-          c.toggleAlert(a.name, cx)
-        )
+        toggle(ctx, `alert-${a.name}`, a.on, (_e, cx) => c.toggleAlert(a.name, cx))
       )
     )
   )
@@ -314,7 +299,7 @@ export function customize(ctx, model) {
             .border_1()
             .border_color(ctx.c['line'])
             .cursor_pointer()
-            .on_click((/** @type {any} */ _e, /** @type {any} */ cx) => c.restore(cx))
+            .on_click((_e, cx) => c.restore(cx))
             .child('RESTORE DEFAULTS')
         )
         .child(label(model.note ?? '> saved in mod storage', ctx.c['muted'], 11))

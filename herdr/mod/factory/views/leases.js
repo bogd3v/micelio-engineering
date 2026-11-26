@@ -4,9 +4,12 @@ import { div } from 'gpui-kit'
 import { h_flex } from 'gpui-base'
 import { displayBold, heading, label, liveOrDim, section } from './ui.js'
 
+/** @typedef {import('../../types/views.js').ViewContext} ViewContext */
+/** @typedef {import('../../types/views.js').PanelSections} PanelSections */
+
 /**
- * @param {any} ctx
- * @param {any} w `panel.sections.workers`
+ * @param {ViewContext} ctx
+ * @param {PanelSections['workers']} w `panel.sections.workers`
  */
 export function leases(ctx, w) {
   const box = section(ctx).child(
@@ -18,7 +21,7 @@ export function leases(ctx, w) {
       .gap(6)
       .mt(10)
       .children(
-        w.cells.map((/** @type {any} */ cell) =>
+        w.cells.map((cell) =>
           cell.free
             ? div()
                 .flex_1()
@@ -40,7 +43,7 @@ export function leases(ctx, w) {
                 .items_center()
                 .justify_center()
                 .text_size(13)
-                .bg(ctx.c[cell.colour])
+                .bg(ctx.c[/** @type {string} */ (cell.colour)])
                 .text_color(ctx.c['badge-fg'])
                 .tooltip(cell.title)
                 .child(cell.label)

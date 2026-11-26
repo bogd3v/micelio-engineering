@@ -11,17 +11,11 @@ import {
   signOffMessage,
   LOCKED_NOTE,
   NO_WORKTREE_NOTE,
-  // @ts-expect-error a plain JavaScript module of the mod, with no declarations
 } from '../herdr/mod/factory/lib/needs.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { buildGithub } from '../herdr/mod/factory/lib/panel.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { createAdapters, readConfig } from '../herdr/mod/factory/adapters.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { buildState } from '../herdr/mod/factory/lib/state.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { parseAgents } from '../herdr/mod/factory/lib/agents.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { timeLine } from '../herdr/mod/factory/lib/time.js'
 
 const NOW = Date.parse('2026-11-24T16:00:00Z')
@@ -217,7 +211,8 @@ describe('Needs you', () => {
       { number: 902, title: 'more docs', comments: atG5('express', 7) },
     ])
     const batch = needs.cards.find((c: { kind: string }) => c.kind === 'batch')
-    const of = (n: number) => batch.items.find((i: { number: number }) => i.number === n).worktree
+    const of = (n: number) =>
+      batch!.items!.find((i: { number: number }) => i.number === n)!.worktree
     expect(of(901)).toBe('/w/wt-901')
     expect(of(902)).toBeNull()
   })
@@ -247,7 +242,7 @@ describe('Needs you', () => {
       diffs: { 389: NOW - 11 * MIN },
     }).cards[0]
     expect(card.lines).toBe('approved, sign off #389\ntime: 11m diff')
-    expect(card.form.tracked).toBe(11)
+    expect(card.form!.tracked).toBe(11)
     // The minutes are editable, and a remark loses its parentheses.
     const edited = build([{ number: 389, title: 'cms', comments: atG5('full', 12) }], {
       diffs: { 389: NOW - 11 * MIN },
@@ -260,7 +255,7 @@ describe('Needs you', () => {
       forms: { 389: { readMin: 'x' } },
     }).cards[0]
     expect(cardMessages(bad)).toEqual([])
-    expect(bad.form.error).toBe('Reading minutes: a whole number.')
+    expect(bad.form!.error).toBe('Reading minutes: a whole number.')
   })
 
   it('a shared sign-off names only the express issues whose diff was read', () => {
@@ -272,8 +267,8 @@ describe('Needs you', () => {
     ]
     const needs = build(issues, { diffs: { 901: NOW - MIN, 451: NOW - MIN, 389: NOW - MIN } })
     const batch = needs.cards.find((c: { kind: string }) => c.kind === 'batch')
-    expect(batch.items.map((i: { number: number }) => i.number)).toEqual([451, 902, 901])
-    expect(batch.unread).toBe(1)
+    expect(batch!.items!.map((i: { number: number }) => i.number)).toEqual([451, 902, 901])
+    expect(batch!.unread).toBe(1)
     expect(cardMessages(batch)).toEqual([
       { target: 'tfix-master', text: 'approved, sign off #451 #901' },
     ])
@@ -328,7 +323,7 @@ describe('Needs you', () => {
       'express:other',
       'express:micelio',
     ])
-    expect(needs.cards.map((c: { messages: unknown[] }) => c.messages.length)).toEqual([1, 1])
+    expect(needs.cards.map((c: { messages?: unknown[] }) => c.messages!.length)).toEqual([1, 1])
     expect(needs.cards.flatMap((c: unknown) => cardMessages(c))).toEqual([
       { target: 'tfix-master2', text: 'approved, sign off #51' },
       { target: 'tfix-master', text: 'approved, sign off #901' },
@@ -360,7 +355,7 @@ describe('Needs you', () => {
           forms: { 389: { hand: 'stack', handMin: '4' } },
         }).cards[0]
     )
-    expect(lanes.map((c: { form: { showHands: boolean } }) => c.form.showHands)).toEqual([
+    expect(lanes.map((c: { form?: { showHands: boolean } | null }) => c.form!.showHands)).toEqual([
       true,
       false,
     ])
@@ -393,7 +388,7 @@ describe('Needs you', () => {
     expect(answerLine(792, 'B')).toBe('answer #792: B')
     const sent: [string, string][] = []
     const outbox = createOutbox({ send: (t: string, x: string) => sent.push([t, x]) })
-    outbox.start(0, 'answer #792', [{ target: card.master, text }])
+    outbox.start(0, 'answer #792', [{ target: card.master!, text }])
     outbox.tick(10_000)
     expect(sent).toEqual([['tfix-master', 'answer #792: A — the note']])
     // Once the master relays the answer, the decision is no longer open.
@@ -491,7 +486,7 @@ describe('a space of two repositories', () => {
       now,
       config,
       github: buildGithub({ now, spaces: config.spaces, reads }),
-      agents: state.sources.agents.value,
+      agents: state.sources.agents.value!,
       diffs,
     })
   }
@@ -561,15 +556,15 @@ describe('a space of two repositories', () => {
       text: 'Which schema does the block keep?',
     })
     // worker-tw5 is the one that waits, not worker-5.
-    expect(card.cat.state).toBe('needs')
-    expect(answerLine(card.ref, 'A')).toBe('answer bogd3v/fixture-two#5: A')
-    expect(answerLine(card.ref, 'B', 'a new one')).toBe(
+    expect(card!.cat.state).toBe('needs')
+    expect(answerLine(card!.ref!, 'A')).toBe('answer bogd3v/fixture-two#5: A')
+    expect(answerLine(card!.ref!, 'B', 'a new one')).toBe(
       'answer bogd3v/fixture-two#5: B — a new one'
     )
     const sent: [string, string][] = []
     const outbox = createOutbox({ send: (t: string, x: string) => sent.push([t, x]) })
-    outbox.start(0, `answer ${card.ref}`, [
-      { target: card.master, text: answerLine(card.ref, 'A') },
+    outbox.start(0, `answer ${card!.ref}`, [
+      { target: card!.master!, text: answerLine(card!.ref!, 'A') },
     ])
     outbox.tick(10_000)
     expect(sent).toEqual([['tfix-master', 'answer bogd3v/fixture-two#5: A']])
@@ -581,7 +576,7 @@ describe('a space of two repositories', () => {
     expect(batches).toHaveLength(1)
     const [batch] = batches
     expect(batch.key).toBe('express:fixture-space')
-    expect(batch.items.map((i: { label: string }) => i.label)).toEqual([
+    expect(batch.items!.map((i: { label: string }) => i.label)).toEqual([
       'fixture-space#6',
       'fixture-space bogd3v/fixture-two#6',
     ])

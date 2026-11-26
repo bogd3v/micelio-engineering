@@ -1,19 +1,10 @@
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { createAdapters, readConfig } from '../herdr/mod/factory/adapters.js'
-import {
-  buildBoard,
-  columnOf,
-  factoryShare,
-  // @ts-expect-error a plain JavaScript module of the mod, with no declarations
-} from '../herdr/mod/factory/lib/board.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
+import { buildBoard, columnOf, factoryShare } from '../herdr/mod/factory/lib/board.js'
 import { parseGates } from '../herdr/mod/factory/lib/gates.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { buildGithub } from '../herdr/mod/factory/lib/panel.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { buildState } from '../herdr/mod/factory/lib/state.js'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
@@ -75,8 +66,8 @@ async function round(filter = { space: 'all', lane: 'all' }) {
   const milestones = await a.readMilestones(config.spaces)
   const fields = await a.readProjectFields()
   const share = factoryShare({
-    fields: (fields as { fields: never }).fields,
-    milestones: (milestones as { byRepo: never }).byRepo,
+    fields: (fields as unknown as { fields: never }).fields,
+    milestones: (milestones as unknown as { byRepo: never }).byRepo,
     spaces: config.spaces,
   })
   const board = buildBoard({ now, state, github, config, share, filter })
@@ -302,7 +293,7 @@ describe('the board', () => {
   it('the read of GitHub keeps the comments of an issue closed today and of no other closed one', async () => {
     const { github } = await round()
     const read = (space: string) =>
-      Object.keys(github.spaces[space].raw.comments)
+      Object.keys(github.spaces[space].raw!.comments)
         .map(Number)
         .toSorted((x, y) => x - y)
     expect(read('micelio-engineering')).toContain(810)
@@ -334,8 +325,8 @@ describe('the board of a space of two repositories', () => {
       'bogd3v/fixture-two',
     ])
     const share = factoryShare({
-      fields: ((await a.readProjectFields()) as { fields: never }).fields,
-      milestones: (milestones as { byRepo: never }).byRepo,
+      fields: ((await a.readProjectFields()) as unknown as { fields: never }).fields,
+      milestones: (milestones as unknown as { byRepo: never }).byRepo,
       spaces: config.spaces,
     })
     // The catalogue's issues in both repositories (6 and 4) over those and the plugins' (10).

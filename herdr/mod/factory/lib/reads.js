@@ -30,7 +30,7 @@ export async function within(ms, step, promise, sleep) {
       return { value: await promise }
     } catch (error) {
       return {
-        error: `${step}: ${String(/** @type {any} */ (error)?.message ?? error).split('\n')[0]}`,
+        error: `${step}: ${String(/** @type {{ message?: unknown } | undefined} */ (error)?.message ?? error).split('\n')[0]}`,
       }
     }
   }
@@ -46,14 +46,15 @@ export async function within(ms, step, promise, sleep) {
 /**
  * Runs a step under `within`: a step that throws at once, before it returns a promise, is a rejection too.
  *
+ * @template T
  * @param {number} ms
  * @param {string} step
- * @param {() => Promise<any>} run
+ * @param {() => Promise<T>} run
  * @param {(ms: number) => Promise<unknown>} sleep
- * @returns {Promise<any>}
+ * @returns {Promise<T | { error: string }>}
  */
 export function limited(ms, step, run, sleep) {
-  /** @type {Promise<any>} */
+  /** @type {Promise<T>} */
   let promise
   try {
     promise = run()
@@ -67,14 +68,15 @@ export function limited(ms, step, run, sleep) {
  * The steps of the fast read, each under `FAST_STEP_MS`: a step that ends with `{ error }` makes only
  * its own source fail.
  *
- * @param {{ now: () => Promise<number>, readSlots: () => Promise<unknown>, readMachine: () => Promise<unknown>, readAgents: () => Promise<unknown>, readStacks: () => Promise<unknown> }} adapters
+ * @template S, M, A, K
+ * @param {{ now: () => Promise<number>, readSlots: () => Promise<S>, readMachine: () => Promise<M>, readAgents: () => Promise<A>, readStacks: () => Promise<K> }} adapters
  * @param {{ sleep: (ms: number) => Promise<unknown> }} options
- * @returns {Promise<{ now: number | null, slots: any, machine: any, agents: any, stacks: any }>}
+ * @returns {Promise<{ now: number | null, slots: S | { error: string }, machine: M | { error: string }, agents: A | { error: string }, stacks: K | { error: string } }>}
  *   `now` is `null` when the clock step failed: the caller keeps its own
  */
 export async function readFast(adapters, { sleep }) {
-  const step = (/** @type {string} */ name, /** @type {() => Promise<any>} */ run) =>
-    limited(FAST_STEP_MS, name, run, sleep)
+  /** @type {<T>(name: string, run: () => Promise<T>) => Promise<T | { error: string }>} */
+  const step = (name, run) => limited(FAST_STEP_MS, name, run, sleep)
   const [now, slots, machine, agents, stacks] = await Promise.all([
     step('now', () => adapters.now()),
     step('readSlots', () => adapters.readSlots()),
@@ -91,15 +93,17 @@ export async function readFast(adapters, { sleep }) {
  * space, which `buildGithub` marks stale with the step's name; a `readPulls` that does not answer
  * leaves the space's read good, with no pull requests.
  *
- * @param {{ now: () => Promise<number>, readGithub: (space: any) => Promise<any>, readPulls: (space: any) => Promise<any> }} adapters
- * @param {{ name: string }[]} spaces
+ * @template {{ name: string }} P
+ * @template {object} R
+ * @param {{ now: () => Promise<number>, readGithub: (space: P) => Promise<R>, readPulls: (space: P) => Promise<unknown> }} adapters
+ * @param {P[]} spaces
  * @param {{ sleep: (ms: number) => Promise<unknown> }} options
  * @returns {Promise<{ now: number | null, reads: Record<string, unknown> }>}
  *   `now` is `null` when the clock step failed: the caller keeps its own
  */
 export async function readSlow(adapters, spaces, { sleep }) {
-  const step = (/** @type {string} */ name, /** @type {() => Promise<any>} */ run) =>
-    limited(SLOW_STEP_MS, name, run, sleep)
+  /** @type {<T>(name: string, run: () => Promise<T>) => Promise<T | { error: string }>} */
+  const step = (name, run) => limited(SLOW_STEP_MS, name, run, sleep)
   /** @type {Record<string, unknown>} */
   const reads = {}
   for (const space of spaces) {
@@ -138,11 +142,11 @@ export function createGate(limitMs) {
       running = { generation: latest, since: now }
       return latest
     },
-    /** @param {number} generation */
+    /** @param {number | null} generation */
     isCurrent(generation) {
       return generation === latest
     },
-    /** @param {number} generation */
+    /** @param {number | null} generation */
     end(generation) {
       if (running?.generation === generation) running = null
     },

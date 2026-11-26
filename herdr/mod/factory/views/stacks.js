@@ -6,10 +6,13 @@ import { div } from 'gpui-kit'
 import { h_flex, v_flex } from 'gpui-base'
 import { button, displayBold, heading, label, section } from './ui.js'
 
+/** @typedef {import('../../types/views.js').ViewContext} ViewContext */
+/** @typedef {import('../../types/views.js').PanelSections} PanelSections */
+
 /**
  * The question of a confirmation, with its two answers.
  *
- * @param {any} ctx
+ * @param {ViewContext} ctx
  * @param {{ title: string, detail: string }} ask
  * @param {string} tone
  */
@@ -31,21 +34,21 @@ export function confirmation(ctx, ask, tone) {
             primary: true,
             tone,
             fg: 'btn-fg',
-            click: (/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.confirm(cx),
+            click: (_e, cx) => ctx.ui.confirm(cx),
           })
         )
         .child(
           button(ctx, 'cancel', 'CANCEL', {
             tone: 'fg',
-            click: (/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.cancel(cx),
+            click: (_e, cx) => ctx.ui.cancel(cx),
           })
         )
     )
 }
 
 /**
- * @param {any} ctx
- * @param {any} s `panel.sections.stacks`
+ * @param {ViewContext} ctx
+ * @param {PanelSections['stacks']} s `panel.sections.stacks`
  */
 export function stacks(ctx, s) {
   const right = h_flex()
@@ -61,7 +64,7 @@ export function stacks(ctx, s) {
       v_flex()
         .mt(6)
         .children(
-          s.rows.map((/** @type {any} */ row) =>
+          s.rows.map((row) =>
             h_flex()
               .items_center()
               .gap(8)
@@ -84,14 +87,13 @@ export function stacks(ctx, s) {
     )
     .children(
       s.rows
-        .filter((/** @type {any} */ row) => row.removable)
-        .map((/** @type {any} */ row) =>
+        .filter((row) => row.removable)
+        .map((row) =>
           v_flex()
             .child(
               button(ctx, `down-${row.name}`, `BRING DOWN ${row.name.toUpperCase()}…`, {
                 tone: 'fg',
-                click: (/** @type {any} */ _e, /** @type {any} */ cx) =>
-                  ctx.ui.askBringDown(row.name, cx),
+                click: (_e, cx) => ctx.ui.askBringDown(row.name, cx),
               }).mt(8)
             )
             .child(

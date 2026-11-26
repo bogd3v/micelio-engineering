@@ -2,12 +2,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import {
-  createAdapters,
-  oldestCreated,
-  readConfig,
-  // @ts-expect-error a plain JavaScript module of the mod, with no declarations
-} from '../herdr/mod/factory/adapters.js'
+import { createAdapters, oldestCreated, readConfig } from '../herdr/mod/factory/adapters.js'
 import {
   armedNote,
   createActions,
@@ -15,15 +10,10 @@ import {
   retryLabel,
   retryThreshold,
   stackOwned,
-  // @ts-expect-error a plain JavaScript module of the mod, with no declarations
 } from '../herdr/mod/factory/lib/actions.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { buildNeeds, parseHeld } from '../herdr/mod/factory/lib/needs.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { buildGithub, buildPanel } from '../herdr/mod/factory/lib/panel.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { parseAgents } from '../herdr/mod/factory/lib/agents.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { buildState } from '../herdr/mod/factory/lib/state.js'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url)).replace(/\/$/, '')
@@ -278,7 +268,7 @@ describe('a held check', () => {
     const retries = createRetries({
       send: (target: string, text: string) => sent.push([target, text]),
     })
-    retries.arm(card.key, card.ref, card.master)
+    retries.arm(card.key, card.ref!, card.master!)
     expect(retries.check(30, 32)).toEqual([])
     expect(retries.check(5, 32)).toEqual(['retry bogd3v/micelio-cms#531'])
     expect(retries.check(5, 32)).toEqual([])

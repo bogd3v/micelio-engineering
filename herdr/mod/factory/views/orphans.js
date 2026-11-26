@@ -7,9 +7,12 @@ import { h_flex, v_flex } from 'gpui-base'
 import { button, heading, label, liveOrDim, section } from './ui.js'
 import { confirmation } from './stacks.js'
 
+/** @typedef {import('../../types/views.js').ViewContext} ViewContext */
+/** @typedef {import('../../types/views.js').PanelSections} PanelSections */
+
 /**
- * @param {any} ctx
- * @param {any} o `panel.sections.orphans`
+ * @param {ViewContext} ctx
+ * @param {PanelSections['orphans']} o `panel.sections.orphans`
  */
 export function orphans(ctx, o) {
   const box = section(ctx, true).child(
@@ -27,7 +30,7 @@ export function orphans(ctx, o) {
     ctx,
     box,
     o,
-    o.rows.map((/** @type {any} */ row) =>
+    o.rows.map((row) =>
       v_flex()
         .mt(10)
         .p(10)
@@ -66,8 +69,7 @@ export function orphans(ctx, o) {
             .child(
               button(ctx, `show-${row.pid}`, 'SHOW PROCESS', {
                 tone: 'fg',
-                click: (/** @type {any} */ _e, /** @type {any} */ cx) =>
-                  ctx.ui.showProcess(row.pid, cx),
+                click: (_e, cx) => ctx.ui.showProcess(row.pid, cx),
               })
             )
             .child(
@@ -75,8 +77,7 @@ export function orphans(ctx, o) {
                 primary: true,
                 tone: 'red',
                 fg: 'btn-fg',
-                click: (/** @type {any} */ _e, /** @type {any} */ cx) =>
-                  ctx.ui.askTerminate(row.pid, cx),
+                click: (_e, cx) => ctx.ui.askTerminate(row.pid, cx),
               })
             )
         )

@@ -2,7 +2,15 @@
   "extends": "@micelio/tsconfig",
   "compilerOptions": {
     "noEmit": true,
+    "allowJs": true,
     "types": ["node"]
   },
-  "include": ["packages/*/src", "packages/*/test", "test", "scripts", "vitest.config.ts"]
+  "include": [
+    "packages/*/src",
+    "packages/*/test",
+    "test",
+    "scripts",
+    "herdr/mod/types",
+    "vitest.config.ts"
+  ]
 }

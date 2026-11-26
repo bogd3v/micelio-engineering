@@ -4,8 +4,10 @@ import { div } from 'gpui-kit'
 import { h_flex, v_flex } from 'gpui-base'
 import { displayBold, label } from './ui.js'
 
+/** @typedef {import('../../types/views.js').ViewContext} ViewContext */
+
 /**
- * @param {any} ctx
+ * @param {ViewContext} ctx
  * @param {{ key: string, label: string, value: string, tone: string, fill: string | null }[]} cells `panel.strip`
  */
 export function strip(ctx, cells) {

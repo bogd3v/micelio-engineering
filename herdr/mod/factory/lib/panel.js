@@ -11,6 +11,8 @@ import { buildIssues } from './issues.js'
 import { paceOf } from './quota.js'
 import { ageMs, toMs } from './time.js'
 
+/** @typedef {'machine' | 'slots' | 'workers' | 'milestones' | 'stacks' | 'orphans'} SectionName a collapsible section */
+
 /** The collapsible sections of the panel, in the order of the design. */
 export const SECTIONS = ['machine', 'slots', 'workers', 'milestones', 'stacks', 'orphans']
 
@@ -76,7 +78,7 @@ function formatClock(ms) {
 /**
  * The hour of a timestamp as `HH:MM` UTC.
  *
- * @param {string | null} at
+ * @param {string | null | undefined} at
  * @returns {string}
  */
 export function hourUtc(at) {
@@ -164,12 +166,15 @@ export function parseStacks(text) {
  * @property {number} number
  * @property {string | null} [body]
  * @property {string} created_at
+ * @property {string} [repo] its repository, when it is not the space's
  * @property {{ user?: { login?: string }, body?: string | null }[]} comments the conversation's comments
  * @property {{ user?: { login?: string }, body?: string | null }[]} reviews
  */
 
 /**
  * What GitHub gave for each space, as rows. A space whose read failed keeps its last rows, stale.
+ *
+ * @typedef {Pick<SpaceConfig, 'name'> & Partial<SpaceConfig>} SpaceName a space of which only the name is sure
  *
  * @typedef {object} SpaceConfig
  * @property {string} name the space's name in Herdr
@@ -194,13 +199,15 @@ export function parseStacks(text) {
  * @property {string | null} error
  *
  * @typedef {{ spaces: Record<string, SpaceMilestone> }} Github
+ *
+ * @typedef {{ at: string, issues: PairRaw['issues'], comments: PairRaw['comments'], maintainer: string, pulls?: OpenPull[], others?: PairRaw[] } | { error: string }} SpaceRead what one read of a space gave
  */
 
 /**
  * The pairs of a space: its `pairs`, or, for a config made with none, the one of its `repo`,
  * `milestone` and `epic`.
  *
- * @param {{ repo: string, milestone?: number, epic?: number | null, pairs?: Pair[] }} space
+ * @param {{ repo: string, milestone?: number, epic?: number | null, pairs?: Pair[], name?: string }} space
  * @returns {Pair[]}
  */
 export function pairsOf(space) {
@@ -296,15 +303,15 @@ export const onPair = (agent, pair) => (agent.tag ?? '') === pair.tag
 /**
  * @param {object} input
  * @param {number} input.now
- * @param {SpaceConfig[]} input.spaces
- * @param {Record<string, { at: string, issues: Parameters<typeof buildIssues>[0]['issues'], comments: Parameters<typeof buildIssues>[0]['comments'], maintainer: string, pulls?: OpenPull[], others?: PairRaw[] } | { error: string }>} input.reads
+ * @param {SpaceName[]} input.spaces
+ * @param {Record<string, unknown>} input.reads each space's read, a `SpaceRead` of `readGithub`
  * @param {Github | null} [input.previous]
  * @returns {Github}
  */
 export function buildGithub({ now, spaces, reads, previous = null }) {
   /** @type {Record<string, SpaceMilestone>} */
   const out = {}
-  for (const space of spaces) {
+  for (const space of /** @type {SpaceConfig[]} */ (spaces)) {
     const had = previous?.spaces[space.name]
     /** @type {SpaceMilestone} */
     const entry = had
@@ -316,7 +323,7 @@ export function buildGithub({ now, spaces, reads, previous = null }) {
           stale: false,
           error: null,
         }
-    const read = reads[space.name]
+    const read = /** @type {SpaceRead | undefined} */ (reads[space.name])
     if (read !== undefined) {
       if ('error' in read) {
         entry.stale = true
@@ -355,7 +362,7 @@ export function buildGithub({ now, spaces, reads, previous = null }) {
  * The rows of a space's milestone from its last good read and the agents of this moment, so a worker
  * that starts, stops or is blocked shows at once and not at the next read of GitHub.
  *
- * @param {SpaceMilestone | undefined} read
+ * @param {Pick<SpaceMilestone, 'raw'> | undefined} read
  * @param {number} now
  * @param {import('./agents.js').Agent[]} agents the agents of the space
  * @returns {{ rows: import('./issues.js').IssueRow[], counts: { closed: number, total: number } }}
@@ -402,19 +409,21 @@ function spaceRows(space, read, now, agents) {
 
 /** @typedef {{ value: unknown, at: string | null, ageMs: number | null, stale: boolean, error: string | null }} Source */
 
+/** @typedef {{ value: unknown } & Partial<Omit<Source, 'value'>>} SourceInput a source as the panel reads it: a field it lacks is as before the first read */
+
 /**
  * The note of a local source (the machine, the slots or the agents) whose latest read failed: the
  * same text as Milestones gives a stale GitHub. `null` while it is live.
  *
- * @param {Source | undefined} source
+ * @param {SourceInput | undefined} source
  * @returns {string | null}
  */
 export const notLive = (source) =>
   source?.stale === true ? `as of ${hourUtc(source.at)} · not live` : null
 
 /**
- * @param {Source | undefined} source
- * @returns {Source}
+ * @param {SourceInput | undefined} source
+ * @returns {SourceInput}
  */
 const orEmpty = (source) =>
   source ?? { value: null, at: null, ageMs: null, stale: false, error: null }
@@ -497,11 +506,18 @@ function catsOf(row, onIt, master, theme) {
 }
 
 /**
+ * A row of "Heavy slots": a free slot, or one an agent or the maintainer holds.
+ *
+ * @typedef {{ n: number, free: true }} FreeSlot
+ * @typedef {{ n: number, free: false, held: boolean, agent: string, role: string | null, badge: { letter: string, colour: string }, command: string, time: string }} TakenSlot
+ */
+
+/**
  * Everything the panel draws.
  *
  * @param {object} input
  * @param {number} input.now milliseconds since the epoch
- * @param {{ stale: boolean, sources: Record<string, Source> }} input.state
+ * @param {{ stale: boolean, sources: Record<string, SourceInput> }} input.state
  * @param {Github | null} input.github
  * @param {{ value: { name: string, status: string }[], at: string | null, stale: boolean, error: string | null }} [input.stacks]
  * @param {Record<string, number>} [input.stackAges] when each unowned stack was created (milliseconds since the epoch), by project
@@ -689,33 +705,36 @@ export function buildPanel({
   }
 
   // Heavy slots and the queue.
-  const slotRows = Array.from({ length: heavyTotal }, (_, i) => {
-    const slot = slots?.heavy.slots.find((s) => s.slot === i + 1)
-    if (slot === undefined) return { n: i + 1, free: true }
-    if (slot.held) {
+  const slotRows = Array.from(
+    { length: heavyTotal },
+    /** @returns {FreeSlot | TakenSlot} */ (_, i) => {
+      const slot = slots?.heavy.slots.find((s) => s.slot === i + 1)
+      if (slot === undefined) return { n: i + 1, free: true }
+      if (slot.held) {
+        return {
+          n: i + 1,
+          free: false,
+          held: true,
+          agent: 'you',
+          role: null,
+          badge: { letter: 'Y', colour: 'warn-fill' },
+          command: 'held for your hands-on test',
+          time: formatClock(slot.since === null ? null : Math.max(0, now - slot.since)),
+        }
+      }
+      const agent = agentNamed(slot.agent)
       return {
         n: i + 1,
         free: false,
-        held: true,
-        agent: 'you',
-        role: null,
-        badge: { letter: 'Y', colour: 'warn-fill' },
-        command: 'held for your hands-on test',
+        held: false,
+        agent: slot.agent,
+        role: agent?.role ?? null,
+        badge: badgeOf(agent),
+        command: `$ ${slot.command}`,
         time: formatClock(slot.since === null ? null : Math.max(0, now - slot.since)),
       }
     }
-    const agent = agentNamed(slot.agent)
-    return {
-      n: i + 1,
-      free: false,
-      held: false,
-      agent: slot.agent,
-      role: agent?.role ?? null,
-      badge: badgeOf(agent),
-      command: `$ ${slot.command}`,
-      time: formatClock(slot.since === null ? null : Math.max(0, now - slot.since)),
-    }
-  })
+  )
   const queue = (slots?.queue ?? []).map((q, i) => {
     const agent = agentNamed(q.agent)
     return {
@@ -829,53 +848,56 @@ export function buildPanel({
     line: `pid ${o.pid} · no slot · no owner`,
   }))
 
+  const sections = {
+    machine: machineModel,
+    slots: {
+      open: open['slots'] ?? true,
+      dim: slotsNote !== null,
+      note: slotsNote,
+      count: `${heavyUsed}/${heavyTotal}`,
+      rows: slotRows,
+      queueTitle: queue.length > 0 ? 'queue, arrival order' : 'queue empty',
+      queue,
+    },
+    workers: {
+      open: open['workers'] ?? true,
+      dim: slotsNote !== null,
+      note: slotsNote,
+      count: `${leasesUsed}/${leasesTotal}${leasesUsed >= leasesTotal && leasesTotal > 0 ? ' · next worker waits' : ''}${paused ? ' · PAUSED' : ''}`,
+      cells: leaseCells,
+      paused,
+    },
+    milestones: {
+      open: open['milestones'] ?? true,
+      dim,
+      note: dim ? `as of ${hourUtc(staleSince)} · not live` : null,
+      // The cats come from the agents: a stale agents source dims them.
+      catsDim: agentsNote !== null,
+      catsNote: agentsNote,
+      spaces,
+    },
+    stacks: {
+      open: open['stacks'] ?? true,
+      count: `${stackRows.length}${stackRows.some((s) => s.owner === null) ? ` · ${stackRows.filter((s) => s.owner === null).length} unowned` : ''}`,
+      unowned: stackRows.filter((s) => s.owner === null).length,
+      rows: stackRows,
+      error: stacks.stale ? stacks.error : null,
+    },
+    orphans: {
+      open: open['orphans'] ?? true,
+      dim: slotsNote !== null,
+      note: slotsNote,
+      count: String(orphans.length),
+      rows: orphans,
+    },
+  }
+
   return {
     header,
     strip,
     banners,
-    sections: {
-      machine: machineModel,
-      slots: {
-        open: open['slots'] ?? true,
-        dim: slotsNote !== null,
-        note: slotsNote,
-        count: `${heavyUsed}/${heavyTotal}`,
-        rows: slotRows,
-        queueTitle: queue.length > 0 ? 'queue, arrival order' : 'queue empty',
-        queue,
-      },
-      workers: {
-        open: open['workers'] ?? true,
-        dim: slotsNote !== null,
-        note: slotsNote,
-        count: `${leasesUsed}/${leasesTotal}${leasesUsed >= leasesTotal && leasesTotal > 0 ? ' · next worker waits' : ''}${paused ? ' · PAUSED' : ''}`,
-        cells: leaseCells,
-        paused,
-      },
-      milestones: {
-        open: open['milestones'] ?? true,
-        dim,
-        note: dim ? `as of ${hourUtc(staleSince)} · not live` : null,
-        // The cats come from the agents: a stale agents source dims them.
-        catsDim: agentsNote !== null,
-        catsNote: agentsNote,
-        spaces,
-      },
-      stacks: {
-        open: open['stacks'] ?? true,
-        count: `${stackRows.length}${stackRows.some((s) => s.owner === null) ? ` · ${stackRows.filter((s) => s.owner === null).length} unowned` : ''}`,
-        unowned: stackRows.filter((s) => s.owner === null).length,
-        rows: stackRows,
-        error: stacks.stale ? stacks.error : null,
-      },
-      orphans: {
-        open: open['orphans'] ?? true,
-        dim: slotsNote !== null,
-        note: slotsNote,
-        count: String(orphans.length),
-        rows: orphans,
-      },
-    },
+    // Also a record, so a section can be asked for by a name that is only known at run time.
+    sections: /** @type {typeof sections & Record<string, unknown>} */ (sections),
     roleLetter: ROLE_LETTER,
   }
 }

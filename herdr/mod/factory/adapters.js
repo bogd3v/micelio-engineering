@@ -72,7 +72,7 @@ function readSpaces(entries) {
  * The block's props as the panel reads them.
  *
  * @param {unknown} raw
- * @returns {{ checkout: string, maintainer: string, dockerHost: string, fixture: string[] | null, spaces: import('./lib/panel.js').SpaceConfig[] }}
+ * @returns {{ checkout: string, maintainer: string, dockerHost: string, side: 'left' | 'right', fixture: string[] | null, spaces: import('./lib/panel.js').SpaceConfig[] }}
  */
 export function readConfig(raw) {
   const props =
@@ -144,7 +144,7 @@ const reason = (error) =>
 
 /**
  * @param {object} deps
- * @param {typeof import('herdr').exec} deps.exec
+ * @param {import('../types/views.js').Exec} deps.exec
  * @param {typeof import('herdr').readTextFile} deps.readTextFile
  * @param {typeof import('herdr').terminals} deps.terminals
  * @param {ReturnType<typeof readConfig>} deps.config
@@ -250,7 +250,11 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
     }
   }
 
-  /** The rows of `terminals()`, the fields the model reads. */
+  /**
+   * The rows of `terminals()`, the fields the model reads.
+   *
+   * @returns {Promise<{ at: string, terminals: import('herdr').TerminalRow[], error?: undefined } | { error: string, at?: undefined, terminals?: undefined }>}
+   */
   async function readAgents() {
     const at = iso(await now())
     try {
@@ -276,7 +280,7 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
   const replies = new Map()
   /** The last `X-Ratelimit-Remaining` and `X-Ratelimit-Reset` any reply gave. @type {import('./lib/quota.js').Quota | null} */
   let quota = null
-  /** When the comments of each issue or pull request were last read, and its `updated_at` then. @type {Map<string, { updatedAt: unknown, at: number, value: any }>} */
+  /** When the comments of each issue or pull request were last read, and its `updated_at` then. @type {Map<string, { updatedAt: unknown, at: number, value: unknown }>} */
   const seenComments = new Map()
 
   /**
@@ -307,14 +311,17 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
    * The comments (or the comments and reviews) of an issue or a pull request: read when `commentsDue`
    * says so, the last ones otherwise.
    *
+   * @template T
    * @param {string} key
    * @param {unknown} updatedAt the `updated_at` of its list
    * @param {number} at milliseconds since the epoch
-   * @param {() => Promise<any>} read
+   * @param {() => Promise<T>} read
+   * @returns {Promise<T>}
    */
   async function commentsOf(key, updatedAt, at, read) {
     const seen = seenComments.get(key)
-    if (seen !== undefined && !commentsDue(seen, updatedAt, at)) return seen.value
+    if (seen !== undefined && !commentsDue(seen, updatedAt, at))
+      return /** @type {T} */ (seen.value)
     const value = await read()
     seenComments.set(key, { updatedAt, at, value })
     return value
@@ -326,12 +333,13 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
    * space of one pair has no `others`). A read that fails for one pair fails for the space.
    *
    * @param {import('./lib/panel.js').SpaceConfig} space
+   * @returns {Promise<import('./lib/panel.js').SpaceRead>}
    */
   async function readGithub(space) {
     let at = iso(await now())
     try {
       const pairs = pairsOf(space)
-      /** @type {{ issues: any[], comments: Record<number, unknown> }[]} */
+      /** @type {import('./lib/panel.js').PairRaw[]} */
       const parts = []
       if (dirs !== null) {
         githubReads[space.name] = (githubReads[space.name] ?? 0) + 1
@@ -349,12 +357,13 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
           if (!Array.isArray(issues)) {
             return { error: `no ${pair === pairs[0] ? 'issues.json' : name} in the fixture` }
           }
-          /** @type {Record<number, unknown>} */
+          /** @type {import('./lib/panel.js').PairRaw['comments']} */
           const comments = {}
           for (const issue of issues) {
             if (issue.state === 'closed' && !closedOn(issue, today)) continue
-            comments[issue.number] =
+            comments[issue.number] = /** @type {import('./lib/gates.js').Comment[]} */ (
               (await fixtureJson(`comments-${pair.tag}${issue.number}.json`)) ?? []
+            )
           }
           parts.push({ issues, comments })
         }
@@ -370,14 +379,19 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
           const open = issues.filter(
             (i) => (i.state !== 'closed' || closedOn(i, today)) && i.pull_request == null
           )
-          /** @type {Record<number, unknown>} */
+          /** @type {import('./lib/panel.js').PairRaw['comments']} */
           const comments = {}
           for (let i = 0; i < open.length; i += GH_AT_ONCE) {
             const batch = open.slice(i, i + GH_AT_ONCE)
             const got = await Promise.all(
               batch.map((issue) => {
                 const endpoint = `repos/${pair.repo}/issues/${issue.number}/comments?per_page=100`
-                return commentsOf(endpoint, issue.updated_at, at, () => gh(endpoint))
+                return commentsOf(
+                  endpoint,
+                  issue.updated_at,
+                  at,
+                  () => /** @type {Promise<import('./lib/gates.js').Comment[]>} */ (gh(endpoint))
+                )
               })
             )
             batch.forEach((issue, k) => {
@@ -406,7 +420,7 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
    * repository than the space's carries its `repo`. A failed read of the pull requests is no pull
    * requests: it never fails the read of the milestone.
    *
-   * @param {import('./lib/panel.js').SpaceConfig} space
+   * @param {{ repo: string, milestone?: number, epic?: number | null, pairs?: import('./lib/panel.js').Pair[], name?: string }} space
    * @returns {Promise<import('./lib/panel.js').OpenPull[]>}
    */
   async function readPulls(space) {
@@ -439,10 +453,12 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
                 pull.updated_at,
                 at,
                 async () => ({
-                  comments: await gh(
-                    `repos/${pair.repo}/issues/${pull.number}/comments?per_page=100`
+                  comments: /** @type {import('./lib/panel.js').OpenPull['comments']} */ (
+                    await gh(`repos/${pair.repo}/issues/${pull.number}/comments?per_page=100`)
                   ),
-                  reviews: await gh(`repos/${pair.repo}/pulls/${pull.number}/reviews?per_page=100`),
+                  reviews: /** @type {import('./lib/panel.js').OpenPull['reviews']} */ (
+                    await gh(`repos/${pair.repo}/pulls/${pull.number}/reviews?per_page=100`)
+                  ),
                 })
               )),
             }))
@@ -466,7 +482,7 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
   async function readMilestones(spaces) {
     const at = iso(await now())
     try {
-      /** @type {Record<string, unknown>} */
+      /** @type {Record<string, import('./lib/board.js').RepoMilestone[]>} */
       const byRepo = {}
       for (const space of spaces) {
         for (const pair of pairsOf(space)) {
@@ -477,7 +493,7 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
                 (await fixtureJson('milestones.json')))
               : await gh(`repos/${pair.repo}/milestones?state=all&per_page=100`)
           if (!Array.isArray(list)) return { error: `no milestones for ${pair.repo}` }
-          byRepo[pair.repo] = list
+          byRepo[pair.repo] = /** @type {import('./lib/board.js').RepoMilestone[]} */ (list)
         }
       }
       return { at, byRepo }
@@ -595,13 +611,16 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
    * @param {number} issue
    * @param {string} path the worktree
    * @param {string} [tag] the tag of the issue's pair: its recording is `worktree-<tag><n>.json`
+   * @returns {Promise<{ branch?: string, added?: number, removed?: number, error?: string }>}
    */
   async function readWorktree(issue, path, tag = '') {
     try {
       if (dirs !== null) {
         const name = `worktree-${tag}${issue}.json`
         const found = await fixtureJson(name)
-        return found === null ? { error: `no ${name} in the fixture` } : found
+        return found === null
+          ? { error: `no ${name} in the fixture` }
+          : /** @type {{ branch: string, added: number, removed: number }} */ (found)
       }
       /** @param {string[]} args */
       const git = async (args) => {
@@ -664,7 +683,12 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
    */
   async function readForms() {
     const found = dirs === null ? null : await fixtureJson('forms.json')
-    const obj = found !== null && typeof found === 'object' ? /** @type {any} */ (found) : {}
+    const obj =
+      found !== null && typeof found === 'object'
+        ? /** @type {{ time?: Record<string, Record<string, unknown>>, log?: Record<string, string> | null }} */ (
+            found
+          )
+        : {}
     return { time: obj.time ?? {}, log: obj.log ?? null }
   }
 

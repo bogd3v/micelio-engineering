@@ -13,15 +13,21 @@ import { div } from 'gpui-kit'
 import { h_flex, Input, Textarea, v_flex } from 'gpui-base'
 import { badge, cat, display, displayBold, label, laneTag } from './ui.js'
 
+/** @typedef {import('../../types/views.js').ViewContext} ViewContext */
+/** @typedef {import('../../types/views.js').DetailModel} DetailModel */
+/** @typedef {import('../../types/views.js').DecisionModel} DecisionModel */
+/** @typedef {import('../../types/views.js').LogModel} LogModel */
+/** @typedef {import('../../types/views.js').ClickHandler} ClickHandler */
+
 /** The title of a section: `// NAME`, cyan. */
-const title = (/** @type {any} */ ctx, /** @type {string} */ text) =>
+const title = (/** @type {ViewContext} */ ctx, /** @type {string} */ text) =>
   display(div()).text_size(12).text_color(ctx.c['cyan']).mb(10).child(`// ${text.toUpperCase()}`)
 
 /**
  * The look of a cell of a round, by its mark (`Gates by round`: the same marks as the track, wider).
  *
- * @param {any} ctx
- * @param {{ mark: string, text: string }} cell
+ * @param {ViewContext} ctx
+ * @param {DetailModel['rounds'][number]['cells'][number]} cell
  */
 function cell(ctx, cell) {
   const box = div()
@@ -61,7 +67,7 @@ function cell(ctx, cell) {
   }
 }
 
-/** @param {any} ctx @param {any} model `buildDetail` */
+/** @param {ViewContext} ctx @param {DetailModel} model `buildDetail` */
 function top(ctx, model) {
   const h = model.header
   const facts = h_flex()
@@ -78,7 +84,11 @@ function top(ctx, model) {
     facts.child(label(`+${h.added}`, ctx.c['cyan'], 11))
     facts.child(label(`−${h.removed ?? 0}`, ctx.c['red'], 11))
   }
-  const button = (/** @type {string} */ id, /** @type {string} */ text, /** @type {any} */ click) =>
+  const button = (
+    /** @type {string} */ id,
+    /** @type {string} */ text,
+    /** @type {ClickHandler} */ click
+  ) =>
     displayBold(div())
       .id(id)
       .h(36)
@@ -108,15 +118,11 @@ function top(ctx, model) {
       h_flex()
         .gap(8)
         .child(button('detail-log', 'LOG A CORRECTION', () => ctx.ui.openLogFromDetail()))
-        .child(
-          button('detail-close', 'CLOSE', (/** @type {any} */ _e, /** @type {any} */ cx) =>
-            ctx.ui.close(cx)
-          )
-        )
+        .child(button('detail-close', 'CLOSE', (_e, cx) => ctx.ui.close(cx)))
     )
 }
 
-/** @param {any} ctx @param {any} model */
+/** @param {ViewContext} ctx @param {DetailModel} model */
 function gates(ctx, model) {
   return v_flex()
     .child(title(ctx, 'Gates by round'))
@@ -125,24 +131,24 @@ function gates(ctx, model) {
         .gap(6)
         .child(div().w(34).flex_none())
         .children(
-          model.gateNames.map((/** @type {string} */ g) =>
+          model.gateNames.map((g) =>
             displayBold(div()).flex_1().min_w(0).text_size(10.5).text_color(ctx.c['muted']).child(g)
           )
         )
     )
     .children(
-      model.rounds.map((/** @type {any} */ round) =>
+      model.rounds.map((round) =>
         h_flex()
           .mt(6)
           .items_center()
           .gap(6)
           .child(label(round.name, ctx.c['muted'], 12).w(34).flex_none())
-          .children(round.cells.map((/** @type {any} */ c) => cell(ctx, c)))
+          .children(round.cells.map((c) => cell(ctx, c)))
       )
     )
 }
 
-/** @param {any} ctx @param {any} model */
+/** @param {ViewContext} ctx @param {DetailModel} model */
 function agents(ctx, model) {
   const col = [220, 150, 170, 148]
   const head = h_flex()
@@ -168,7 +174,7 @@ function agents(ctx, model) {
         .border_color(ctx.c['line'])
         .child(head)
         .children(
-          model.agents.map((/** @type {any} */ a) => {
+          model.agents.map((a) => {
             const name = h_flex()
               .items_center()
               .gap(8)
@@ -184,7 +190,7 @@ function agents(ctx, model) {
                       .truncate()
                       .text_color(ctx.c['cyan'])
                       .tooltip('Opens a pane that only shows its last lines')
-                      .on_click(() => ctx.ui.watchAgent(a.name, a.address))
+                      .on_click(() => ctx.ui.watchAgent(a.name, /** @type {string} */ (a.address)))
                       .child(a.name)
               )
             return h_flex()
@@ -219,7 +225,7 @@ function agents(ctx, model) {
     )
 }
 
-/** @param {any} ctx @param {any} model */
+/** @param {ViewContext} ctx @param {DetailModel} model */
 function packet(ctx, model) {
   const item = (/** @type {{ label: string, path: string | null, file: boolean }} */ p) => {
     const box = v_flex()
@@ -249,7 +255,10 @@ function packet(ctx, model) {
       .tooltip('Opens the file in a pane')
       .on_click(() => ctx.ui.openFile(path))
   }
-  const [a, b, c, d] = model.packet
+  const [a, b, c, d] =
+    /** @type {[DetailModel['packet'][number], DetailModel['packet'][number], DetailModel['packet'][number], DetailModel['packet'][number]]} */ (
+      model.packet
+    )
   return v_flex()
     .child(title(ctx, 'Packet'))
     .child(h_flex().gap(8).child(item(a)).child(item(b)))
@@ -262,8 +271,8 @@ function packet(ctx, model) {
  * button that sends `answer #N: <option>[ — <note>]` to the space's master after 10 s (`ctx.ui.answer`:
  * `option`, `note` (a textarea state), `choose(letter, cx)`, `send(model, cx)`, `undo(cx)`, `pending`).
  *
- * @param {any} ctx
- * @param {any} model `buildDetail().decision`
+ * @param {ViewContext} ctx
+ * @param {DecisionModel} model `buildDetail().decision`
  */
 function decision(ctx, model) {
   const a = ctx.ui.answer
@@ -294,7 +303,7 @@ function decision(ctx, model) {
         .bg(ctx.c['surface'])
         .border_1()
         .border_color(on ? ctx.c['cyan'] : ctx.c['line'])
-        .on_click((/** @type {any} */ _e, /** @type {any} */ cx) => a.choose(o.letter, cx))
+        .on_click((_e, cx) => a.choose(o.letter, cx))
         .child(
           displayBold(div())
             .w(22)
@@ -320,7 +329,11 @@ function decision(ctx, model) {
           .child('Note for the master ')
           .child(label('(optional)', ctx.c['muted'], 12))
       )
-      .child(div().h(72).child(Textarea.new(a.note)))
+      .child(
+        div()
+          .h(72)
+          .child(Textarea.new(/** @type {import('gpui-base').TextareaState} */ (a.note)))
+      )
   )
   if (pending !== null) {
     box.child(
@@ -352,7 +365,7 @@ function decision(ctx, model) {
             .text_color(ctx.c['magenta'])
             .border_1()
             .border_color(ctx.c['magenta'])
-            .on_click((/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.undo(cx))
+            .on_click((_e, cx) => ctx.ui.undo(cx))
             .child('UNDO')
         )
     )
@@ -370,9 +383,7 @@ function decision(ctx, model) {
       .text_color(ready ? ctx.c['btn-fg'] : ctx.c['muted'])
       .child(`SEND TO ${String(model.masterName).toUpperCase()} · MASTER`)
     if (ready) {
-      send
-        .cursor_pointer()
-        .on_click((/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.send(model, cx))
+      send.cursor_pointer().on_click((_e, cx) => ctx.ui.send(model, cx))
     }
     box.child(send)
   }
@@ -387,8 +398,8 @@ function decision(ctx, model) {
 }
 
 /**
- * @param {any} ctx
- * @param {any} model `buildDetail`, or `null` before the first read of GitHub
+ * @param {ViewContext} ctx
+ * @param {DetailModel | null} model `buildDetail`, or `null` before the first read of GitHub
  */
 export function detail(ctx, model) {
   const body = v_flex().w_full().p(24).gap(20)
@@ -409,12 +420,12 @@ export function detail(ctx, model) {
 // `ctx.ui.logForm` gives `model` (`lib/log.js`, `correctionLine`, with `masterName`, `master`, `form`),
 // `inputs` (`issue`, `what`), `choose(category, cx)`, `send(cx)`, `undo(cx)`, `close()` and `pending`.
 
-const logLegend = (/** @type {any} */ ctx, /** @type {string} */ text) =>
+const logLegend = (/** @type {ViewContext} */ ctx, /** @type {string} */ text) =>
   displayBold(div()).text_size(11).text_color(ctx.c['muted']).mb(6).child(text.toUpperCase())
 
 /** A category of the correction form: filled cyan when chosen. */
 function categoryPill(
-  /** @type {any} */ ctx,
+  /** @type {ViewContext} */ ctx,
   /** @type {string} */ name,
   /** @type {boolean} */ on
 ) {
@@ -428,7 +439,7 @@ function categoryPill(
     .justify_center()
     .text_size(12)
     .cursor_pointer()
-    .on_click((/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.logForm.choose(name, cx))
+    .on_click((_e, cx) => ctx.ui.logForm.choose(name, cx))
     .child(name)
   return on
     ? el.bg(ctx.c['cyan']).text_color(ctx.c['badge-fg']).border_1().border_color(ctx.c['cyan'])
@@ -436,8 +447,8 @@ function categoryPill(
 }
 
 /**
- * @param {any} ctx
- * @param {{ categories: readonly string[], form: any, posted: string, error: string | null, send: string | null, masterName: string, master: string | null }} model
+ * @param {ViewContext} ctx
+ * @param {LogModel} model
  */
 export function logForm(ctx, model) {
   const f = ctx.ui.logForm
@@ -474,7 +485,13 @@ export function logForm(ctx, model) {
   box.child(
     v_flex()
       .child(logLegend(ctx, 'Issue'))
-      .child(div().w(120).child(Input.new(f.inputs.issue)))
+      .child(
+        div()
+          .w(120)
+          .child(
+            Input.new(/** @type {import('../../types/views.js').LogInputs} */ (f.inputs).issue)
+          )
+      )
   )
   box.child(
     v_flex()
@@ -484,7 +501,13 @@ export function logForm(ctx, model) {
           .child(logLegend(ctx, 'What was wrong').mb(0).child(' '))
           .child(label('(not how it was fixed)', ctx.c['muted'], 11))
       )
-      .child(div().h(72).child(Textarea.new(f.inputs.what)))
+      .child(
+        div()
+          .h(72)
+          .child(
+            Textarea.new(/** @type {import('../../types/views.js').LogInputs} */ (f.inputs).what)
+          )
+      )
   )
   box.child(
     v_flex()
@@ -558,7 +581,7 @@ export function logForm(ctx, model) {
             .text_color(ctx.c['magenta'])
             .border_1()
             .border_color(ctx.c['magenta'])
-            .on_click((/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.undo(cx))
+            .on_click((_e, cx) => ctx.ui.undo(cx))
             .child('UNDO')
         )
     )
@@ -576,7 +599,7 @@ export function logForm(ctx, model) {
       .text_color(ready ? ctx.c['btn-fg'] : ctx.c['muted'])
       .child(`SEND TO ${model.masterName.toUpperCase()} · MASTER`)
     if (ready) {
-      send.cursor_pointer().on_click((/** @type {any} */ _e, /** @type {any} */ cx) => f.send(cx))
+      send.cursor_pointer().on_click((_e, cx) => f.send(cx))
     }
     box.child(send)
   }

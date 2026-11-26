@@ -115,11 +115,25 @@ import { stacks } from './views/stacks.js'
 import { strip } from './views/strip.js'
 import { MONO } from './views/ui.js'
 
+/** @typedef {import('gpui-kit').Context} Context */
+/** @typedef {import('./lib/machine.js').Machine} Machine */
+/** @typedef {Parameters<typeof factoryShare>[0]} ShareInput */
+/** @typedef {import('../types/views.js').DetailProps} DetailProps */
+/** @typedef {import('../types/views.js').LogProps} LogProps */
+
 /** What the slots, the machine, the agents and the stacks are read every, and GitHub. */
 const FAST_MS = 5000
 const SLOW_MS = 60_000
 
-export default class Factory extends View {
+export default class Factory
+  extends /** @type {new () => import('gpui-kit').View & import('../types/views.js').FactoryState} */ (
+    View
+  )
+{
+  /**
+   * @param {unknown} _props
+   * @param {Context} cx
+   */
   init(_props, cx) {
     this.config = readConfig(props())
     this.adapters = createAdapters({ exec, readTextFile, terminals, config: this.config })
@@ -129,7 +143,7 @@ export default class Factory extends View {
     this.history = []
     this.terminals = []
     /** `{ space, number, repo }` in the overlay of an issue (`repo` left out: the space's), `null` in the panel. */
-    this.detail = props()?.detail ?? null
+    this.detail = /** @type {DetailProps | null} */ (props()?.detail ?? null)
     /** The Board tab is this mod opened with `board` in its props (`tab.new {mod, props}`). */
     this.board = props()?.board === true
     /** The Board's filters: `all` or a space's name, `all` or a lane tag. */
@@ -146,7 +160,7 @@ export default class Factory extends View {
     this.gates = { fast: createGate(FAST_READ_MS), slow: createGate(SLOW_READ_MS) }
     this.scroll = ScrollHandle.new()
     this.order = []
-    this.open = this.load('open', {})
+    this.open = /** @type {Record<string, boolean>} */ (this.load('open', {}))
     /** The subject of each issue's commit message, by the issue's key (`issueKey` of `lib/panel.js`). */
     this.commits = {}
     /** When the panel first saw each blocked terminal (by address): `terminals()` gives no time for it. */
@@ -178,7 +192,7 @@ export default class Factory extends View {
     this.saturation = createSaturation()
     this.look = createLook()
     /** `{ space, number, ref }` in the overlay of the correction form (`props().log`), `null` elsewhere. */
-    this.logOpen = props()?.log ?? null
+    this.logOpen = /** @type {LogProps | null} */ (props()?.log ?? null)
     /** What the correction form holds, and its inputs: made in the overlay only, where the form is drawn. */
     this.logState =
       this.logOpen === null
@@ -228,7 +242,8 @@ export default class Factory extends View {
     this.ui = {
       toggle: (name, cx) => {
         if (!SECTIONS.includes(name)) return
-        const was = this.panel().sections[name].open
+        const was =
+          this.panel().sections[/** @type {import('./lib/panel.js').SectionName} */ (name)].open
         this.open = { ...this.open, [name]: !was }
         localStorage.setItem('open', JSON.stringify(this.open))
         cx.notify()
@@ -284,7 +299,8 @@ export default class Factory extends View {
         ),
       toggleRetry: (card, cx) => {
         if (this.retries.isArmed(card.key)) this.retries.cancel(card.key)
-        else if (card.master !== null) this.retries.arm(card.key, card.ref, card.master)
+        else if (card.master !== null)
+          this.retries.arm(card.key, /** @type {string} */ (card.ref), card.master)
         cx.notify()
       },
       askBringDown: (project, cx) => {
@@ -391,7 +407,7 @@ export default class Factory extends View {
       watchAgent: (name, address) => {
         this.opened(['watch', '-n', '2', 'hc', 'read', address, '--lines', '40'], name)
       },
-      close: () => closeOverlay(props()?.overlay),
+      close: () => closeOverlay(/** @type {string} */ (props()?.overlay)),
     }
     // `herdr-app check` runs init for real: no reads and no timers there.
     if (checking()) return
@@ -429,7 +445,7 @@ export default class Factory extends View {
    * A click of the slot script's buttons: runs it (nothing, with a fixture), shows what it said and reads the
    * slots again.
    *
-   * @param {any} cx
+   * @param {Context} cx
    * @param {() => Promise<{ note: string | null }>} action
    */
   act(cx, action) {
@@ -497,7 +513,7 @@ export default class Factory extends View {
    * The form of "Log time" on an open pull request. Its inputs are made when it first opens (where an
    * event handler runs, never in `render`).
    *
-   * @param {number | string} number the issue's key @param {Record<string, unknown>} patch @param {any} cx
+   * @param {number | string} number the issue's key @param {Record<string, unknown>} patch @param {Context} cx
    */
   setTimeForm(number, patch, cx) {
     const form = (this.timeForms[number] ??= emptyTimeLogForm())
@@ -527,7 +543,7 @@ export default class Factory extends View {
     cx.notify()
   }
 
-  /** Starts the hands-on timer, or stops it and adds its minutes to the field. @param {number | string} number the issue's key @param {any} cx */
+  /** Starts the hands-on timer, or stops it and adds its minutes to the field. @param {number | string} number the issue's key @param {Context} cx */
   toggleTimer(number, cx) {
     const form = this.timeForms[number]
     if (form === undefined) return
@@ -541,7 +557,7 @@ export default class Factory extends View {
     cx.notify()
   }
 
-  /** @param {number | string} number the issue's key @param {Record<string, unknown>} patch @param {any} cx */
+  /** @param {number | string} number the issue's key @param {Record<string, unknown>} patch @param {Context} cx */
   setForm(number, patch, cx) {
     const form = this.forms[number]
     if (form === undefined) return
@@ -555,7 +571,7 @@ export default class Factory extends View {
     cx.notify()
   }
 
-  /** Every second: the countdown, the tracked minutes of an open form. @param {any} cx */
+  /** Every second: the countdown, the tracked minutes of an open form. @param {Context} cx */
   tick(cx) {
     if (this.config.fixture === null) this.now = Date.now()
     const sent = this.outbox.tick(Date.now())
@@ -575,8 +591,8 @@ export default class Factory extends View {
    * Starts the 10 s countdown of one click: a card of Needs you (`cardMessages`) or the decision of the
    * overlay. Nothing is sent before it ends, and a click while another countdown runs does nothing.
    *
-   * @param {any} card
-   * @param {any} cx
+   * @param {import('../types/views.js').SendTarget} card
+   * @param {Context} cx
    */
   startSend(card, cx) {
     this.sentNote = null
@@ -605,7 +621,10 @@ export default class Factory extends View {
    * space it was opened from, else the first.
    */
   logTarget() {
-    const { number, repo } = correctionLine(this.logState.form, this.now)
+    const { number, repo } = correctionLine(
+      /** @type {NonNullable<typeof this.logState>} */ (this.logState).form,
+      this.now
+    )
     const space =
       this.config.spaces.find((s) =>
         pairReads(s, this.github?.spaces[s.name]).some(
@@ -624,11 +643,11 @@ export default class Factory extends View {
 
   /** What the correction form shows now. */
   logModel() {
-    const form = this.logState.form
+    const form = /** @type {NonNullable<typeof this.logState>} */ (this.logState).form
     return { categories: CATEGORIES, form, ...correctionLine(form, this.now), ...this.logTarget() }
   }
 
-  /** Starts the 10 s countdown of `log #N | <what> | <category>`, for the master of the issue's space. @param {any} cx */
+  /** Starts the 10 s countdown of `log #N | <what> | <category>`, for the master of the issue's space. @param {Context} cx */
   startLogSend(cx) {
     this.sentNote = null
     const { send, number, repo, master } = this.logModel()
@@ -725,7 +744,9 @@ export default class Factory extends View {
       commits: this.commits,
       forms: this.forms,
       armed: this.retries.armed(),
-      cores: this.state?.sources['machine']?.value?.cores ?? 0,
+      cores:
+        /** @type {Machine | null | undefined} */ (this.state?.sources['machine']?.value)?.cores ??
+        0,
       timeForms: this.timeForms,
       theme: this.themeNow(),
       agentsNote: notLive(this.state?.sources['agents']),
@@ -735,7 +756,7 @@ export default class Factory extends View {
   /** Opens `argv` in a pane beside the window and closes the overlay. @param {string[]} argv @param {string} [name] */
   opened(argv, name) {
     run('terminal.open', { argv, place: 'right', ...(name === undefined ? {} : { name }) })
-    closeOverlay(props()?.overlay)
+    closeOverlay(/** @type {string} */ (props()?.overlay))
   }
 
   /** Opens Customize: this mod with `customize` in its props. */
@@ -786,8 +807,8 @@ export default class Factory extends View {
    * A key of the focused panel. N, L and B are the commands `factory.next`, `factory.log` and
    * `factory.board` too; S, P and R are keys only, the click of a button by hand.
    *
-   * @param {{ key: string, modifiers?: Record<string, boolean> }} event
-   * @param {any} cx
+   * @param {{ key: string, modifiers?: Partial<import('gpui-kit').Modifiers> }} event
+   * @param {Context} cx
    */
   keyDown(event, cx) {
     const m = event.modifiers ?? {}
@@ -877,7 +898,13 @@ export default class Factory extends View {
     if (at >= 0) this.scroll.scroll_to_item(at)
   }
 
-  /** A value kept in `localStorage`, or `fallback`. */
+  /**
+   * A value kept in `localStorage`, or `fallback`.
+   *
+   * @param {string} key
+   * @param {unknown} fallback
+   * @returns {unknown}
+   */
   load(key, fallback) {
     try {
       const text = localStorage.getItem(key)
@@ -887,7 +914,7 @@ export default class Factory extends View {
     }
   }
 
-  /** The slots, the machine, the agents and the stacks. */
+  /** The slots, the machine, the agents and the stacks. @param {Context} cx */
   fast(cx) {
     const generation = this.gates.fast.start(Date.now())
     if (generation === null) return
@@ -902,7 +929,10 @@ export default class Factory extends View {
         const { slots, machine, agents, stacks } = read
         const now = read.now ?? Date.now()
         this.now = now
-        this.terminals = 'terminals' in agents ? agents.terminals : this.terminals
+        this.terminals =
+          'terminals' in agents
+            ? /** @type {import('herdr').TerminalRow[]} */ (agents.terminals)
+            : this.terminals
         this.state = buildState({ now, fetched: { slots, machine, agents }, previous: this.state })
         const live = /** @type {import('./lib/agents.js').Agent[]} */ (
           this.state.sources['agents']?.value ?? []
@@ -914,8 +944,8 @@ export default class Factory extends View {
         if (!this.seeded) {
           this.seeded = true
           // Each step has the same limit; one that does not answer seeds nothing and the read goes on.
-          const seed = (/** @type {string} */ name, /** @type {() => Promise<any>} */ run) =>
-            limited(FAST_STEP_MS, name, run, sleep)
+          /** @type {<T>(name: string, run: () => Promise<T>) => Promise<T | { error: string }>} */
+          const seed = (name, run) => limited(FAST_STEP_MS, name, run, sleep)
           const history = await seed('readHistory', () => a.readHistory())
           const diffs = await seed('readDiffs', () => a.readDiffs())
           const formsRead = await seed('readForms', () => a.readForms())
@@ -943,8 +973,8 @@ export default class Factory extends View {
             inputs.what.set_value(form.what)
           }
         }
-        const load = this.state.sources.machine.value?.load1 ?? null
-        const cores = this.state.sources.machine.value?.cores ?? 0
+        const load = /** @type {Machine | null} */ (this.state.sources.machine.value)?.load1 ?? null
+        const cores = /** @type {Machine | null} */ (this.state.sources.machine.value)?.cores ?? 0
         if (this.isPanel() && this.config.fixture === null && this.saturation(load, cores, now)) {
           this.post(this.customizer.settings(), 'saturated', {
             title: 'Machine saturated',
@@ -957,7 +987,11 @@ export default class Factory extends View {
         if (sent.length > 0) this.sentNote = `Sent to the master: ${sent.join(' · ')}`
         if (!this.config.fixture) this.history = pushLoad(this.history, now, load)
         if ('error' in stacks) {
-          this.stacks = { ...this.stacks, stale: true, error: stacks.error }
+          this.stacks = {
+            ...this.stacks,
+            stale: true,
+            error: /** @type {string} */ (stacks.error),
+          }
         } else {
           this.stacks = {
             value: parseStacks(stacks.text),
@@ -983,8 +1017,8 @@ export default class Factory extends View {
    * @param {() => boolean} current whether the read that asks is still the newest
    */
   async readStackAges(sleep, current) {
-    const rows = this.panel().sections.stacks.rows.filter((/** @type {any} */ r) => r.removable)
-    const names = new Set(rows.map((/** @type {any} */ r) => r.name))
+    const rows = this.panel().sections.stacks.rows.filter((r) => r.removable)
+    const names = new Set(rows.map((r) => r.name))
     for (const name of Object.keys(this.stackAges))
       if (!names.has(name)) delete this.stackAges[name]
     for (const name of names) {
@@ -1003,6 +1037,8 @@ export default class Factory extends View {
   /**
    * The milestones of each space, from GitHub, unless the pace of the quota or a hidden window says not to
    * (`readsNow` of `lib/quota.js`): a skipped read is not a failure, and the local reads go on.
+   *
+   * @param {Context} cx
    */
   slow(cx) {
     cx.spawn(async (cx) => {
@@ -1070,7 +1106,10 @@ export default class Factory extends View {
     ])
     if (!current()) return
     this.share = {
-      milestones: 'byRepo' in milestones ? milestones.byRepo : this.share.milestones,
+      milestones:
+        'byRepo' in milestones
+          ? /** @type {ShareInput['milestones']} */ (milestones.byRepo)
+          : this.share.milestones,
       fields: 'fields' in fields ? fields.fields : this.share.fields,
     }
   }
@@ -1189,7 +1228,7 @@ export default class Factory extends View {
     })
   }
 
-  /** The app's appearance now: the mod has no pick of its own. */
+  /** The app's appearance now: the mod has no pick of its own. @returns {'dark' | 'light'} */
   themeNow() {
     return settings().dark === false ? 'light' : 'dark'
   }
@@ -1278,7 +1317,7 @@ export default class Factory extends View {
     const header_ = { ...p.header, red: headerRed(settings, s) }
     const shown = banners(ctx, p.banners, controls(ctx, p.header))
     const needs = needsYou(ctx, needsNow, settings.hidden.includes('needs'))
-    /** @type {Record<string, any[]>} */
+    /** @type {Record<string, import('gpui-kit').NativeElement[]>} */
     const drawn = {
       needs: needs.items,
       machine: [machine(ctx, s.machine)],

@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { createAdapters, readConfig } from '../herdr/mod/factory/adapters.js'
 import {
   createGate,
@@ -10,9 +9,7 @@ import {
   SLOW_READ_MS,
   SLOW_STEP_MS,
   within,
-  // @ts-expect-error a plain JavaScript module of the mod, with no declarations
 } from '../herdr/mod/factory/lib/reads.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { buildGithub } from '../herdr/mod/factory/lib/panel.js'
 
 const NEVER = new Promise<never>(() => {})
@@ -78,9 +75,9 @@ describe('the time limits of the reads', () => {
     await time.advance(FAST_STEP_MS)
     const read = await pending
     expect(read.machine).toEqual({ error: 'readMachine: no answer in 20 s' })
-    expect(read.slots.text).toBe(STATUS)
-    expect(read.agents.terminals).toEqual([])
-    expect(read.stacks.text).toBe('[]')
+    expect((read.slots as { text: string }).text).toBe(STATUS)
+    expect((read.agents as { terminals: unknown[] }).terminals).toEqual([])
+    expect((read.stacks as { text: string }).text).toBe('[]')
     expect(read.now).toBe(1_000)
   })
 
@@ -95,7 +92,7 @@ describe('the time limits of the reads', () => {
     await time.advance(1)
     const read = await pending
     expect(read.slots).toEqual({ error: 'readSlots: no answer in 20 s' })
-    expect(read.machine.loadavg).toContain('2.81')
+    expect((read.machine as { loadavg: string }).loadavg).toContain('2.81')
   })
 
   it('a step that rejects ends as an error of its own source and the other sources of the read land', async () => {
@@ -113,8 +110,8 @@ describe('the time limits of the reads', () => {
     )
     expect(read.machine).toEqual({ error: 'readMachine: EIO: sensor gone' })
     expect(read.agents).toEqual({ error: 'readAgents: terminals broke' })
-    expect(read.slots.text).toBe(STATUS)
-    expect(read.stacks.text).toBe('[]')
+    expect((read.slots as { text: string }).text).toBe(STATUS)
+    expect((read.stacks as { text: string }).text).toBe('[]')
     // `within` alone: the value of a promise that settles in time.
     expect(await within(1000, 'step', Promise.resolve(7), time.sleep)).toBe(7)
   })

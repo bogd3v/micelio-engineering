@@ -7,14 +7,17 @@ import { h_flex, v_flex } from 'gpui-base'
 import { customizeButton } from './header.js'
 import { badge, cat, displayBold, label, laneTag } from './ui.js'
 
+/** @typedef {import('../../types/views.js').ViewContext} ViewContext */
+/** @typedef {import('../../types/views.js').BoardModel} BoardModel */
+
 /**
  * The frame of a card by its mark (`Board.dc.html`): magenta on a magenta ground for needs you, a
  * 6 px acid stripe for held, red on a red ground for red, a 2 px dim cyan stripe for the rest. A
  * border has one colour in Herdr's elements, so a stripe is a child of its own.
  *
- * @param {any} ctx
- * @param {any} card
- * @param {any} body the card's content
+ * @param {ViewContext} ctx
+ * @param {BoardModel['columns'][number]['cards'][number]} card
+ * @param {import('gpui-kit').NativeElement} body the card's content
  */
 function frame(ctx, card, body) {
   const box = h_flex().border_1().mb(8).text_size(12)
@@ -38,8 +41,8 @@ function frame(ctx, card, body) {
  * One card: the space, the issue, the lane, the round, a sentence, the cat and name of its agent and
  * how long.
  *
- * @param {any} ctx
- * @param {any} card
+ * @param {ViewContext} ctx
+ * @param {BoardModel['columns'][number]['cards'][number]} card
  */
 function cardOf(ctx, card) {
   const body = v_flex()
@@ -68,7 +71,9 @@ function cardOf(ctx, card) {
             .items_center()
             .gap(6)
             .min_w(0)
-            .children(card.cat === null ? [] : [cat(ctx, card.cat, 16, card.state)])
+            .children(
+              card.cat === null ? [] : [cat(ctx, card.cat, 16, /** @type {string} */ (card.state))]
+            )
             .child(label(card.agent ?? '--', ctx.c['muted'], 11).truncate())
         )
         .child(label(card.time, ctx.c['muted'], 11).whitespace_nowrap())
@@ -83,7 +88,7 @@ function cardOf(ctx, card) {
 /**
  * A filter button of the space or the lane row.
  *
- * @param {any} ctx
+ * @param {ViewContext} ctx
  * @param {'space' | 'lane'} kind
  * @param {{ key: string, label: string, pressed: boolean }} f
  */
@@ -102,22 +107,20 @@ function filterButton(ctx, kind, f) {
     .border_color(ctx.c[on ? fill : 'line'])
     .bg(on ? ctx.c[fill] : ctx.c['bg'])
     .text_color(on ? ctx.c[kind === 'space' ? 'badge-fg' : 'bg'] : ctx.c['fg'])
-    .on_click((/** @type {any} */ _e, /** @type {any} */ cx) =>
-      ctx.ui.setBoardFilter(kind, f.key, cx)
-    )
+    .on_click((_e, cx) => ctx.ui.setBoardFilter(kind, f.key, cx))
     .child(f.label)
 }
 
 /**
- * @param {any} ctx
- * @param {any} model `buildBoard(...)`
+ * @param {ViewContext} ctx
+ * @param {BoardModel} model `buildBoard(...)`
  */
 export function board(ctx, model) {
   const stats = h_flex()
     .flex_wrap()
     .gap(8)
     .children(
-      model.summary.map((/** @type {any} */ s) =>
+      model.summary.map((s) =>
         h_flex()
           .items_center()
           .bg(ctx.c['surface'])
@@ -146,9 +149,9 @@ export function board(ctx, model) {
   const filters = h_flex()
     .flex_wrap()
     .gap(8)
-    .children(model.filters.spaces.map((/** @type {any} */ f) => filterButton(ctx, 'space', f)))
+    .children(model.filters.spaces.map((f) => filterButton(ctx, 'space', f)))
     .child(div().w(1).bg(ctx.c['line']))
-    .children(model.filters.lanes.map((/** @type {any} */ f) => filterButton(ctx, 'lane', f)))
+    .children(model.filters.lanes.map((f) => filterButton(ctx, 'lane', f)))
   // The design's grid: seven columns of at least 180 px that share the width, and a scroll below 1330 px.
   const row = h_flex()
     .w_full()
@@ -156,7 +159,7 @@ export function board(ctx, model) {
     .gap(12)
     .items_start()
     .children(
-      model.columns.map((/** @type {any} */ col) => {
+      model.columns.map((col) => {
         const box = v_flex().flex_1().min_w(0).min_h(520).p(10)
         return (
           col.yours
@@ -176,7 +179,7 @@ export function board(ctx, model) {
               )
               .child(label(`[${col.count}]`, ctx.c['muted'], 11))
           )
-          .children(col.cards.map((/** @type {any} */ c) => cardOf(ctx, c)))
+          .children(col.cards.map((c) => cardOf(ctx, c)))
       })
     )
   const columns = div().id('board-columns').w_full().overflow_x_scrollbar().child(row)
