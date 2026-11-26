@@ -307,7 +307,29 @@ describe('the canonical copy of this repository', () => {
     const files = [STANDARD_PATH, `${PROFILE_DIR}/typescript.md`, `${PROFILE_DIR}/site-engine.md`]
     const texts = files.map((path) => readFileSync(join(ROOT, path), 'utf8'))
     const lines = old.toString('utf8').split('\n')
-    const rules = lines.filter((line) => /\*\*(must|should)\b/i.test(line))
+    // every other line of 1.8 (headings, table separators and short code lines aside) is kept word
+    // for word in one file, except the three lines 2.0 rewrites, the rule of section 13 that 2.2
+    // rewords (the verifier re-creates the repository's stack, on any engine), the Block contract
+    // row that 2.4 rewrites (it also covers the icon catalogue) and the six lines of the TypeScript
+    // profile that 2.5 rewrites (the compiler options, `any` received, `lint:unused`, the 500-line
+    // limit, the outcomes that are return values and the row of `test:coverage`)
+    const rewritten = [
+      /^Version 1\.8 /,
+      /^These are the rules shared/,
+      /^\| `AGENTS\.md` \|/,
+      /^- \*\*Review and verify by others\.\*\*/,
+      /^\| Block contract: /,
+      /^- Every TypeScript project \*\*must\*\* compile under `strict`/,
+      /^- No `any`\. /,
+      /^- Export only what another file imports\./,
+      /^- A file \*\*should\*\* stay under about 500 lines/,
+      /^- "Not found" is a normal result/,
+      /^\| Tests with the coverage floor \|/,
+    ]
+    const rules = lines.filter(
+      (line) =>
+        /\*\*(must|should)\b/i.test(line) && !rewritten.some((pattern) => pattern.test(line))
+    )
     expect(rules.length).toBeGreaterThan(0)
     for (const rule of rules) {
       const found = texts.reduce(
@@ -316,17 +338,6 @@ describe('the canonical copy of this repository', () => {
       )
       expect(found, rule).toBe(1)
     }
-    // every other line of 1.8 (headings, table separators and short code lines aside) is kept word
-    // for word in one file, except the three lines 2.0 rewrites, the rule of section 13 that 2.2
-    // rewords (the verifier re-creates the repository's stack, on any engine) and the Block contract
-    // row that 2.4 rewrites (it also covers the icon catalogue)
-    const rewritten = [
-      /^Version 1\.8 /,
-      /^These are the rules shared/,
-      /^\| `AGENTS\.md` \|/,
-      /^- \*\*Review and verify by others\.\*\*/,
-      /^\| Block contract: /,
-    ]
     const kept = lines.filter(
       (line) =>
         line.trim().length >= 12 &&

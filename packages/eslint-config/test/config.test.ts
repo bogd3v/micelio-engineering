@@ -163,6 +163,19 @@ describe('@micelio/eslint-config against the fixture', () => {
     expect(messages[0]?.message).toContain('Unused eslint-disable directive')
   })
 
+  it('reports a file-wide disable, even one that names its rule and reason', async () => {
+    expect(
+      await ruleIdsFor(
+        '/* eslint-disable no-console -- the whole file prints */\nconsole.log("x");\nexport {};\n'
+      )
+    ).toContain('@eslint-community/eslint-comments/disable-enable-pair')
+    expect(
+      await ruleIdsFor(
+        '/* eslint-disable no-console -- this block prints */\nconsole.log("x");\n/* eslint-enable no-console -- the block ends */\nexport {};\n'
+      )
+    ).toEqual([])
+  })
+
   it('reports a TODO that does not name its issue', async () => {
     expect(await ruleIdsFor('// TODO: later\nexport {};\n')).toContain('micelio/todo-names-issue')
     expect(await ruleIdsFor('// TODO(#12): later\nexport {};\n')).toEqual([])

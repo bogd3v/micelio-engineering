@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { tempDir } from '../../../test/support/temp.js'
-import { loadFileHashes, standardVersion } from '../src/standard.js'
+import { lintStandard, loadFileHashes, standardVersion } from '../src/standard.js'
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url))
 const WORKFLOW = readFileSync(`${ROOT}.github/workflows/standard-sync.yml`, 'utf8')
@@ -835,6 +835,29 @@ describe('apply-standard and the profile pin', () => {
     expect(result.stderr).toContain('pins profile go, which standard 2.0 does not have')
     expect(readFileSync(join(dir, 'docs/engineering-standard.md'), 'utf8')).toBe('older\n')
     expect(existsSync(join(dir, 'docs/standard'))).toBe(false)
+  })
+
+  it('syncs 2.5 with the typescript profile', () => {
+    const core = `${ROOT}docs/engineering-standard.md`
+    expect(CURRENT).toBe('2.5')
+    const dir = pinned('`standard: 2.4`, `profile: typescript`')
+    const result = apply(dir, core)
+    expect(result.status, result.stderr).toBe(0)
+    expect(result.stdout.trim()).toBe('changed')
+    for (const path of ['docs/engineering-standard.md', 'docs/standard/typescript.md']) {
+      expect(readFileSync(join(dir, path), 'utf8'), path).toBe(
+        readFileSync(join(ROOT, path), 'utf8')
+      )
+    }
+    expect(existsSync(join(dir, 'docs/standard/rust.md'))).toBe(false)
+    expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain(
+      '`standard: 2.5`, `profile: typescript`'
+    )
+    expect(lintStandard(dir)).toEqual({
+      ok: true,
+      message:
+        'Standard 2.5 (typescript): docs/engineering-standard.md, docs/standard/typescript.md match the published copy.',
+    })
   })
 
   it('copies no profile file for a version that is one file', () => {

@@ -80,6 +80,8 @@ const config: Linter.Config[] = defineConfig(
       // A disable names its rule and carries its reason (TypeScript profile, section 4)
       '@eslint-community/eslint-comments/no-unlimited-disable': 'error',
       '@eslint-community/eslint-comments/require-description': 'error',
+      // A disable with no matching enable covers the rest of the file (TypeScript profile, section 4)
+      '@eslint-community/eslint-comments/disable-enable-pair': 'error',
       'micelio/todo-names-issue': 'error',
     },
   },

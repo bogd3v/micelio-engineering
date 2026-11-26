@@ -1,6 +1,6 @@
 # Micelio engineering standard: Rust profile
 
-Profile `rust` of standard version 2.1 (2026-11-11). Canonical copy: `bogd3v/micelio-engineering`, `docs/standard/rust.md`.
+Profile `rust` of standard version 2.5 (2026-11-26). Canonical copy: `bogd3v/micelio-engineering`, `docs/standard/rust.md`.
 
 How a repository in Rust meets the core, `docs/engineering-standard.md`. A repository that pins it is bound by exactly what it pins. Each section has the number of the section of the core it belongs to, and "section N" means that section of the core. The sections are those of `typescript.md`; a rule of that profile that has no counterpart here says why in its place.
 
@@ -9,8 +9,16 @@ How a repository in Rust meets the core, `docs/engineering-standard.md`. A repos
 ### Rust
 
 - Every crate **must** build with `cargo clippy --all-targets --locked -- -D warnings` (a warning is an error) and be formatted by `rustfmt`. The check command covers every crate of the repository, tests included.
+- The compiler options of the TypeScript profile (`@micelio/tsconfig`, `checkJs`) have no counterpart: `rustc` checks types, exhaustive matches and missing returns with no switch to turn them off, and the clippy line above is what a crate never relaxes.
 - No `unsafe` without a `// SAFETY:` comment that says why the code is sound; `unsafe` that a safe API can replace is replaced. A crate with no need for `unsafe` says `#![forbid(unsafe_code)]`.
 - Data that crosses a boundary (HTTP, CMS, storage, environment) enters as bytes or text and is parsed into a typed value by a schema or a parser that returns a `Result`; nothing past the boundary handles raw input.
+- The `any` of the TypeScript profile does not exist in Rust: every value has a type the compiler knows, and a `dyn Any` is downcast to its type before it is used.
+- The type assertion and the non-null `!` of the TypeScript profile have no counterpart: no `as` of Rust narrows a type (it converts numbers and pointers), and the `!` is `unwrap`, which "Errors and logging" covers.
+- Schemas are written with `serde`, and the type is the schema: the type that derives `Deserialize` is what the input is parsed into, never described a second time by hand. A format that belongs to a framework keeps that format.
+- A value with a fixed set of shapes is an `enum`, and a `match` over it names every variant: no `_` arm that would hide a new one.
+- The `enum`, `namespace` and parameter properties of the TypeScript profile are TypeScript's own syntax, so that line does not apply: a Rust `enum` is the union of the line above.
+- Every future is awaited or spawned. A future that is never polled does nothing, and `rustc` warns on one (`unused_must_use`), which clippy with `-D warnings` fails. One spawned to run on its own carries the reason on the line.
+- A function **should** not change the data it receives: it takes `&T`, and takes `&mut T` or ownership only when changing the value is its job.
 - Public functions and types declare their types, as every Rust item does. Type-only imports do not exist in Rust, so that line of the TypeScript profile does not apply.
 
 ### Where types and constants live
@@ -37,7 +45,7 @@ Reach decides the place, and visibility is the reach. A declaration starts priva
 - Each repository has exactly one formatter configuration, `rustfmt.toml` or none, checked in CI by `cargo fmt --check`. Formatting is never discussed in review: if `rustfmt` accepts it, it is fine.
 - `async fn` with `.await` and `?`. A future is never driven by hand with `poll` or `block_on` outside a runtime entry point or a test. The `.then()` chains of the TypeScript profile do not exist in Rust, so that line does not apply.
 - Pure logic lives in small functions with no framework types and is unit-tested there. Handlers, commands and routes stay thin.
-- A file **should** stay under about 500 lines and do one job; split it when it passes either limit.
+- A file **should** stay under about 500 lines and do one job; split it when it passes either limit. The TypeScript profile makes this a **must** for a source file because its lint counts the lines; clippy has no such lint, so here it stays a **should**.
 - Within a file the order is: `use` lines, types, constants, the public API, private helpers, then `#[cfg(test)] mod tests`.
 - Dead code is deleted, not commented out. Git keeps the history.
 
@@ -47,7 +55,9 @@ Reach decides the place, and visibility is the reach. A declaration starts priva
 - No panic on input. `unwrap`, `expect`, `panic!`, `unreachable!`, indexing and arithmetic that can overflow are not used on a value that comes from outside the process; they are fine on an invariant the code itself guarantees, with a comment that says which. A test may use them.
 - Catch an error only where it can be handled or given context. Never swallow one: an ignored result (`let _ =`) needs a comment that says why nothing is lost.
 - At a boundary, turn the error into the right answer for the caller (an HTTP status and code, an exit code and a message, a neutral fallback) and log the cause.
-- "Not found" is a normal result, an `Option` or a variant, not an error.
+- An outcome the caller handles in the normal flow (not found, invalid input, a refused transition) is a return value, an `Option` or a variant, not an error.
+- Rust has no `throw`, so the line of the TypeScript profile on `Error` objects becomes: an error the caller is expected to handle is a variant of the error enum of its domain, and at an HTTP boundary its stable `code` is the one of the problem detail.
+- An error given context keeps its cause: the new error holds the old one as its `source()`, and its message is not copied into the new one.
 - Use the repository's one logging facade (`log` or `tracing`). `println!` and `dbg!` do not ship outside the output of a command-line program.
 - Logs **must not** contain secrets, tokens, email addresses or raw IP addresses.
 
@@ -93,11 +103,13 @@ How it is written:
 - Comments inside a function are short and say why, not what. Anything longer goes in `docs/` or an ADR and the comment points to it.
 - A `TODO` names its issue: `// TODO(#123): …`. Without an issue it is not a plan.
 - A suppression (`#[expect(lint, reason = "…")]`, or `#[allow(lint)]` where `expect` cannot be used) covers one item and carries its reason. `#![allow(warnings)]`, `#![allow(clippy::all)]` and crate-wide allows are not used.
+- An `#[expect]` that suppresses nothing fails clippy with `-D warnings` (`unfulfilled_lint_expectations`). The other failures of the TypeScript profile's lint (a suppression without its reason, a crate-wide allow, a `TODO` without its issue) have no lint on by default in clippy: review holds them, and a repository that turns one on adds it to its check command.
 
 ## 8. Tests
 
 - Levels, from cheapest to most expensive: unit (`#[cfg(test)]` next to the code), doctests, integration (`tests/`, through the public API), end to end and performance budgets. `AGENTS.md` lists the commands of each repository.
 - Prefer the real thing to a mock. Replace a collaborator only at the process boundary (the network, the clock, the file system), with one shared fake.
+- The coverage floor is required only when the repository has one, as the row of section 15 says: `cargo llvm-cov` is not part of the toolchain. A floor starts at the value measured when the repository adopts it, rounded down to a whole percent, and only goes up.
 
 ## 10. Dependencies, licences, supply chain and runtime
 
@@ -112,6 +124,7 @@ How it is written:
 - Every published artifact (a crate, a binary, an image) carries a software bill of materials and a signed build provenance attestation, and the operator documentation says how to verify them.
 - The OpenSSF Scorecard runs on every repository. A finding is fixed or written down with the reason, like a dependency alert.
 - All repositories of one organisation run the same Rust toolchain unless an ADR says why not. `rust-toolchain.toml` is the source: CI reads it, and `rust-version` matches or lowers it.
+- The line of the TypeScript profile on the TypeScript major and the Node major does not apply: the line above is its counterpart, and a stable Rust toolchain is replaced by the next one every six weeks instead of reaching an end of support.
 
 ## 11. Git, pull requests and review
 
@@ -157,6 +170,7 @@ Every repository has one check command, the `check:` line of the first `## Comma
 | Format | `cargo fmt --check` | Yes |
 | Lint, including the repository's own rules | `cargo clippy --all-targets --locked -- -D warnings` | Yes |
 | Tests, doctests included, and the coverage floor when the repository has one | `cargo test --locked`; `cargo llvm-cov --locked --fail-under-lines <n>` for the floor | Yes |
+| Unused items | `dead_code`, in the clippy row above, for a private or `pub(crate)` item (section 4, "Where types and constants live") | Yes |
 | Public documentation | `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --locked` | Yes |
 | Licences | `cargo deny check licenses` and `reuse lint` | Yes (allowlist) |
 | The copy of this standard | `npx --yes --package @micelio/eslint-config@<version> micelio-lint-standard`, or the `lint-standard` action in CI | Yes |
