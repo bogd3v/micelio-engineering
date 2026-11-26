@@ -175,7 +175,9 @@ describe('planted-coverage and wrong-test-count.md', () => {
     expect(tests).toContain('$ npm test')
     const real = counts(npmTest(repo).output)
     expect(real).toEqual({ tests: 3, pass: 3, fail: 0 })
-    expect(counts(tests)).toEqual({ tests: real.tests + 1, pass: real.pass + 1, fail: real.fail })
+    const { tests: total, pass, fail } = real
+    if (total === undefined || pass === undefined) throw new Error('npm test printed no counts')
+    expect(counts(tests)).toEqual({ tests: total + 1, pass: pass + 1, fail })
   })
 })
 

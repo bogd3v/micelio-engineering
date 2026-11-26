@@ -126,7 +126,8 @@ export function planFields(
   if (!entry)
     return `fields left alone: the milestone "${milestone}" has no entry in .github/project-fields.json`
   const byRepository = entry.frontByRepository ?? {}
-  const front = Object.hasOwn(byRepository, repository) ? byRepository[repository] : entry.front
+  const own = Object.hasOwn(byRepository, repository) ? byRepository[repository] : undefined
+  const front = own ?? entry.front
   const fields = [
     { name: RELEASE_LINE_FIELD, option: entry.releaseLine },
     { name: FRONT_FIELD, option: front },

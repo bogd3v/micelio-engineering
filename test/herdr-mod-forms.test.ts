@@ -210,6 +210,12 @@ interface TimeCard {
 }
 const timeCards = (needs: { cards: { kind: string }[] }) =>
   needs.cards.filter((c) => c.kind === 'time') as unknown as TimeCard[]
+/** The first time card; throws when there is none. */
+const firstTimeCard = (needs: { cards: { kind: string }[] }): TimeCard => {
+  const [card] = timeCards(needs)
+  if (!card) throw new Error('no time card')
+  return card
+}
 
 describe('Log time on an open pull request', () => {
   it('a pull request that has a time note from the maintainer gets no card', () => {
@@ -250,7 +256,7 @@ describe('Log time on an open pull request', () => {
   })
 
   it('"Log time" opens the form, and its line goes to the master as time #N: time: …', () => {
-    const closed = timeCards(needsWith([pull(1001, 'Closes #410')]))[0]
+    const closed = firstTimeCard(needsWith([pull(1001, 'Closes #410')]))
     expect(closed.form).toBeNull()
     expect(cardMessages(closed)).toEqual([])
     const form = {
@@ -262,7 +268,7 @@ describe('Log time on an open pull request', () => {
         remark: 'the demo site',
       },
     }
-    const open = timeCards(needsWith([pull(1001, 'Closes #410')], form))[0]
+    const open = firstTimeCard(needsWith([pull(1001, 'Closes #410')], form))
     expect(open.form).toMatchObject({ showHands: true, error: null, timer: 'START TIMER' })
     expect(open.posted).toBe('time: 4m stack (the demo site)')
     expect(cardMessages(open)).toEqual([
@@ -279,14 +285,14 @@ describe('Log time on an open pull request', () => {
       timeCards(needsWith([pull(1001, 'Closes #410'), pull(1004, 'Refs #410')])).map((c) => c.pull)
     ).toEqual([1001])
     // An empty form sends nothing; the normal lane has no hands-on check.
-    const empty = timeCards(needsWith([pull(1001, 'Closes #410')], { 410: { open: true } }))[0]
+    const empty = firstTimeCard(needsWith([pull(1001, 'Closes #410')], { 410: { open: true } }))
     expect(empty.form?.error).toBe('Give at least one time.')
     expect(cardMessages(empty)).toEqual([])
-    const normal = timeCards(
+    const normal = firstTimeCard(
       needsWith([pull(1001, 'Closes #411')], {
         411: { open: true, read: 'diff', readMin: '6', hand: 'test', handMin: '3' },
       })
-    )[0]
+    )
     expect(normal.form?.showHands).toBe(false)
     expect(normal.posted).toBe('time: 6m diff')
     // Through the outbox, to the master and nowhere else, after 10 s and once.

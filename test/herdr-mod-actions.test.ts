@@ -431,7 +431,9 @@ describe('the orphans', () => {
     expect(calls).toEqual([])
     expect(await actions.confirm()).toEqual({ ok: true, note: 'pid 4242 ended' })
     expect(calls).toHaveLength(1)
-    const [cmd, args] = calls[0]
+    const [call] = calls
+    if (!call) throw new Error('no command ran')
+    const [cmd, args] = call
     expect(cmd).toBe('sh')
     expect(args[1]).toContain('kill -TERM -- "-$pg"')
     expect(args.at(-1)).toBe('4242')
