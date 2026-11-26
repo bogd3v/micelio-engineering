@@ -162,12 +162,18 @@ export function parseStacks(text) {
     .map((r) => ({ name: r.Name, status: typeof r.Status === 'string' ? r.Status : '' }))
 }
 
+/** The issue a pull request closes or refers to: `Closes #N`, `Fixes #N`, `Refs #N`. @param {string | null | undefined} body @returns {number | null} */
+export function pullIssue(body) {
+  const match = /\b(?:closes|fixes|resolves|refs)\s+#(\d+)/i.exec(body ?? '')
+  return match === null ? null : Number(match[1])
+}
+
 /**
  * An open pull request with what the maintainer wrote on it.
  *
  * @typedef {object} OpenPull
  * @property {number} number
- * @property {string | null} [body]
+ * @property {number | null} issue the issue its body names (`pullIssue`), read with it
  * @property {string} created_at
  * @property {string} [repo] its repository, when it is not the space's
  * @property {{ user?: { login?: string }, body?: string | null }[]} comments the conversation's comments

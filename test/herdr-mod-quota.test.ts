@@ -197,7 +197,7 @@ describe('the conditional requests of the mod', () => {
     expect(first).toEqual([
       {
         number: 9,
-        body: null,
+        issue: null,
         created_at: 'c',
         comments: [{ body: 'c1' }],
         reviews: [{ body: 'r1' }],
