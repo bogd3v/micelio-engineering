@@ -34,6 +34,91 @@ export const LOCKED_NOTE = 'Time form and sign-off unlock after the diff.'
 export const NO_WORKTREE_NOTE = "Open diff needs the worktree in the issue's Progress."
 
 /**
+ * One line to send, and the terminal it goes to.
+ *
+ * @typedef {{ target: string, text: string }} Message
+ *
+ * @typedef {{ name: string, letter: string, colour: string }} SpaceBadge a space as a card names it
+ *
+ * @typedef {{ role: string, state: string, file: string | null }} CardCat the cat of a card
+ */
+
+/**
+ * An express issue that waits for the shared sign-off.
+ *
+ * @typedef {object} ExpressItem
+ * @property {number} number
+ * @property {string} ref
+ * @property {number | string} issue its key (`issueKey` of `panel.js`)
+ * @property {string} repo
+ * @property {string} title
+ * @property {import('./gates.js').Gates['lane']} lane
+ * @property {SpaceBadge} space
+ * @property {string | null} master
+ * @property {boolean} read its diff was opened
+ * @property {number} at
+ * @property {string} label
+ * @property {string | null} worktree
+ */
+
+/**
+ * The time form as a card draws it: a sign-off's or a "Log time" one.
+ *
+ * @typedef {object} CardForm
+ * @property {'none' | 'diff' | 'report'} read
+ * @property {string | null} [readMin]
+ * @property {'none' | 'stack' | 'test'} hand
+ * @property {string} handMin
+ * @property {string} remark
+ * @property {boolean} showHands
+ * @property {string | null} error
+ * @property {boolean} [open] "Log time" only
+ * @property {number | null} [timerAt] "Log time" only
+ * @property {string} [timer] "Log time" only
+ * @property {number | null} [tracked] a sign-off only
+ */
+
+/**
+ * A card of "Needs you". Every kind has the first nine fields; the others are those of its kind.
+ *
+ * @typedef {object} Card
+ * @property {string} key
+ * @property {'master' | 'time' | 'decision' | 'held' | 'signoff' | 'batch'} kind
+ * @property {number} at since when it waits, milliseconds since the epoch
+ * @property {number} age
+ * @property {SpaceBadge} space
+ * @property {string | null} master the master's address
+ * @property {CardCat} cat
+ * @property {string} head
+ * @property {string} text
+ * @property {boolean} [dim] it comes from a stale agents source
+ * @property {number} [number]
+ * @property {string} [ref]
+ * @property {number | string} [issue]
+ * @property {string} [repo]
+ * @property {import('./gates.js').Gates['lane']} [lane]
+ * @property {number} [pull] `time`
+ * @property {CardForm | null} [form] `time` and `signoff`
+ * @property {string | null} [lines] `time` and `signoff`: what the button sends
+ * @property {string | null} [posted] `time`
+ * @property {{ letter: string, text: string }[]} [options] `decision`
+ * @property {boolean} [armed] `held`
+ * @property {string} [retryLabel] `held`
+ * @property {string | null} [armedNote] `held`
+ * @property {string | null} [worktree] `signoff`
+ * @property {string | null} [review] `signoff`
+ * @property {string | null} [verify] `signoff`
+ * @property {string} [laneText] `signoff`
+ * @property {string | null} [commit] `signoff`
+ * @property {boolean} [locked] `signoff`
+ * @property {string} [lockedNote] `signoff`
+ * @property {ExpressItem[]} [items] `batch`
+ * @property {number} [unread] `batch`
+ * @property {number} [readCount] `batch`
+ * @property {Message[]} [messages] `batch`
+ */
+
+/**
  * The first line of a comment without its markup.
  *
  * @param {string} body
@@ -97,7 +182,9 @@ export function parseHeld(comments, maintainer, number) {
     const line = /^held \| [^|]*\| (?:[\w.-]+\/[\w.-]+)?#(\d+) \| G([2-6]) \| (.+)$/m.exec(body)
     if (line !== null) {
       held =
-        Number(line[1]) === number ? { gate: Number(line[2]), reason: line[3].trim(), at } : null
+        Number(line[1]) === number
+          ? { gate: Number(line[2]), reason: /** @type {string} */ (line[3]).trim(), at }
+          : null
       continue
     }
     const gate = /^gate (\d)\b/i.exec(firstLine(body))
@@ -208,7 +295,7 @@ export function pullIssue(body) {
  *
  * @param {object} input
  * @param {number} input.now milliseconds since the epoch
- * @param {{ spaces: import('./panel.js').SpaceConfig[] }} input.config
+ * @param {{ spaces: import('./panel.js').SpaceName[] }} input.config a space with only its name has its master's card and no issue
  * @param {import('./panel.js').Github | null} input.github
  * @param {import('./agents.js').Agent[]} input.agents
  * @param {Record<string, number>} [input.blockedSince] when the panel first saw each blocked terminal (by address)
@@ -217,7 +304,7 @@ export function pullIssue(body) {
  * @param {Record<string, Partial<Form>>} [input.forms] the time forms, by key
  * @param {Record<string, boolean>} [input.armed] the retries the maintainer armed, by card key
  * @param {number} [input.cores] the machine's thread count, for the load a retry waits for
- * @param {Record<string, Partial<TimeLogForm>>} [input.timeForms] the forms of "Log time", by key
+ * @param {Record<string, unknown>} [input.timeForms] the forms of "Log time", each a `Partial<TimeLogForm>`, by key
  * @param {'dark' | 'light'} [input.theme]
  * @param {string | null} [input.agentsNote] the note of a stale agents source (`notLive` of `panel.js`): the cards that come from the agents are dimmed
  */
@@ -236,11 +323,11 @@ export function buildNeeds({
   theme = 'dark',
   agentsNote = null,
 }) {
-  /** @type {any[]} */
+  /** @type {Card[]} */
   const cards = []
-  /** @type {any[]} */
+  /** @type {ExpressItem[]} */
   const express = []
-  config.spaces.forEach((space, at) => {
+  ;/** @type {import('./panel.js').SpaceConfig[]} */ (config.spaces).forEach((space, at) => {
     const badge = {
       name: space.name,
       letter: (space.name[0] ?? '?').toUpperCase(),
@@ -297,7 +384,10 @@ export function buildNeeds({
         const id = ids(number)
         if (noted || carded.has(id.issue)) continue
         carded.add(id.issue)
-        const form = { ...emptyTimeLogForm(), ...timeForms[id.issue] }
+        const form = {
+          ...emptyTimeLogForm(),
+          .../** @type {Partial<TimeLogForm> | undefined} */ (timeForms[id.issue]),
+        }
         // A running timer has not added its minutes yet: the line waits for it to stop.
         const time = !form.open
           ? null
@@ -421,8 +511,14 @@ export function buildNeeds({
           cat: cat('master', 'needs'),
           head: `${where(row.number)} · G5`,
           text: `Ready for your sign-off.${issue?.title ? ` ${issue.title}` : ''}`,
-          review: row.lane === 'express' || last(3) === undefined ? null : last(3)?.summary || null,
-          verify: row.lane === 'express' || last(4) === undefined ? null : last(4)?.summary || null,
+          review:
+            /** @type {Card['lane']} */ (row.lane) === 'express' || last(3) === undefined
+              ? null
+              : last(3)?.summary || null,
+          verify:
+            /** @type {Card['lane']} */ (row.lane) === 'express' || last(4) === undefined
+              ? null
+              : last(4)?.summary || null,
           laneText:
             `${row.lane === 'full' ? 'Full' : row.lane === 'normal' ? 'Normal' : 'Express'}: ${laneWhy(comments, raw.maintainer)}`.trim(),
           commit: commits[id.issue] ?? null,
@@ -445,21 +541,20 @@ export function buildNeeds({
 
   // The green express issues: one card for each space, so that a click sends exactly one message, to
   // that space's master.
-  for (const group of Map.groupBy(express, (/** @type {any} */ i) => i.space.name).values()) {
+  for (const group of Map.groupBy(express, (i) => i.space.name).values()) {
     const sorted = group.toSorted(
-      (/** @type {any} */ a, /** @type {any} */ b) =>
-        a.at - b.at || a.number - b.number || a.ref.localeCompare(b.ref)
+      (a, b) => a.at - b.at || a.number - b.number || a.ref.localeCompare(b.ref)
     )
     const at = sorted[0]?.at ?? now
     const readCount = sorted.filter((i) => i.read).length
-    const space = sorted[0].space
+    const space = /** @type {ExpressItem} */ (sorted[0]).space
     cards.push({
       key: `express:${space.name}`,
       kind: 'batch',
       at,
       age: Math.max(0, now - at),
       space,
-      master: sorted[0].master,
+      master: /** @type {ExpressItem} */ (sorted[0]).master,
       cat: { role: 'master', state: 'needs', file: catFile('master', 'needs', 24, theme) ?? null },
       head: `${space.name} · ${sorted.length} change${sorted.length === 1 ? '' : 's'} · G5 · no reviewer, no stack`,
       text: `${sorted.length} express change${sorted.length === 1 ? ' is' : 's are'} green.`,
@@ -485,20 +580,21 @@ export function buildNeeds({
  * The messages a card sends when its main button is clicked: none while the sign-off is locked, while
  * the time form is invalid or while the space has no master.
  *
- * @param {any} card a card of `buildNeeds`
- * @returns {{ target: string, text: string }[]}
+ * @param {unknown} given a card of `buildNeeds`
+ * @returns {Message[]}
  */
-export function cardMessages(card) {
-  if (card.kind === 'batch') return card.messages
+export function cardMessages(given) {
+  const card = /** @type {Card} */ (given)
+  if (card.kind === 'batch') return /** @type {Message[]} */ (card.messages)
   if (card.kind === 'time') {
     return card.lines === null || card.master === null
       ? []
-      : [{ target: card.master, text: card.lines }]
+      : [{ target: card.master, text: /** @type {string} */ (card.lines) }]
   }
   if (card.kind !== 'signoff' || card.locked || card.lines === null || card.master === null) {
     return []
   }
-  return [{ target: card.master, text: card.lines }]
+  return [{ target: card.master, text: /** @type {string} */ (card.lines) }]
 }
 
 /**

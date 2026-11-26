@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { ROLES, STATES, catFile } from '../herdr/mod/factory/lib/cat.js'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))

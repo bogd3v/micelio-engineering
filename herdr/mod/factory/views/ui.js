@@ -7,15 +7,20 @@
 import { div, image } from 'gpui-kit'
 import { h_flex, v_flex } from 'gpui-base'
 
+/** @typedef {import('../../types/views.js').ViewContext} ViewContext */
+/** @typedef {import('../../types/views.js').ClickHandler} ClickHandler */
+
 /** The family of headings, buttons and badges; the files are in `fonts/`. */
 const DISPLAY = 'Chakra Petch'
 /** The family of everything else. */
 export const MONO = 'JetBrains Mono'
 
 /** A heading, button or badge text: Chakra Petch, semibold. */
-export const display = (/** @type {any} */ el) => el.font_family(DISPLAY).font_semibold()
+export const display = (/** @type {import('gpui-kit').NativeElement} */ el) =>
+  el.font_family(DISPLAY).font_semibold()
 /** A heading text in bold. */
-export const displayBold = (/** @type {any} */ el) => el.font_family(DISPLAY).font_bold()
+export const displayBold = (/** @type {import('gpui-kit').NativeElement} */ el) =>
+  el.font_family(DISPLAY).font_bold()
 
 /**
  * A line of text.
@@ -31,7 +36,7 @@ export function label(text, colour, size = 12) {
 /**
  * The small square with a space's letter.
  *
- * @param {any} ctx
+ * @param {ViewContext} ctx
  * @param {string} letter
  * @param {string} colour a token name
  * @param {number} [size]
@@ -54,7 +59,7 @@ export function badge(ctx, letter, colour, size = 16) {
 /**
  * The lane tag: FULL filled, NORMAL outlined, EXPRESS dashed.
  *
- * @param {any} ctx
+ * @param {ViewContext} ctx
  * @param {string} lane `FULL`, `NORMAL` or `EXPRESS`
  */
 export function laneTag(ctx, lane) {
@@ -77,7 +82,7 @@ export function laneTag(ctx, lane) {
 /**
  * One mark of a gate track, 14 by 6 px. Running and needs-you marks glow in the dark theme.
  *
- * @param {any} ctx
+ * @param {ViewContext} ctx
  * @param {string} mark one of `passed`, `running`, `needs`, `held`, `red`, `notReached`, `omitted`
  */
 export function gateMark(ctx, mark) {
@@ -120,7 +125,7 @@ export function gateMark(ctx, mark) {
  * The cat of `file` at `size` px. A cat that works glows cyan and one that needs the maintainer
  * glows magenta, in the dark theme only.
  *
- * @param {any} ctx
+ * @param {ViewContext} ctx
  * @param {string | null | undefined} file a file of `cats/`
  * @param {number} size
  * @param {string} state `working`, `needs`, `idle`, `held` or `red`
@@ -148,10 +153,10 @@ export function cat(ctx, file, size, state) {
 
 /** A text button: filled when it is the card's main action, outlined otherwise, flat when disabled. */
 export function button(
-  /** @type {any} */ ctx,
+  /** @type {ViewContext} */ ctx,
   /** @type {string} */ id,
   /** @type {string} */ text,
-  /** @type {{ primary?: boolean, disabled?: boolean, tone?: string, fg?: string, tip?: string, click?: any }} */ o = {}
+  /** @type {{ primary?: boolean, disabled?: boolean, tone?: string, fg?: string, tip?: string, click?: ClickHandler }} */ o = {}
 ) {
   const tone = o.tone ?? 'cyan'
   const el = displayBold(div())
@@ -172,25 +177,28 @@ export function button(
       .border_color(ctx.c['track'])
       .tooltip(o.tip ?? ctx.ui.lockedNote)
   }
-  el.cursor_pointer().on_click(o.click)
+  el.cursor_pointer().on_click(/** @type {ClickHandler} */ (o.click))
   if (o.primary === true) {
     return el
-      .bg(ctx.c[tone])
-      .text_color(ctx.c[o.fg ?? 'badge-fg'])
+      .bg(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (tone)])
+      .text_color(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (o.fg ?? 'badge-fg')])
       .border_1()
-      .border_color(ctx.c[tone])
+      .border_color(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (tone)])
   }
-  return el.text_color(ctx.c[tone]).border_1().border_color(ctx.c[tone])
+  return el
+    .text_color(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (tone)])
+    .border_1()
+    .border_color(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (tone)])
 }
 
 /**
  * The heading of a section: `// NAME [-]`, a button that folds it, and what is on its right.
  *
- * @param {any} ctx
+ * @param {ViewContext} ctx
  * @param {string} name the section's key
  * @param {string} title
  * @param {boolean} open
- * @param {any} right an element
+ * @param {import('gpui-kit').NativeElement} right an element
  * @param {string} [colour] a token name
  */
 export function heading(ctx, name, title, open, right, colour = 'cyan') {
@@ -206,8 +214,8 @@ export function heading(ctx, name, title, open, right, colour = 'cyan') {
         .flex()
         .items_center()
         .text_size(12)
-        .text_color(ctx.c[colour])
-        .on_click((/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.toggle(name, cx))
+        .text_color(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (colour)])
+        .on_click((_e, cx) => ctx.ui.toggle(name, cx))
         .child(`// ${title.toUpperCase()} ${open ? '[-]' : '[+]'}`)
     )
     .child(right)
@@ -216,7 +224,7 @@ export function heading(ctx, name, title, open, right, colour = 'cyan') {
 /**
  * The box every section sits in.
  *
- * @param {any} ctx
+ * @param {ViewContext} ctx
  * @param {boolean} [last]
  */
 export function section(ctx, last = false) {
@@ -228,10 +236,10 @@ export function section(ctx, last = false) {
  * The body of a section whose source is not live: the note in red, then the content at opacity 0.6, as
  * Milestones does for a stale GitHub. A live section (`dim` false) is drawn as it is.
  *
- * @param {any} ctx
- * @param {any} box the section, with its heading
+ * @param {ViewContext} ctx
+ * @param {import('gpui-kit').NativeElement} box the section, with its heading
  * @param {{ dim?: boolean, note?: string | null }} m the section's model
- * @param {any[]} content what the section shows below its heading
+ * @param {import('gpui-kit').NativeElement[]} content what the section shows below its heading
  */
 export function liveOrDim(ctx, box, m, content) {
   if (m.note !== null && m.note !== undefined)

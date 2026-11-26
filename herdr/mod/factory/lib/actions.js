@@ -163,7 +163,7 @@ export function stackOwned(name, agents, leases, tags = []) {
  * The buttons' actions.
  *
  * @param {object} deps
- * @param {typeof import('herdr').exec} deps.exec
+ * @param {import('../../types/views.js').Exec} deps.exec
  * @param {{ checkout: string, dockerHost: string }} deps.config
  * @param {() => Facts} deps.facts read when a removal is asked for and again when it is confirmed
  * @param {boolean} [deps.disabled] run nothing: every action answers `FIXTURE_NOTE`

@@ -60,6 +60,12 @@ export function columnOf(gates) {
 }
 
 /**
+ * A milestone as REST returns it, the fields the share reads.
+ *
+ * @typedef {{ number: number, title: string, open_issues: number, closed_issues: number }} RepoMilestone
+ */
+
+/**
  * The factory's share of a release line: the issues of the milestones whose front is `Foundations`
  * over the issues of every milestone of the same line, in the repositories of every pair of the spaces. A
  * milestone's issues are its `open_issues` and `closed_issues` as REST returns them. The line is that of the
@@ -68,7 +74,7 @@ export function columnOf(gates) {
  *
  * @param {object} input
  * @param {Record<string, { releaseLine?: string, front?: string, frontByRepository?: Record<string, string> }>} input.fields `.github/project-fields.json`, by milestone title
- * @param {Record<string, { number: number, title: string, open_issues: number, closed_issues: number }[]>} input.milestones each repository's milestones, `owner/name` to its list
+ * @param {Record<string, RepoMilestone[]>} input.milestones each repository's milestones, `owner/name` to its list
  * @param {{ repo: string, milestone: number, pairs?: import('./panel.js').Pair[] }[]} input.spaces
  * @returns {{ line: string, foundations: number, total: number, percent: number } | null} `null` when no pair's milestone gives a line
  */
@@ -106,12 +112,34 @@ export function factoryShare({ fields, milestones, spaces }) {
 /**
  * @typedef {object} BoardInput
  * @property {number} now milliseconds since the epoch
- * @property {{ sources: Record<string, { value: unknown }> }} state
+ * @property {{ sources: Record<string, { value: unknown, at?: string | null, stale?: boolean }> }} state
  * @property {import('./panel.js').Github | null} github
  * @property {{ spaces: import('./panel.js').SpaceConfig[], maintainer?: string }} config
  * @property {{ line: string, foundations: number, total: number, percent: number } | null} [share]
  * @property {{ space: string, lane: string }} [filter] `all` or a space's name; `all` or a lane tag
  * @property {'dark' | 'light'} [theme]
+ */
+
+/**
+ * A card of the Board: one issue.
+ *
+ * @typedef {object} BoardCard
+ * @property {string} space
+ * @property {string} letter
+ * @property {string} colour
+ * @property {number} number
+ * @property {string} id its reference (`refOf` of `panel.js`)
+ * @property {string} repo
+ * @property {string} lane
+ * @property {string} round
+ * @property {string} text
+ * @property {string | null} agent
+ * @property {string | null} cat a file of `cats/`
+ * @property {string | null} [role]
+ * @property {string | null} state
+ * @property {string} time
+ * @property {number} at when it merged, or how long it has waited
+ * @property {string | null} mark
  */
 
 /** The day of a timestamp, `YYYY-MM-DD`, UTC. @param {number} ms */
@@ -175,7 +203,7 @@ export function buildBoard({
     },
   ]
 
-  /** @type {Record<string, any[]>} */
+  /** @type {Record<string, BoardCard[]>} */
   const columns = Object.fromEntries(COLUMNS.map((c) => [c.key, []]))
   /** @type {{ key: string, label: string, letter: string, colour: string, merged: string }[]} */
   const spaceFilters = []

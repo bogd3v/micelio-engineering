@@ -1,17 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { createAdapters, readConfig } from '../herdr/mod/factory/adapters.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { buildGithub, buildPanel } from '../herdr/mod/factory/lib/panel.js'
 import {
   COMMENTS_MAX_AGE_MS,
   paceOf,
   parseReply,
   readsNow,
-  // @ts-expect-error a plain JavaScript module of the mod, with no declarations
 } from '../herdr/mod/factory/lib/quota.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { buildState } from '../herdr/mod/factory/lib/state.js'
 
 const REPO = 'bogd3v/micelio-engineering'

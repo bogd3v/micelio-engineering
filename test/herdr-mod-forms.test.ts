@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { createAdapters, readConfig } from '../herdr/mod/factory/adapters.js'
 import {
   buildNeeds,
@@ -10,13 +9,9 @@ import {
   createOutbox,
   emptyTimeLogForm,
   pullIssue,
-  // @ts-expect-error a plain JavaScript module of the mod, with no declarations
 } from '../herdr/mod/factory/lib/needs.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { buildGithub } from '../herdr/mod/factory/lib/panel.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { parseAgents } from '../herdr/mod/factory/lib/agents.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { buildState } from '../herdr/mod/factory/lib/state.js'
 import {
   hasTimeNote,
@@ -24,14 +19,8 @@ import {
   timeLine,
   timeMessage,
   timerLabel,
-  // @ts-expect-error a plain JavaScript module of the mod, with no declarations
 } from '../herdr/mod/factory/lib/time.js'
-import {
-  CATEGORIES,
-  correctionLine,
-  emptyLogForm,
-  // @ts-expect-error a plain JavaScript module of the mod, with no declarations
-} from '../herdr/mod/factory/lib/log.js'
+import { CATEGORIES, correctionLine, emptyLogForm } from '../herdr/mod/factory/lib/log.js'
 import { parseTime } from '../packages/factory-tools/src/parse.js'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
@@ -62,8 +51,8 @@ describe('the time line of the form', () => {
                 }
                 expect(error).toBeNull()
                 produced += 1
-                const parsed = parseTime(line)
-                expect(parsed, line).not.toBeNull()
+                const parsed = parseTime(line!)
+                expect(parsed, line!).not.toBeNull()
                 expect(parsed).toEqual({
                   diff: read === 'diff' ? Number(readMin) : null,
                   report: read === 'report' ? Number(readMin) : null,
@@ -342,7 +331,7 @@ describe('Log time on an open pull request', () => {
       now,
       config: read,
       github,
-      agents: state.sources.agents.value,
+      agents: state.sources.agents.value!,
       diffs: { 389: now - 11 * MIN },
       timeForms: { 389: { ...forms.time['389'], open: true } },
     })
@@ -438,7 +427,7 @@ describe('Log a correction', () => {
     // Through the outbox, to the master, after 10 s and once.
     const sent: [string, string][] = []
     const outbox = createOutbox({ send: (t: string, x: string) => sent.push([t, x]) })
-    outbox.start(0, 'correction #792', [{ target: 'tfix-master', text: piped.send }], 'log')
+    outbox.start(0, 'correction #792', [{ target: 'tfix-master', text: piped.send! }], 'log')
     outbox.tick(10_000)
     outbox.tick(20_000)
     expect(sent).toEqual([['tfix-master', 'log #792 | ran a \\| b and c\\|d | test']])

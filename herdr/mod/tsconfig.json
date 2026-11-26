@@ -1,0 +1,10 @@
+{
+  "extends": "@micelio/tsconfig",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "lib": ["ES2023", "ES2024.Collection"]
+  },
+  "include": ["*.mjs", "factory/**/*.js", "types"]
+}

@@ -51,6 +51,13 @@ export const THEMES = {
   },
 }
 
+/** @typedef {keyof typeof THEMES.dark} Token a name of tokens.json */
+/**
+ * The colours by name: every token has one, and a name that is not a token may have none.
+ *
+ * @typedef {Record<Token, string> & Record<string, string>} Colours
+ */
+
 /** The mod's neutral tokens, by the name of the app's `theme()` colour each one takes. */
 const FROM_APP = {
   bg: 'canvas',
@@ -67,10 +74,10 @@ const FROM_APP = {
  * A name `app` lacks, or whose value is not a string, keeps the value of `THEMES`. Reads no global.
  * @param {Record<string, unknown> | null | undefined} app the object `theme()` returns
  * @param {boolean} dark whether the app's appearance is dark
- * @returns {Record<string, string>}
+ * @returns {Colours}
  */
 export function colours(app, dark) {
-  /** @type {Record<string, string>} */
+  /** @type {Colours} */
   const out = { ...(dark ? THEMES.dark : THEMES.light) }
   for (const [token, name] of Object.entries(FROM_APP)) {
     const value = app?.[name]

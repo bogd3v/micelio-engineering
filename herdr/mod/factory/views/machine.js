@@ -5,9 +5,12 @@ import { div } from 'gpui-kit'
 import { h_flex, v_flex } from 'gpui-base'
 import { displayBold, heading, label, liveOrDim, section } from './ui.js'
 
+/** @typedef {import('../../types/views.js').ViewContext} ViewContext */
+/** @typedef {import('../../types/views.js').PanelSections} PanelSections */
+
 /**
- * @param {any} ctx
- * @param {any} m `panel.sections.machine`
+ * @param {ViewContext} ctx
+ * @param {PanelSections['machine']} m `panel.sections.machine`
  */
 export function machine(ctx, m) {
   const pill = displayBold(div()).px(8).py(2).text_size(11).child(m.pill)
@@ -41,7 +44,12 @@ export function machine(ctx, m) {
         .items_baseline()
         .gap(8)
         .mt(10)
-        .child(displayBold(div()).text_size(34).text_color(ctx.c[m.tone]).child(m.load))
+        .child(
+          displayBold(div())
+            .text_size(34)
+            .text_color(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (m.tone)])
+            .child(m.load)
+        )
         .child(
           label(
             `load / ${m.cores} threads · wait > ${Math.round(m.cores * 0.75)}`,
@@ -60,7 +68,7 @@ export function machine(ctx, m) {
           div()
             .h_full()
             .w(`${Math.round(m.fraction * 100)}%`)
-            .bg(ctx.c[m.tone])
+            .bg(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (m.tone)])
         )
     )
     .child(
@@ -77,7 +85,7 @@ export function machine(ctx, m) {
               .h(
                 `${bar.load === null ? 4 : Math.max(4, Math.round((Math.min(bar.load, m.cores * 1.35) / (m.cores * 1.35)) * 100))}%`
               )
-              .bg(ctx.c[bar.tone])
+              .bg(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (bar.tone)])
           )
         )
     )

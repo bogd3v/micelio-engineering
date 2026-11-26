@@ -13,7 +13,29 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const DESIGN = join(HERE, 'design')
 const CROPS = ['full', 'head']
 
-/** A colour of the source: a token of the theme, or a literal `#rrggbb`. */
+/** @typedef {Record<string, string>} Tokens the colours of one theme of `design/tokens.json`, by name */
+
+/** @typedef {{ x: number, y: number, size: number }} Crop */
+
+/**
+ * The parts of `design/cats.json` the build reads.
+ *
+ * @typedef {object} Cats
+ * @property {Record<string, { body: string, collar: string, objectFill: string, ink: string, paths: { silhouette: string, collar: string, objectFill: string, ink: string } }>} roles
+ * @property {Record<string, { outline: string, outlineWidth: number, eyes: string, marks: string[], opacity?: number }>} states
+ * @property {Record<string, Crop>} crops
+ * @property {Record<string, { d: string, fill?: string, stroke?: string, width?: number }>} eyes
+ * @property {{ cx: number, cy: number, r: number, fill: Record<string, string> }} bell
+ * @property {{ icons: Record<string, string> }} badge
+ * @property {Record<string, { d: string, stroke: string, width: number, offsetFromCropOrigin: number, size: number, fill: string, strokeWidth: number, bars: string, barColour: string, barWidth: number }>} marks
+ */
+
+/**
+ * A colour of the source: a token of the theme, or a literal `#rrggbb`.
+ *
+ * @param {string} value
+ * @param {Tokens} theme
+ */
 function colour(value, theme) {
   if (value.startsWith('#')) return value
   const found = theme[value]
@@ -21,19 +43,30 @@ function colour(value, theme) {
   return found
 }
 
-/** The icon of a role's badge, with its placeholders filled. */
+/**
+ * The icon of a role's badge, with its placeholders filled.
+ *
+ * @param {Cats} cats
+ * @param {string} role
+ */
 function badge(cats, role) {
-  const figure = cats.roles[role]
+  const figure = /** @type {Cats['roles'][string]} */ (cats.roles[role])
   const reviewer = role === 'reviewer'
-  return cats.badge.icons[role]
+  return /** @type {string} */ (cats.badge.icons[role])
     .replaceAll('{{c.ink}}', figure.ink)
     .replaceAll('{{halo}}', reviewer ? 'none' : '#ffffff')
     .replaceAll('{{notch}}', reviewer ? '#15161c' : '#ffffff')
 }
 
-/** The pause mark of "held", at the crop's origin plus its offset. */
+/**
+ * The pause mark of "held", at the crop's origin plus its offset.
+ *
+ * @param {Cats} cats
+ * @param {Tokens} theme
+ * @param {Crop} crop
+ */
 function pause(cats, theme, crop) {
-  const p = cats.marks.pause
+  const p = /** @type {Cats['marks'][string]} */ (cats.marks.pause)
   const at = `translate(${crop.x + p.offsetFromCropOrigin} ${crop.y + p.offsetFromCropOrigin})`
   return (
     `<g transform="${at}">` +
@@ -43,32 +76,41 @@ function pause(cats, theme, crop) {
   )
 }
 
-/** The SVG of one cat. */
+/**
+ * The SVG of one cat.
+ *
+ * @param {Cats} cats
+ * @param {{ themes: Record<string, Tokens> }} tokens
+ * @param {string} role
+ * @param {string} state
+ * @param {string} cropName
+ * @param {string} themeName
+ */
 function drawCat(cats, tokens, role, state, cropName, themeName) {
-  const theme = tokens.themes[themeName]
-  const figure = cats.roles[role]
-  const spec = cats.states[state]
-  const crop = cats.crops[cropName]
+  const theme = /** @type {Tokens} */ (tokens.themes[themeName])
+  const figure = /** @type {Cats['roles'][string]} */ (cats.roles[role])
+  const spec = /** @type {Cats['states'][string]} */ (cats.states[state])
+  const crop = /** @type {Crop} */ (cats.crops[cropName])
   const outline = colour(spec.outline, theme)
-  const eyes = cats.eyes[spec.eyes]
+  const eyes = /** @type {Cats['eyes'][string]} */ (cats.eyes[spec.eyes])
   const parts = []
   parts.push(
     `<path d="${figure.paths.silhouette}" fill="${figure.body}" stroke="${outline}" stroke-width="${spec.outlineWidth}" stroke-linejoin="round"/>`,
     `<path d="${figure.paths.collar}" fill="${figure.collar}"/>`,
-    `<circle cx="${cats.bell.cx}" cy="${cats.bell.cy}" r="${cats.bell.r}" fill="${colour(cats.bell.fill[state], theme)}"/>`,
+    `<circle cx="${cats.bell.cx}" cy="${cats.bell.cy}" r="${cats.bell.r}" fill="${colour(/** @type {string} */ (cats.bell.fill[state]), theme)}"/>`,
     `<path d="${figure.paths.objectFill}" fill="${figure.objectFill}"/>`,
     `<path d="${figure.paths.ink}" fill="${figure.ink}" fill-rule="evenodd"/>`
   )
   parts.push(
     eyes.fill === undefined
-      ? `<path d="${eyes.d}" fill="none" stroke="${colour(eyes.stroke, { ink: figure.ink })}" stroke-width="${eyes.width}" stroke-linecap="round"/>`
+      ? `<path d="${eyes.d}" fill="none" stroke="${colour(/** @type {string} */ (eyes.stroke), { ink: figure.ink })}" stroke-width="${eyes.width}" stroke-linecap="round"/>`
       : `<path d="${eyes.d}" fill="${figure.ink}"/>`
   )
   for (const mark of spec.marks) {
     if (mark === 'pause') {
       parts.push(pause(cats, theme, crop))
     } else {
-      const m = cats.marks[mark]
+      const m = /** @type {Cats['marks'][string]} */ (cats.marks[mark])
       parts.push(
         `<path d="${m.d}" fill="none" stroke="${colour(m.stroke, { outline })}" stroke-width="${m.width}" stroke-linecap="round"/>`
       )
@@ -88,7 +130,11 @@ function drawCat(cats, tokens, role, state, cropName, themeName) {
   )
 }
 
-/** Writes the 120 files into `outDir`; returns their names. */
+/**
+ * Writes the 120 files into `outDir`; returns their names.
+ *
+ * @param {string} outDir
+ */
 function buildCats(outDir) {
   const cats = JSON.parse(readFileSync(join(DESIGN, 'cats.json'), 'utf8'))
   const tokens = JSON.parse(readFileSync(join(DESIGN, 'tokens.json'), 'utf8'))

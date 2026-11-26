@@ -2,21 +2,13 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { readConfig } from '../herdr/mod/factory/adapters.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { parseAgents } from '../herdr/mod/factory/lib/agents.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { onPair, pairsOf } from '../herdr/mod/factory/lib/panel.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { parseGates } from '../herdr/mod/factory/lib/gates.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { buildIssues, dependsOn } from '../herdr/mod/factory/lib/issues.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { parseMachine } from '../herdr/mod/factory/lib/machine.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { parseSlots } from '../herdr/mod/factory/lib/slots.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { buildState } from '../herdr/mod/factory/lib/state.js'
 
 const FIXTURES = join(fileURLToPath(new URL('./', import.meta.url)), 'fixtures/herdr-mod')
@@ -486,8 +478,8 @@ describe('the spaces of the layout', () => {
       ['worker', 5, ''],
       ['worker', 267, 'pc'],
     ])
-    expect(agents.filter((a) => onPair(a, two)).map((a) => a.address)).toEqual(['a', 'b', 'c'])
-    expect(agents.filter((a) => onPair(a, own)).map((a) => a.address)).toEqual(['d'])
+    expect(agents.filter((a) => onPair(a, two!)).map((a) => a.address)).toEqual(['a', 'b', 'c'])
+    expect(agents.filter((a) => onPair(a, own!)).map((a) => a.address)).toEqual(['d'])
   })
 })
 

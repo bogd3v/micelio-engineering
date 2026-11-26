@@ -10,13 +10,26 @@ import { div } from 'gpui-kit'
 import { h_flex, Input, v_flex } from 'gpui-base'
 import { badge, button, cat, display, displayBold, label, laneTag } from './ui.js'
 
+/** @typedef {import('../../types/views.js').ViewContext} ViewContext */
+/** @typedef {import('../../types/views.js').Pending} Pending */
+/** @typedef {import('../../types/views.js').ClickHandler} ClickHandler */
+
+/** @typedef {import('../lib/needs.js').Card} Card */
+/** @typedef {'number' | 'ref' | 'issue' | 'repo' | 'lane'} IssueFields */
+/** @typedef {Card & Required<Pick<Card, IssueFields | 'form' | 'lines' | 'posted'>>} FormCard a card with a time form, closed (`null`) or open */
+/** @typedef {FormCard & { form: import('../lib/needs.js').CardForm }} OpenFormCard a card that draws its time form */
+/** @typedef {FormCard & Required<Pick<Card, 'worktree' | 'review' | 'verify' | 'laneText' | 'commit' | 'locked' | 'lockedNote'>>} SignoffCard */
+/** @typedef {Card & Required<Pick<Card, 'items' | 'unread' | 'readCount' | 'messages'>>} BatchCard */
+/** @typedef {Card & Required<Pick<Card, IssueFields>>} DecisionCard */
+/** @typedef {DecisionCard & Required<Pick<Card, 'retryLabel' | 'armed' | 'armedNote'>>} HeldCard */
+
 /** A pill of the time form: selected is filled cyan. */
 function pill(
-  /** @type {any} */ ctx,
+  /** @type {ViewContext} */ ctx,
   /** @type {string} */ id,
   /** @type {string} */ text,
   /** @type {boolean} */ on,
-  /** @type {any} */ click
+  /** @type {ClickHandler} */ click
 ) {
   const el = displayBold(div())
     .id(id)
@@ -33,11 +46,11 @@ function pill(
     : el.text_color(ctx.c['fg']).border_1().border_color(ctx.c['line'])
 }
 
-const legend = (/** @type {any} */ ctx, /** @type {string} */ text) =>
+const legend = (/** @type {ViewContext} */ ctx, /** @type {string} */ text) =>
   displayBold(div()).text_size(11).text_color(ctx.c['muted']).mb(6).child(text.toUpperCase())
 
 /** The top line of a card: the cat, the space's badge, what it is, the lane and the age. */
-function top(/** @type {any} */ ctx, /** @type {any} */ card) {
+function top(/** @type {ViewContext} */ ctx, /** @type {Card} */ card) {
   const row = h_flex().items_center().gap(6).text_size(11).text_color(ctx.c['muted'])
   row.child(cat(ctx, card.cat.file, 24, card.cat.state))
   if (card.space !== null) row.child(badge(ctx, card.space.letter, card.space.colour, 16))
@@ -50,7 +63,7 @@ function top(/** @type {any} */ ctx, /** @type {any} */ card) {
 }
 
 /** The facts of a sign-off: review, verification, lane, commit. */
-function facts(/** @type {any} */ ctx, /** @type {any} */ card) {
+function facts(/** @type {ViewContext} */ ctx, /** @type {SignoffCard} */ card) {
   /** @type {[string, string | null][]} */
   const lines = [
     ['REVIEW', card.review],
@@ -85,7 +98,7 @@ function facts(/** @type {any} */ ctx, /** @type {any} */ card) {
 }
 
 /** The countdown that replaces the button while a line waits, with its undo. */
-function countdown(/** @type {any} */ ctx, /** @type {any} */ pending) {
+function countdown(/** @type {ViewContext} */ ctx, /** @type {Pending} */ pending) {
   return h_flex()
     .mt(10)
     .items_center()
@@ -117,7 +130,7 @@ function countdown(/** @type {any} */ ctx, /** @type {any} */ pending) {
     .child(
       button(ctx, 'needs-undo', 'UNDO', {
         tone: 'magenta',
-        click: (/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.undo(cx),
+        click: (_e, cx) => ctx.ui.undo(cx),
       })
     )
 }
@@ -126,13 +139,16 @@ function countdown(/** @type {any} */ ctx, /** @type {any} */ pending) {
  * The time form of an unlocked sign-off (`TimeForm.png`) or, with `log`, the one of an open pull request
  * (`TimeLog.png`: Noted, Diff or Reports, a timer for the hands-on check, "Posted on the PR").
  */
-function timeForm(/** @type {any} */ ctx, /** @type {any} */ card, log = false) {
+function timeForm(/** @type {ViewContext} */ ctx, /** @type {OpenFormCard} */ card, log = false) {
   const f = card.form
   const n = card.issue
   const inputs = log ? ctx.ui.timeInputs(n) : ctx.ui.inputs(n)
-  const set = (/** @type {any} */ patch) => (/** @type {any} */ _e, /** @type {any} */ cx) =>
-    log ? ctx.ui.setTimeForm(n, patch, cx) : ctx.ui.setForm(n, patch, cx)
-  const minutes = (/** @type {any} */ state) => div().w(64).flex_none().child(Input.new(state))
+  const set =
+    (/** @type {Record<string, unknown>} */ patch) =>
+    /** @type {ClickHandler} */
+    (_e, cx) => (log ? ctx.ui.setTimeForm(n, patch, cx) : ctx.ui.setForm(n, patch, cx))
+  const minutes = (/** @type {import('gpui-base').InputState} */ state) =>
+    div().w(64).flex_none().child(Input.new(state))
   const box = v_flex()
     .mt(10)
     .gap(10)
@@ -202,8 +218,8 @@ function timeForm(/** @type {any} */ ctx, /** @type {any} */ card, log = false) 
           .text_color(ctx.c['magenta'])
           .border_1()
           .border_color(ctx.c['magenta'])
-          .on_click((/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.toggleTimer(n, cx))
-          .child(f.timer)
+          .on_click((_e, cx) => ctx.ui.toggleTimer(n, cx))
+          .child(/** @type {string} */ (f.timer))
       )
     }
     box.child(v_flex().child(legend(ctx, 'Hands-on check')).child(row))
@@ -239,7 +255,7 @@ function timeForm(/** @type {any} */ ctx, /** @type {any} */ card, log = false) 
   return box
 }
 
-/** @param {any} ctx @param {any} card */
+/** @param {ViewContext} ctx @param {SignoffCard} card */
 function signoff(ctx, card) {
   const pending = ctx.ui.pending
   const mine = pending !== null && pending.key === card.key
@@ -267,18 +283,18 @@ function signoff(ctx, card) {
   if (card.locked) {
     return body.child(label(card.lockedNote, ctx.c['muted'], 11).mt(6))
   }
-  body.child(timeForm(ctx, card))
+  body.child(timeForm(ctx, /** @type {OpenFormCard} */ (card)))
   if (mine) return body.child(countdown(ctx, pending))
   return body.child(
     button(ctx, `signoff-${card.issue}`, `APPROVE & SIGN OFF ${card.ref}`, {
       primary: true,
       disabled: card.lines === null || card.master === null || pending !== null,
-      click: (/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.send(card, cx),
+      click: (_e, cx) => ctx.ui.send(card, cx),
     }).mt(10)
   )
 }
 
-/** @param {any} ctx @param {any} card */
+/** @param {ViewContext} ctx @param {BatchCard} card */
 function batch(ctx, card) {
   const pending = ctx.ui.pending
   const mine = pending !== null && pending.key === card.key
@@ -290,7 +306,7 @@ function batch(ctx, card) {
       .mt(8)
       .gap(6)
       .children(
-        card.items.map((/** @type {any} */ i) =>
+        card.items.map((i) =>
           h_flex()
             .items_center()
             .gap(6)
@@ -309,7 +325,7 @@ function batch(ctx, card) {
       .child(
         button(ctx, `read-diffs-${card.key}`, `READ THE ${card.items.length} DIFFS`, {
           disabled: unread === 0,
-          click: (/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.readDiffs(card, cx),
+          click: (_e, cx) => ctx.ui.readDiffs(card, cx),
         })
       )
       .child(
@@ -318,7 +334,7 @@ function batch(ctx, card) {
           : button(ctx, `signoff-${card.key}`, `SIGN OFF ${card.readCount} EXPRESS`, {
               primary: true,
               disabled: card.messages.length === 0 || pending !== null,
-              click: (/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.send(card, cx),
+              click: (_e, cx) => ctx.ui.send(card, cx),
             })
       )
   )
@@ -332,7 +348,7 @@ function batch(ctx, card) {
   )
 }
 
-/** An open pull request with no `time:` note of the maintainer (`Panel.png`, f3-main; `TimeLog.png`). @param {any} ctx @param {any} card */
+/** An open pull request with no `time:` note of the maintainer (`Panel.png`, f3-main; `TimeLog.png`). @param {ViewContext} ctx @param {FormCard} card */
 function timeCard(ctx, card) {
   const pending = ctx.ui.pending
   const mine = pending !== null && pending.key === card.key
@@ -343,23 +359,22 @@ function timeCard(ctx, card) {
     return body.child(
       button(ctx, `log-time-${card.issue}`, 'LOG TIME', {
         tone: 'fg',
-        click: (/** @type {any} */ _e, /** @type {any} */ cx) =>
-          ctx.ui.setTimeForm(card.issue, { open: true }, cx),
+        click: (_e, cx) => ctx.ui.setTimeForm(card.issue, { open: true }, cx),
       }).mt(10)
     )
   }
-  body.child(timeForm(ctx, card, true))
+  body.child(timeForm(ctx, /** @type {OpenFormCard} */ (card), true))
   if (mine) return body.child(countdown(ctx, pending))
   return body.child(
     button(ctx, `post-time-${card.issue}`, 'POST TIME NOTE', {
       primary: true,
       disabled: card.lines === null || card.master === null || pending !== null,
-      click: (/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.send(card, cx),
+      click: (_e, cx) => ctx.ui.send(card, cx),
     }).mt(10)
   )
 }
 
-/** @param {any} ctx @param {any} card */
+/** @param {ViewContext} ctx @param {DecisionCard} card */
 function decision(ctx, card) {
   return v_flex()
     .child(top(ctx, card))
@@ -380,7 +395,7 @@ function decision(ctx, card) {
     )
 }
 
-/** @param {any} ctx @param {any} card */
+/** @param {ViewContext} ctx @param {HeldCard} card */
 function held(ctx, card) {
   const body = v_flex()
     .child(top(ctx, card))
@@ -393,7 +408,7 @@ function held(ctx, card) {
           button(ctx, `retry-${card.issue}`, card.retryLabel, {
             disabled: card.master === null,
             tip: 'This space has no master to send retry to.',
-            click: (/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.toggleRetry(card, cx),
+            click: (_e, cx) => ctx.ui.toggleRetry(card, cx),
           })
         )
     )
@@ -401,7 +416,7 @@ function held(ctx, card) {
   return body
 }
 
-/** @param {any} ctx @param {any} card */
+/** @param {ViewContext} ctx @param {Card} card */
 function master(ctx, card) {
   return v_flex()
     .child(top(ctx, card))
@@ -417,10 +432,10 @@ function master(ctx, card) {
  * The section as a list of elements, so that each card is an item of the panel's scroll and
  * `factory.reveal:card-<n>` can bring it into view: the heading first, then one element for each card.
  *
- * @param {any} ctx
- * @param {any} needs `buildNeeds`
+ * @param {ViewContext} ctx
+ * @param {ReturnType<typeof import('../lib/needs.js').buildNeeds>} needs `buildNeeds`
  * @param {boolean} [collapsed] hidden in Customize: the heading and the count, no cards
- * @returns {{ items: any[], keys: string[] }} empty when nothing waits
+ * @returns {{ items: import('gpui-kit').NativeElement[], keys: string[] }} empty when nothing waits
  */
 export function needsYou(ctx, needs, collapsed = false) {
   if (needs.count === 0) return { items: [], keys: [] }
@@ -442,21 +457,24 @@ export function needsYou(ctx, needs, collapsed = false) {
   const keys = ['needs']
   // Hidden in Customize while something waits: the heading and its count, no cards.
   if (collapsed) {
-    items[0] = items[0].pb(14).border_b(1).border_color(ctx.c['line'])
+    items[0] = /** @type {import('gpui-kit').NativeElement} */ (items[0])
+      .pb(14)
+      .border_b(1)
+      .border_color(ctx.c['line'])
     return { items, keys }
   }
-  needs.cards.forEach((/** @type {any} */ card, /** @type {number} */ i) => {
+  needs.cards.forEach((card, i) => {
     const inner =
       card.kind === 'signoff'
-        ? signoff(ctx, card)
+        ? signoff(ctx, /** @type {SignoffCard} */ (card))
         : card.kind === 'batch'
-          ? batch(ctx, card)
+          ? batch(ctx, /** @type {BatchCard} */ (card))
           : card.kind === 'decision'
-            ? decision(ctx, card)
+            ? decision(ctx, /** @type {DecisionCard} */ (card))
             : card.kind === 'held'
-              ? held(ctx, card)
+              ? held(ctx, /** @type {HeldCard} */ (card))
               : card.kind === 'time'
-                ? timeCard(ctx, card)
+                ? timeCard(ctx, /** @type {FormCard} */ (card))
                 : master(ctx, card)
     const last = i === needs.cards.length - 1
     const body = div()
@@ -474,6 +492,10 @@ export function needsYou(ctx, needs, collapsed = false) {
     )
     keys.push(`card-${i}`)
   })
-  items[items.length - 1] = items[items.length - 1].border_b(1).border_color(ctx.c['line'])
+  items[items.length - 1] = /** @type {import('gpui-kit').NativeElement} */ (
+    items[items.length - 1]
+  )
+    .border_b(1)
+    .border_color(ctx.c['line'])
   return { items, keys }
 }

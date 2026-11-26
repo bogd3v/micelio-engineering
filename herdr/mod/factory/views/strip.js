@@ -4,8 +4,10 @@ import { div } from 'gpui-kit'
 import { h_flex, v_flex } from 'gpui-base'
 import { displayBold, label } from './ui.js'
 
+/** @typedef {import('../../types/views.js').ViewContext} ViewContext */
+
 /**
- * @param {any} ctx
+ * @param {ViewContext} ctx
  * @param {{ key: string, label: string, value: string, tone: string, fill: string | null }[]} cells `panel.strip`
  */
 export function strip(ctx, cells) {
@@ -23,8 +25,15 @@ export function strip(ctx, cells) {
           .border_r(1)
           .border_color(ctx.c['line'])
           .child(label(cell.label, ctx.c['muted'], 9.5))
-          .child(displayBold(div()).text_size(14).text_color(ctx.c[cell.tone]).child(cell.value))
-        return cell.fill === null ? box : box.bg(ctx.c[cell.fill])
+          .child(
+            displayBold(div())
+              .text_size(14)
+              .text_color(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (cell.tone)])
+              .child(cell.value)
+          )
+        return cell.fill === null
+          ? box
+          : box.bg(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (cell.fill)])
       })
     )
 }

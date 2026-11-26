@@ -20,6 +20,12 @@ import { ageMs } from './time.js'
  */
 
 /**
+ * An item of a milestone as REST returns it, the fields the model reads.
+ *
+ * @typedef {{ number: number, title?: string, state?: string, body?: string | null, created_at?: string, pull_request?: unknown }} Issue
+ */
+
+/**
  * The numbers of the issues a body's `## Depends on` section names (`- #296 (…)`).
  *
  * @param {unknown} body
@@ -36,8 +42,8 @@ export function dependsOn(body) {
  * Turns a milestone's issues into rows.
  *
  * @param {object} input
- * @param {{ number: number, title?: string, state?: string, body?: string | null, created_at?: string, pull_request?: unknown }[]} input.issues the milestone's items as REST returns them; pull requests are left out
- * @param {Record<number, { user?: { login?: string }, body?: string, created_at?: string, id?: number }[]>} input.comments each issue's comments
+ * @param {Issue[]} input.issues the milestone's items as REST returns them; pull requests are left out
+ * @param {Record<number, import('./gates.js').Comment[]>} input.comments each issue's comments
  * @param {string} input.maintainer the login whose comments count
  * @param {number} input.now milliseconds since the epoch
  * @param {{ issue: number | null, needsYou: boolean }[]} [input.agents] the agents (`parseAgents`)

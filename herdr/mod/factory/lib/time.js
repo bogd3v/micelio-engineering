@@ -52,12 +52,12 @@ const WHOLE = /^\d{1,3}$/
  * reading clause out, and a line with no clause at all is an error.
  *
  * @param {object} form
- * @param {'none' | 'diff' | 'report'} form.read what was read first
+ * @param {string} form.read what was read first: `none`, `diff` or `report`
  * @param {string | number} [form.readMin] its minutes
- * @param {'none' | 'stack' | 'test'} [form.hand] the hands-on check
+ * @param {string} [form.hand] the hands-on check: `none`, `stack` or `test`
  * @param {string | number} [form.handMin] its minutes
  * @param {string} [form.remark]
- * @param {'express' | 'normal' | 'full'} form.lane
+ * @param {string} form.lane `express`, `normal` or `full`
  * @returns {{ line: string | null, error: string | null }}
  */
 export function timeLine({ read, readMin = '', hand = 'none', handMin = '', remark = '', lane }) {

@@ -5,11 +5,15 @@ import { div } from 'gpui-kit'
 import { h_flex, v_flex } from 'gpui-base'
 import { displayBold, label } from './ui.js'
 
+/** @typedef {import('../../types/views.js').ViewContext} ViewContext */
+/** @typedef {import('../../types/views.js').PanelModel} PanelModel */
+/** @typedef {import('../../types/views.js').ClickHandler} ClickHandler */
+
 /**
  * The 32 px button that opens Customize (`Panel.png`): three bars with a knob each, drawn as bars.
  * `ctx.ui.openCustomize()` opens the overlay.
  *
- * @param {any} ctx
+ * @param {ViewContext} ctx
  */
 export function customizeButton(ctx) {
   const bar = (/** @type {number} */ w) => div().h(2).w(w).bg(ctx.c['fg'])
@@ -35,9 +39,9 @@ export function customizeButton(ctx) {
 }
 
 /**
- * @param {any} ctx
- * @param {any} model `panel.header`, with `red` when a hidden section turned red
- * @param {any} strip the summary strip's element
+ * @param {ViewContext} ctx
+ * @param {PanelModel['header'] & { red?: boolean }} model `panel.header`, with `red` when a hidden section turned red
+ * @param {import('gpui-kit').NativeElement} strip the summary strip's element
  */
 export function header(ctx, model, strip) {
   // A hidden section that turns red lights the header: the docked panel has no tab of its own.
@@ -75,11 +79,11 @@ export function header(ctx, model, strip) {
  * The two buttons of the machine: no new worker, and a heavy slot kept for the maintainer. `ctx.ui` gives
  * `togglePause(cx)`, `toggleReserve(cx)` and `actionNote` (what the last click said, such as "no free slot").
  *
- * @param {any} ctx
- * @param {any} model `panel.header`
+ * @param {ViewContext} ctx
+ * @param {PanelModel['header']} model `panel.header`
  */
 export function controls(ctx, model) {
-  /** @param {string} id @param {any} on @param {string} text @param {string} tone @param {any} click */
+  /** @param {string} id @param {{ on: boolean }} on @param {string} text @param {string} tone @param {ClickHandler} click */
   const toggle = (id, on, text, tone, click) => {
     const el = displayBold(div())
       .id(id)
@@ -112,21 +116,13 @@ export function controls(ctx, model) {
       h_flex()
         .gap(8)
         .child(
-          toggle(
-            'pause',
-            model.pause,
-            model.pause.label,
-            'magenta',
-            (/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.togglePause(cx)
+          toggle('pause', model.pause, model.pause.label, 'magenta', (_e, cx) =>
+            ctx.ui.togglePause(cx)
           )
         )
         .child(
-          toggle(
-            'reserve',
-            model.reserve,
-            model.reserve.label,
-            'warn',
-            (/** @type {any} */ _e, /** @type {any} */ cx) => ctx.ui.toggleReserve(cx)
+          toggle('reserve', model.reserve, model.reserve.label, 'warn', (_e, cx) =>
+            ctx.ui.toggleReserve(cx)
           )
         )
     )

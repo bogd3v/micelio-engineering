@@ -12,12 +12,19 @@ import { ageMs } from './time.js'
 const SOURCES = ['slots', 'machine', 'agents', 'issues']
 
 /**
+ * @template [T=unknown]
  * @typedef {object} Source
- * @property {unknown} value what the last good read gave, `null` before the first
+ * @property {T | null} value what the last good read gave, `null` before the first
  * @property {string | null} at when that read was made (ISO 8601), `null` before the first
  * @property {number | null} ageMs how long ago, `null` before the first good read
  * @property {boolean} stale the latest read failed
  * @property {string | null} error why it failed
+ */
+
+/**
+ * The four sources by name.
+ *
+ * @typedef {Record<string, Source> & { slots: Source<import('./slots.js').Slots>, machine: Source<import('./machine.js').Machine>, agents: Source<import('./agents.js').Agent[]>, issues: Source<import('./issues.js').IssueRow[]> }} Sources
  */
 
 /**
@@ -26,7 +33,7 @@ const SOURCES = ['slots', 'machine', 'agents', 'issues']
  * keeps its last value, not stale.
  * @property {{ at: string, text: string, error?: undefined } | { error: string }} [slots]
  * @property {{ at: string, loadavg: string, meminfo: string, hwmon: { name: string, temp1_input: string | null }[], cores: number } | { error: string }} [machine]
- * @property {{ at: string, terminals: import('./agents.js').Terminal[] } | { error: string }} [agents]
+ * @property {{ at: string, terminals: Partial<import('./agents.js').Terminal>[] } | { error: string }} [agents]
  * @property {{ at: string, issues: Parameters<typeof buildIssues>[0]['issues'], comments: Parameters<typeof buildIssues>[0]['comments'], maintainer: string } | { error: string }} [issues]
  */
 
@@ -40,15 +47,14 @@ const empty = () => ({ value: null, at: null, ageMs: null, stale: false, error: 
  * @param {number} input.now milliseconds since the epoch
  * @param {Fetched} input.fetched this round's reads
  * @param {{ sources: Record<string, Source> } | null} [input.previous] the state of the last round
- * @returns {{ now: number, stale: boolean, sources: Record<string, Source> }}
+ * @returns {{ now: number, stale: boolean, sources: Sources }}
  */
 export function buildState({ now, fetched, previous = null }) {
-  /** @type {Record<string, Source>} */
-  const sources = {}
+  const sources = /** @type {Sources} */ ({})
   for (const name of SOURCES) sources[name] = { ...(previous?.sources[name] ?? empty()) }
   /**
    * @param {string} name
-   * @param {{ at?: string, error?: string }} read
+   * @param {{ at?: string, error?: string | undefined }} read
    * @param {() => unknown} parse
    */
   const take = (name, read, parse) => {
@@ -73,7 +79,11 @@ export function buildState({ now, fetched, previous = null }) {
   }
   if (fetched.agents !== undefined) {
     const read = fetched.agents
-    take('agents', read, () => ('terminals' in read ? parseAgents(read.terminals) : []))
+    take('agents', read, () =>
+      'terminals' in read
+        ? parseAgents(/** @type {import('./agents.js').Terminal[]} */ (read.terminals))
+        : []
+    )
   }
   const agents = /** @type {import('./agents.js').Agent[]} */ (sources['agents']?.value ?? [])
   if (fetched.issues !== undefined) {
@@ -81,5 +91,9 @@ export function buildState({ now, fetched, previous = null }) {
     take('issues', read, () => ('issues' in read ? buildIssues({ ...read, now, agents }) : []))
   }
   for (const source of Object.values(sources)) source.ageMs = ageMs(now, source.at)
-  return { now, stale: Object.values(sources).some((s) => s.stale), sources }
+  return {
+    now,
+    stale: Object.values(sources).some((s) => s.stale),
+    sources,
+  }
 }

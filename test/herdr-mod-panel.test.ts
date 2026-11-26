@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { createAdapters, dockerArgs, readConfig } from '../herdr/mod/factory/adapters.js'
 import {
   buildGithub,
@@ -13,24 +12,16 @@ import {
   formatAge,
   loadBars,
   parseStacks,
-  // @ts-expect-error a plain JavaScript module of the mod, with no declarations
 } from '../herdr/mod/factory/lib/panel.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { parseAgents } from '../herdr/mod/factory/lib/agents.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { stackOwned } from '../herdr/mod/factory/lib/actions.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { heldOrRed } from '../herdr/mod/factory/lib/settings.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { buildState } from '../herdr/mod/factory/lib/state.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { colours, THEMES } from '../herdr/mod/factory/lib/tokens.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { orphans as orphansView } from '../herdr/mod/factory/views/orphans.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { stacks as stacksView } from '../herdr/mod/factory/views/stacks.js'
-// @ts-expect-error a plain JavaScript module of the mod, with no declarations
 import { badge, button, cat, gateMark, laneTag } from '../herdr/mod/factory/views/ui.js'
+import type { ViewContext } from '../herdr/mod/types/views.js'
 
 // The app's UI modules exist only inside it: each element here records the calls made on it.
 const ui = vi.hoisted(() => {
@@ -111,7 +102,7 @@ const TOKENS = Object.fromEntries(Object.keys(THEMES.dark).map((name) => [name, 
 
 /** The `ctx` of a view, with a spy for each thing the view may call. */
 function viewContext({ dark = true, confirmation = null as unknown } = {}) {
-  return {
+  const ctx = {
     c: TOKENS,
     dark,
     ui: {
@@ -127,6 +118,7 @@ function viewContext({ dark = true, confirmation = null as unknown } = {}) {
       askTerminate: vi.fn(),
     },
   }
+  return ctx as typeof ctx & ViewContext
 }
 
 /** A `panel.sections.stacks` of one owned stack and two that nothing owns. */
@@ -296,7 +288,7 @@ describe('the panel', () => {
       temp: '94 °C',
       tone: 'red',
     })
-    expect(saturated.banners.saturated.title).toBe('Load 81 / 32 threads.')
+    expect(saturated.banners.saturated!.title).toBe('Load 81 / 32 threads.')
     expect(saturated.sections.machine.bars).toHaveLength(30)
     expect(saturated.sections.machine.bars.at(-1)).toEqual({ load: 81, tone: 'red' })
     const closed = (await round(SATURATED)).panel
@@ -315,12 +307,12 @@ describe('the panel', () => {
     expect(live.sections.milestones.dim).toBe(false)
     const stale = (await round(STALE, 2)).panel
     expect(stale.header.sync).toEqual({ text: 'GH STALE 3 MIN', stale: true })
-    expect(stale.banners.stale.title).toBe('GitHub: no data for 3 min.')
-    expect(stale.banners.stale.text).toContain('as of 15:57 UTC (gh: network error)')
+    expect(stale.banners.stale!.title).toBe('GitHub: no data for 3 min.')
+    expect(stale.banners.stale!.text).toContain('as of 15:57 UTC (gh: network error)')
     expect(stale.sections.milestones.dim).toBe(true)
     expect(stale.sections.milestones.note).toBe('as of 15:57 UTC · not live')
     // It keeps its last rows, and the machine, the slots and the stacks are the live ones.
-    expect(stale.sections.milestones.spaces[0].issues.map((i: { id: string }) => i.id)).toEqual([
+    expect(stale.sections.milestones.spaces[0]!.issues.map((i: { id: string }) => i.id)).toEqual([
       '#788',
       '#792',
       '#801',
@@ -382,7 +374,7 @@ describe('the panel', () => {
 
   it('an issue row has its track, gate label, lane tag and the cat file of each agent on it', async () => {
     const { panel } = await round(NORMAL)
-    const rows = panel.sections.milestones.spaces[0].issues as {
+    const rows = panel.sections.milestones.spaces[0]!.issues as {
       id: string
       marks: string[]
       label: string
@@ -419,13 +411,13 @@ describe('the panel', () => {
     expect(rows.map((r) => r.id)).toEqual(['#788', '#792', '#801', '#810'])
     const written = new Set(readdirSync(cats))
     for (const row of rows) for (const c of row.cats) expect(written.has(c.file)).toBe(true)
-    const light = (await round(NORMAL, 1, 'light')).panel.sections.milestones.spaces[0].issues
-    expect(light[1].cats[0].file).toBe('worker-working-head-light.svg')
+    const light = (await round(NORMAL, 1, 'light')).panel.sections.milestones.spaces[0]!.issues
+    expect(light[1]!.cats[0]!.file).toBe('worker-working-head-light.svg')
   })
 
   it('the rows and the NEEDS count follow the agents of the moment, not those of the last read of GitHub', async () => {
     const input = await round(NORMAL)
-    expect(input.panel.strip[3].value).toBe('2')
+    expect(input.panel.strip[3]!.value).toBe('2')
     const terminals = JSON.parse(
       await readFile(join(ROOT, FIXTURES, 'normal/terminals.json'), 'utf8')
     ) as {
@@ -442,13 +434,13 @@ describe('the panel', () => {
     })
     // GitHub is not read again: only the agents changed.
     const panel = buildPanel({ ...input, state })
-    expect(panel.strip[3].value).toBe('3')
-    const row = panel.sections.milestones.spaces[0].issues.find(
+    expect(panel.strip[3]!.value).toBe('3')
+    const row = panel.sections.milestones.spaces[0]!.issues.find(
       (i: { id: string }) => i.id === '#792'
     )
-    expect(row.marks[1]).toBe('needs')
-    expect(row.note).toBe('worker is blocked: it may need you')
-    expect(row.cats[0]).toMatchObject({ role: 'worker', state: 'needs' })
+    expect(row!.marks[1]).toBe('needs')
+    expect(row!.note).toBe('worker is blocked: it may need you')
+    expect(row!.cats[0]).toMatchObject({ role: 'worker', state: 'needs' })
   })
 
   it('the stacks, the queue and the orphans come from the state', async () => {
@@ -480,11 +472,11 @@ describe('the panel', () => {
   it("an orphan's row names its program and folder in its title and cuts its command to 120 characters", async () => {
     const { panel } = await round([`${FIXTURES}/orphans`, FIXTURES])
     const [row] = panel.sections.orphans.rows
-    expect(row.command.length).toBeGreaterThan(1000)
-    expect(row.title).toBe(`zsh · ${row.cwd}`)
-    expect(row.brief).toBe(`${row.command.slice(0, 120)}…`)
+    expect(row!.command.length).toBeGreaterThan(1000)
+    expect(row!.title).toBe(`zsh · ${row!.cwd}`)
+    expect(row!.brief).toBe(`${row!.command.slice(0, 120)}…`)
     // A command of 120 characters or fewer is whole.
-    const short = (await round(NORMAL)).panel.sections.orphans.rows[0]
+    const short = (await round(NORMAL)).panel.sections.orphans.rows[0]!
     expect(short).toMatchObject({ title: `sleep · ${short.cwd}`, brief: 'sleep 602' })
   })
 
@@ -572,7 +564,7 @@ describe('a space of several repositories', () => {
     })
     const config = readConfig({ ...props(null), spaces: PAIRS })
     expect(config.spaces).toHaveLength(1)
-    const space = config.spaces[0]
+    const space = config.spaces[0]!
     const read = await a.readGithub(space)
     expect(read).toMatchObject({
       issues: [{ number: 5 }],
@@ -684,7 +676,7 @@ describe('a space of several repositories', () => {
         github: null,
         stacks: { value: [{ name: 'wt-tw5', status: 'up' }], at: null, stale: false, error: null },
         config,
-      }).sections.stacks.rows[0].owner
+      }).sections.stacks.rows[0]!.owner
     expect(leased('worker-tw5')).toBe('worker-tw5')
     expect(leased('worker-5')).toBeNull()
     expect(stackOwned('wt-tw5', agents, [], ['tw'])).toBe(false)
@@ -732,7 +724,7 @@ describe('a space of several repositories', () => {
     })
     const state = { stale: false, sources: {} }
     const panel = buildPanel({ now, state, github, config })
-    const rows = panel.sections.milestones.spaces[0].issues as {
+    const rows = panel.sections.milestones.spaces[0]!.issues as {
       id: string
       note: string
       marks: string[]
@@ -875,7 +867,7 @@ describe('the adapters', () => {
     await a.readSlots()
     await a.readMachine()
     await a.readStacks()
-    await a.readGithub(SPACES[0])
+    await a.readGithub(SPACES[0]!)
     const lines = calls.map(([cmd, args]) => [cmd, ...args].join(' '))
     expect(lines.filter((l) => !l.startsWith('gh '))).toEqual([
       `bash ${ROOT.replace(/\/$/, '')}/herdr/factory-slot.sh status`,
@@ -947,22 +939,22 @@ describe('the adapters', () => {
     let github = buildGithub({
       now: first,
       spaces: config.spaces,
-      reads: { 'micelio-engineering': await a.readGithub(config.spaces[0]) },
+      reads: { 'micelio-engineering': await a.readGithub(config.spaces[0]!) },
     })
     failing = true
     github = buildGithub({
       now: first + 90_000,
       spaces: config.spaces,
       previous: github,
-      reads: { 'micelio-engineering': await a.readGithub(config.spaces[0]) },
+      reads: { 'micelio-engineering': await a.readGithub(config.spaces[0]!) },
     })
     const state = buildState({
       now: first + 90_000,
       fetched: { slots: await a.readSlots(), machine: await a.readMachine() },
     })
     const panel = buildPanel({ now: first + 90_000, state, github, config })
-    expect(panel.banners.stale.title).toBe('GitHub: no data for 1 min.')
-    expect(panel.banners.stale.text).toContain('gh: network error')
+    expect(panel.banners.stale!.title).toBe('GitHub: no data for 1 min.')
+    expect(panel.banners.stale!.text).toContain('gh: network error')
     expect(panel.sections.machine.load).toBe('0.5')
     expect(panel.sections.slots.rows).toHaveLength(3)
   })
@@ -1149,7 +1141,7 @@ describe('the views', () => {
     ]
     for (const { name, view, model, drawn, colour } of sections) {
       const ctx = viewContext()
-      const folded = view(ctx, model)
+      const folded = (view as (c: unknown, m: unknown) => unknown)(ctx, model)
       expect(elements(folded).flatMap(texts), name).toEqual(drawn)
       const title = drawing(folded, drawn[0] as string)
       expect(paint(title).text, name).toEqual([colour])
@@ -1233,18 +1225,18 @@ describe('the views', () => {
 
   it('a badge, a lane tag and a gate mark draw each kind with its colours, and glow only in the dark theme', () => {
     const ctx = viewContext()
-    const small = badge(ctx, 'M', 'space-m') as Element
+    const small = badge(ctx, 'M', 'space-m') as unknown as Element
     expect(texts(small)).toEqual(['M'])
     expect([said(small, 'w'), said(small, 'h')]).toEqual([[16], [16]])
     expect(paint(small)).toEqual({ bg: ['space-m'], text: ['badge-fg'], border: [] })
-    const large = badge(ctx, 'F', 'space-f', 24) as Element
+    const large = badge(ctx, 'F', 'space-f', 24) as unknown as Element
     expect([said(large, 'w'), said(large, 'h')]).toEqual([[24], [24]])
-    expect(paint(badge(ctx, 'X', 'no-such-token'))).toEqual({
+    expect(paint(badge(ctx, 'X', 'no-such-token') as unknown as Element)).toEqual({
       bg: ['muted'],
       text: ['badge-fg'],
       border: [],
     })
-    expect(paint(badge(ctx, '!', 'warn-fill'))).toEqual({
+    expect(paint(badge(ctx, '!', 'warn-fill') as unknown as Element)).toEqual({
       bg: ['warn-fill'],
       text: ['warn-fg'],
       border: [],
@@ -1256,7 +1248,7 @@ describe('the views', () => {
       NORMAL: { bg: [], text: ['fg'], border: ['fg'], dashed: false },
     }
     for (const [lane, { dashed, ...colours }] of Object.entries(lanes)) {
-      const tag = laneTag(ctx, lane) as Element
+      const tag = laneTag(ctx, lane) as unknown as Element
       expect(texts(tag), lane).toEqual([lane])
       expect(paint(tag), lane).toEqual(colours)
       expect(said(tag, 'border_dashed').length > 0, lane).toBe(dashed)
@@ -1271,7 +1263,7 @@ describe('the views', () => {
     }
     for (const dark of [true, false]) {
       for (const [mark, { dashed, ...colours }] of Object.entries(flat)) {
-        const box = gateMark(viewContext({ dark }), mark) as Element
+        const box = gateMark(viewContext({ dark }), mark) as unknown as Element
         expect(paint(box), mark).toEqual(colours)
         expect(said(box, 'border_dashed').length > 0, mark).toBe(dashed)
         expect(images(box), mark).toEqual([])
@@ -1287,7 +1279,7 @@ describe('the views', () => {
         elements(glowing).flatMap((e) => said(e, 'bg')),
         mark
       ).toEqual([colour])
-      const light = gateMark(viewContext({ dark: false }), mark) as Element
+      const light = gateMark(viewContext({ dark: false }), mark) as unknown as Element
       expect(images(light), mark).toEqual([])
       expect(paint(light), mark).toEqual({ bg: [colour], text: [], border: [] })
     }
@@ -1306,7 +1298,7 @@ describe('the views', () => {
       expect(drawn(false, state), state).toEqual([picture])
     // No file: an empty box of the same size, so the row does not move.
     for (const none of [null, undefined]) {
-      const box = cat(viewContext(), none, 24, 'working') as Element
+      const box = cat(viewContext(), none, 24, 'working') as unknown as Element
       expect(images(box)).toEqual([])
       expect([said(box, 'w'), said(box, 'h')]).toEqual([[24], [24]])
     }
@@ -1316,8 +1308,11 @@ describe('the views', () => {
     const ctx = viewContext()
     const press = vi.fn()
     const options = { disabled: true, primary: true, click: press }
-    const tipped = button(ctx, 'go', 'GO', { ...options, tip: 'no free slot' }) as Element
-    const locked = button(ctx, 'stop', 'STOP', options) as Element
+    const tipped = button(ctx, 'go', 'GO', {
+      ...options,
+      tip: 'no free slot',
+    }) as unknown as Element
+    const locked = button(ctx, 'stop', 'STOP', options) as unknown as Element
     expect(said(tipped, 'tooltip')).toEqual(['no free slot'])
     expect(said(locked, 'tooltip')).toEqual(['locked while no master answers'])
     for (const [text, el] of [

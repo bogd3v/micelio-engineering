@@ -55,6 +55,7 @@ export function parseNumstat(text) {
  * @returns {{ worktree: string | null, packet: string | null, draft: string | null, branch: string | null }}
  */
 export function parseProgress(body) {
+  /** @type {{ worktree: string | null, packet: string | null, draft: string | null, branch: string | null }} */
   const found = { worktree: null, packet: null, draft: null, branch: null }
   if (typeof body !== 'string') return found
   const head = /^(#{2,3})\s+Progress\s*$/m.exec(body)
@@ -142,7 +143,7 @@ function stateOf(status) {
  * @param {import('./agents.js').Agent[]} input.agents the agents of the space: those of the issue are the ones with its pair's tag
  * @param {import('./agents.js').Terminal[]} input.terminals the rows of `terminals()`, for the model
  * @param {{ name: string }[]} input.stacks the stacks up
- * @param {{ branch: string | null, added: number | null, removed: number | null } | null} input.worktree what the worktree says
+ * @param {{ branch?: string | null, added?: number | null, removed?: number | null, error?: string } | null} input.worktree what the worktree says
  * @param {'dark' | 'light'} input.theme
  * @param {number} [input.now] milliseconds since the epoch, for the age of a decision
  */

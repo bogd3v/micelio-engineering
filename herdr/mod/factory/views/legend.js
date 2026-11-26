@@ -5,6 +5,8 @@ import { div } from 'gpui-kit'
 import { h_flex } from 'gpui-base'
 import { gateMark, label } from './ui.js'
 
+/** @typedef {import('../../types/views.js').ViewContext} ViewContext */
+
 const ENTRIES = [
   ['passed', 'passed'],
   ['running', 'running'],
@@ -14,7 +16,7 @@ const ENTRIES = [
   ['red', 'red'],
 ]
 
-/** @param {any} ctx */
+/** @param {ViewContext} ctx */
 export function legend(ctx) {
   return h_flex()
     .flex_wrap()
@@ -35,7 +37,7 @@ export function legend(ctx) {
  * The footer: the keys of the panel (`Panel.png`) and "log a correction", which opens the correction form.
  * `keys` are the entries of `keyMap` (`lib/settings.js`): the key that acts, and what it does.
  *
- * @param {any} ctx
+ * @param {ViewContext} ctx
  * @param {{ id: string, shown: string, label: string }[]} [keys]
  */
 export function footer(ctx, keys = []) {

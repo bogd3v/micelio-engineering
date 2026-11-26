@@ -4,14 +4,17 @@ import { div } from 'gpui-kit'
 import { h_flex } from 'gpui-base'
 import { displayBold, label } from './ui.js'
 
+/** @typedef {import('../../types/views.js').ViewContext} ViewContext */
+/** @typedef {import('../../types/views.js').PanelModel} PanelModel */
+
 /**
- * @param {any} ctx
- * @param {any} banners `panel.banners`
- * @param {any} [controls] the two buttons of the machine, which the design puts under the alarms and above the paused line
- * @returns {any[]} the elements to show, none when nothing is wrong
+ * @param {ViewContext} ctx
+ * @param {PanelModel['banners']} banners `panel.banners`
+ * @param {import('gpui-kit').NativeElement | null} [controls] the two buttons of the machine, which the design puts under the alarms and above the paused line
+ * @returns {import('gpui-kit').NativeElement[]} the elements to show, none when nothing is wrong
  */
 export function banners(ctx, banners, controls = null) {
-  /** @type {any[]} */
+  /** @type {import('gpui-kit').NativeElement[]} */
   const out = []
   if (banners.saturated !== null) {
     out.push(

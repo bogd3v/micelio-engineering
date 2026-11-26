@@ -6,9 +6,12 @@ import { h_flex, v_flex } from 'gpui-base'
 import { badge, cat, displayBold, gateMark, heading, label, laneTag, section } from './ui.js'
 import { legend } from './legend.js'
 
+/** @typedef {import('../../types/views.js').ViewContext} ViewContext */
+/** @typedef {import('../../types/views.js').PanelSections} PanelSections */
+
 /**
- * @param {any} ctx
- * @param {any} m `panel.sections.milestones`
+ * @param {ViewContext} ctx
+ * @param {PanelSections['milestones']} m `panel.sections.milestones`
  */
 export function milestones(ctx, m) {
   const open = displayBold(div())
@@ -23,7 +26,8 @@ export function milestones(ctx, m) {
     .on_click(() => ctx.ui.openBoard())
     .child('OPEN BOARD >')
   // The cats come from the agents: a stale agents source dims them.
-  const dimmed = (/** @type {any} */ el) => (m.catsDim === true ? el.opacity(0.6) : el)
+  const dimmed = (/** @type {import('gpui-kit').NativeElement} */ el) =>
+    m.catsDim === true ? el.opacity(0.6) : el
   // With the Board tab off in Customize the button is gone.
   const box = section(ctx).child(
     heading(ctx, 'milestones', 'Milestones', m.open, ctx.ui.boardOn === false ? div() : open)
@@ -45,7 +49,7 @@ export function milestones(ctx, m) {
           .child(label(`PRs ${space.merged}`, ctx.c['muted'], 11))
       )
       .children(
-        space.issues.map((/** @type {any} */ issue) =>
+        space.issues.map((issue) =>
           v_flex()
             .py(7)
             .pl(26)
@@ -76,7 +80,7 @@ export function milestones(ctx, m) {
                     .font_bold()
                     .text_size(11)
                     .whitespace_nowrap()
-                    .text_color(ctx.c[issue.tone])
+                    .text_color(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (issue.tone)])
                     .child(issue.label)
                 )
             )
@@ -85,9 +89,7 @@ export function milestones(ctx, m) {
                 .mt(3)
                 .items_center()
                 .gap(6)
-                .children(
-                  issue.cats.map((/** @type {any} */ k) => dimmed(cat(ctx, k.file, 16, k.state)))
-                )
+                .children(issue.cats.map((k) => dimmed(cat(ctx, k.file, 16, k.state))))
                 .child(laneTag(ctx, issue.lane))
                 .child(label(issue.note, ctx.c['muted'], 11).flex_1().min_w(0).truncate())
             )

@@ -2,6 +2,16 @@
 
 The mod of the epic "the maintainer runs the factory from a Herdr mod". The approved designs are in [`design/`](design/README.md); this folder holds what is built from them.
 
+## Types
+
+The mod is JavaScript with JSDoc types; it has no build step. [`tsconfig.json`](tsconfig.json) checks every `.js` and `.mjs` file of the mod under `strict` (`allowJs`, `checkJs`, `noEmit`), and `npm run typecheck` runs it:
+
+```bash
+npx tsc -p herdr/mod/tsconfig.json
+```
+
+[`types/`](types/) holds declarations only, outside `factory/`, so `install.sh` does not copy them. [`types/herdr.d.ts`](types/herdr.d.ts) and [`types/gpui.d.ts`](types/gpui.d.ts) declare the members of `herdr`, `gpui-kit` and `gpui-base` that the mod uses, taken from the type files the Herdr app writes in its configuration folder, which neither the repository nor CI has: a member the mod starts to use is added there. [`types/views.d.ts`](types/views.d.ts) has the types that several files of the mod share, `main.js` and the views most of them.
+
 ## The agent cats
 
 A mod draws an image from a file under the app's configuration folder (`image("mods/<name>/…svg")`), so every cat the panel shows exists as a file. The source of all of them is [`design/cats.json`](design/cats.json) (the figures, the states, the crops and the badges) with the colours of [`design/tokens.json`](design/tokens.json).
