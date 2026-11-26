@@ -5,6 +5,8 @@
 // reach it from `theme()` as strings). A method the mod starts to use is added from that file.
 
 declare module 'gpui-kit' {
+  import type { ScrollHandle } from 'gpui-base'
+
   /** Pixels as a number, or `<n>px`, `<n>rem`, `<n>%`. */
   export type DefiniteLength = number | `${number}px` | `${number}rem` | `${number}%`
   export type Length = DefiniteLength | 'auto'
@@ -61,7 +63,7 @@ declare module 'gpui-kit' {
     on_key_down(handler: (event: KeyEvent, cx: Context) => void): this
     on_mouse_down(button: 'left' | 'right' | 'middle', handler: () => void): this
     track_focus(handle: FocusHandle): this
-    track_scroll(handle: import('gpui-base').ScrollHandle): this
+    track_scroll(handle: ScrollHandle): this
     absolute(): this
     relative(): this
     flex(): this
@@ -128,6 +130,8 @@ declare module 'gpui-kit' {
 }
 
 declare module 'gpui-base' {
+  import type { Context, NativeElement } from 'gpui-kit'
+
   export interface ScrollHandle {
     scroll_to_item(index: number): void
   }
@@ -137,14 +141,14 @@ declare module 'gpui-base' {
     set_value(next: string): void
     on(
       event: 'change' | 'submit' | 'focus' | 'blur',
-      handler: (event: unknown, cx: import('gpui-kit').Context) => void
+      handler: (event: unknown, cx: Context) => void
     ): boolean
   }
 
   export type TextareaState = InputState
 
-  export function h_flex(): import('gpui-kit').NativeElement
-  export function v_flex(): import('gpui-kit').NativeElement
+  export function h_flex(): NativeElement
+  export function v_flex(): NativeElement
   export const ScrollHandle: { new: () => ScrollHandle }
   export const InputState: {
     new: (options?: { placeholder?: string; value?: string }) => InputState
@@ -152,6 +156,6 @@ declare module 'gpui-base' {
   export const TextareaState: {
     new: (options?: { placeholder?: string; value?: string; rows?: number }) => TextareaState
   }
-  export const Input: { new: (state: InputState) => import('gpui-kit').NativeElement }
-  export const Textarea: { new: (state: TextareaState) => import('gpui-kit').NativeElement }
+  export const Input: { new: (state: InputState) => NativeElement }
+  export const Textarea: { new: (state: TextareaState) => NativeElement }
 }

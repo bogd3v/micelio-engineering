@@ -443,7 +443,7 @@ describe('the spaces of the layout', () => {
       { name: 'micelio', repo: 'bogd3v/micelio-cms', milestone: 12, tag: 'CMS' },
       { name: 'micelio', repo: 'bogd3v/micelio-cms', milestone: 12, tag: 'abcd' },
       { name: 'micelio', repo: 'bogd3v/micelio-cms', milestone: 12, tag: '' },
-    ]) as Space[]
+    ])
     expect(space?.pairs.map((p) => `${p.repo}:${p.tag}`)).toEqual([
       'bogd3v/micelio:',
       'bogd3v/micelio-plugin-core:pc',
@@ -454,7 +454,7 @@ describe('the spaces of the layout', () => {
     const [space] = spacesOf([
       { name: 'fixture-space', repo: 'bogd3v/fixture', milestone: 1 },
       { name: 'fixture-space', repo: 'bogd3v/fixture-two', milestone: 3, tag: 'tw' },
-    ]) as Space[]
+    ])
     const [own, two] = space?.pairs ?? []
     const row = (address: string, name: string): Terminal => ({
       address,
@@ -578,7 +578,7 @@ describe('state', () => {
               ...json<Terminal[]>('terminals.json')[1],
               name: 'worker-792',
               status: 'blocked',
-            } as Terminal,
+            },
           ],
         },
         issues: {

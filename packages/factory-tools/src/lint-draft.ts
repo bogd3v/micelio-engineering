@@ -3,16 +3,16 @@ import { access, readFile, readdir, stat } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { errorLine } from './errors.js'
+import { arrayOf, errorCode, isRecord } from './narrow.js'
 import {
-  EXIT,
-  LOG,
-  WITHOUT_CHANGE,
-  agentsCommandLines,
-  figures,
-  numbersBefore,
-  testsEntries,
-  withoutSlotPrefix,
-} from './verify-draft.js'
+  evidenceNames,
+  figureLogNames,
+  figureProblems,
+  logProblems,
+  staleEvidenceProblems,
+} from './draft-evidence.js'
+import { testTitles } from './test-titles.js'
+import { EXIT, agentsCommandLines, testsEntries, withoutSlotPrefix } from './verify-draft.js'
 
 /** The heading of the section the command reads, without the `#`s. */
 export const SECTION = 'Instructions that were wrong or missing'
@@ -159,8 +159,8 @@ function runsWordCount(line: string): boolean {
       return `"Q${quoted.length - 1}"`
     }
   )
-  const comment = /(^|\s)#/.exec(unquoted)
-  const code = comment === null ? unquoted : unquoted.slice(0, comment.index + comment[1]!.length)
+  const comment = /(?<=^|\s)#/.exec(unquoted)
+  const code = comment === null ? unquoted : unquoted.slice(0, comment.index)
   return code.split(COMMAND_BREAK).some((part) => {
     const words = (part.split('`')[part.startsWith('`') ? 1 : 0] ?? '')
       .replace(/^\s*\$\s+/, '')
@@ -232,227 +232,6 @@ function editedTestProblems(draft: string, edited: string[]): DraftProblem[] {
     }))
 }
 
-/** The fenced blocks of the "Tests" section whose first line starts `$ `, with the line above the fence. */
-function testsBlocks(draft: string): { lines: string[]; intro: string }[] {
-  const lines = draft.split('\n')
-  const start = lines.findIndex((line) => /^#{1,6}\s+Tests\s*$/.test(line))
-  if (start === -1) return []
-  const depth = (line: string): number => /^(#{1,6})\s/.exec(line)?.[1]?.length ?? 7
-  const level = depth(lines[start] ?? '')
-  const blocks: { lines: string[]; intro: string }[] = []
-  let current: string[] | null = null
-  let intro = ''
-  let last = ''
-  for (const line of lines.slice(start + 1)) {
-    if (/^\s*(?:```|~~~)/.test(line)) {
-      if (current === null) {
-        current = []
-        intro = last
-      } else {
-        const body = current.map((l) => l.trim()).filter((l) => l !== '')
-        if (body[0]?.startsWith('$ ')) blocks.push({ lines: body, intro })
-        current = null
-        last = ''
-      }
-    } else if (current !== null) current.push(line)
-    else if (depth(line) <= level) break
-    else if (line.trim() !== '') last = line.trim()
-  }
-  return blocks
-}
-
-/** A problem for a log the packet lacks: `name` is what the draft writes after `logs/`. */
-function missingLog(files: string[], name: string | undefined): string | null {
-  if (name === undefined)
-    return 'names no log file: add `log: logs/<name>.log` or `logs/<name>.log`'
-  const clean = name.replace(/^\.?\/+/, '')
-  return files.includes(clean)
-    ? null
-    : `its log \`logs/${clean}\` is not a file in the packet's logs directory`
-}
-
-/**
- * One problem for each command of the "Tests" section with no log in the packet (`G2`): a fenced
- * block whose first line starts `$ ` and an item that starts with a command in backticks. A run shown
- * failing (`without the change`, not exit 0) needs none.
- */
-function logProblems(draft: string, files: string[] | undefined): DraftProblem[] {
-  if (files === undefined) return []
-  const problems: DraftProblem[] = []
-  for (const block of testsBlocks(draft)) {
-    if (WITHOUT_CHANGE.test(block.intro)) continue
-    const command = (block.lines[0] ?? '').replace(/^\$\s+/, '')
-    const named = block.lines.map((l) => /^log:\s*(\S+)/.exec(l)?.[1]).find((n) => n !== undefined)
-    const problem = missingLog(files, named?.replace(/^logs\//, ''))
-    if (problem !== null) problems.push({ line: command, problem: `the block ${problem}` })
-  }
-  for (const entry of testsEntries(draft) ?? []) {
-    const parsed = /^`([^`]+)`(.*)$/.exec(entry.text)
-    if (parsed === null) continue
-    const summary = parsed[2] ?? ''
-    if (
-      (WITHOUT_CHANGE.test(entry.text) || WITHOUT_CHANGE.test(entry.intro)) &&
-      EXIT.exec(summary)?.[1] !== '0'
-    )
-      continue
-    const problem = missingLog(files, LOG.exec(summary)?.[1])
-    if (problem !== null)
-      problems.push({ line: (parsed[1] ?? '').trim(), problem: `the item ${problem}` })
-  }
-  return problems
-}
-
-/** A round named in a Tests entry or in the line above a fenced block: `round 2`. */
-const ROUND = /\brounds?\s+\d+/i
-
-/** The files an entry or block names: each `logs/<file>` and each path that ends `.png`. */
-function namedFiles(text: string): string[] {
-  const names = [
-    ...(text.match(/\blogs\/[^\s`),;]+/g) ?? []),
-    ...(text.match(/[^\s`(),;"']+\.png\b/g) ?? []),
-  ].map((name) => name.replace(/[.:]+$/, '').replace(/^\.?\/+/, ''))
-  return [...new Set(names)]
-}
-
-/**
- * What the "Tests" section names as evidence, with the line to blame and whether the entry is
- * exempt: a run shown failing without the change, or an entry (or the line above its block) that
- * names its round.
- */
-function evidenceItems(draft: string): { line: string; names: string[]; exempt: boolean }[] {
-  const items: { line: string; names: string[]; exempt: boolean }[] = []
-  for (const block of testsBlocks(draft)) {
-    const failing = WITHOUT_CHANGE.test(block.intro)
-    const named = block.lines.join(' ')
-    items.push({
-      line: (block.lines[0] ?? '').replace(/^\$\s+/, ''),
-      names: namedFiles(named),
-      exempt: failing || ROUND.test(block.intro),
-    })
-  }
-  for (const entry of testsEntries(draft) ?? []) {
-    const parsed = /^`([^`]+)`(.*)$/.exec(entry.text)
-    const failing =
-      (WITHOUT_CHANGE.test(entry.text) || WITHOUT_CHANGE.test(entry.intro)) &&
-      EXIT.exec(parsed?.[2] ?? '')?.[1] !== '0'
-    items.push({
-      line: (parsed?.[1] ?? entry.text).trim(),
-      names: namedFiles(entry.text),
-      exempt: failing || ROUND.test(entry.text),
-    })
-  }
-  return items
-}
-
-/** The files the "Tests" section names whose times the rule needs (`runLintDraft` reads them). */
-function evidenceNames(draft: string): string[] {
-  return [
-    ...new Set(
-      evidenceItems(draft)
-        .filter((item) => !item.exempt)
-        .flatMap((item) => item.names)
-    ),
-  ]
-}
-
-const iso = (ms: number): string => new Date(ms).toISOString()
-
-/**
- * One problem for each log or image a "Tests" entry names that is older than the newest file the
- * diff changes, unless the entry names its round (`G2.6`). Skipped without both sets of times.
- */
-function staleEvidenceProblems(
-  draft: string,
-  evidence: Record<string, number> | undefined,
-  changed: Record<string, number> | undefined
-): DraftProblem[] {
-  if (evidence === undefined || changed === undefined) return []
-  const newest = Object.entries(changed).reduce<[string, number] | null>(
-    (best, entry) => (best === null || entry[1] > best[1] ? entry : best),
-    null
-  )
-  if (newest === null) return []
-  const problems: DraftProblem[] = []
-  for (const item of evidenceItems(draft)) {
-    if (item.exempt) continue
-    for (const name of item.names) {
-      const time = evidence[name]
-      if (time === undefined || time >= newest[1]) continue
-      problems.push({
-        line: item.line,
-        problem: `\`${name}\` (${iso(time)}) is older than \`${newest[0]}\` (${iso(newest[1])}), a file the diff changes (G2.6): run the command again, or name its round as "round <k>" in the entry`,
-      })
-    }
-  }
-  return problems
-}
-
-/** The log an entry names, as the file after `logs/` (`npm-test.log`); `undefined` when it names none. */
-function namedLog(summary: string): string | undefined {
-  return LOG.exec(summary)?.[1]
-    ?.replace(/[.:]+$/, '')
-    .replace(/^\.?\/+/, '')
-}
-
-/** The logs the figures rule needs (`runLintDraft` reads them): those named by an entry that is not a run shown failing. */
-function figureLogNames(draft: string): string[] {
-  const names: string[] = []
-  for (const entry of testsEntries(draft) ?? []) {
-    const parsed = /^`([^`]+)`(.*)$/.exec(entry.text)
-    if (parsed === null) continue
-    const summary = parsed[2] ?? ''
-    if (
-      (WITHOUT_CHANGE.test(entry.text) || WITHOUT_CHANGE.test(entry.intro)) &&
-      EXIT.exec(summary)?.[1] !== '0'
-    )
-      continue
-    const name = namedLog(summary)
-    if (name !== undefined) names.push(name)
-  }
-  return [...new Set(names)]
-}
-
-/**
- * One problem for each figure of a "Tests" entry that the log the entry names does not hold, with
- * `verify-draft`'s rules (`figures` and `numbersBefore`): a word the log never counts is prose,
- * unless no figure of the line is counted at all. A run shown failing and a log that is not there
- * (`logProblems` reports it) are skipped, as is the whole rule without `logs`.
- */
-function figureProblems(draft: string, logs: Record<string, string> | undefined): DraftProblem[] {
-  if (logs === undefined) return []
-  const problems: DraftProblem[] = []
-  for (const entry of testsEntries(draft) ?? []) {
-    const parsed = /^`([^`]+)`(.*)$/.exec(entry.text)
-    if (parsed === null) continue
-    const summary = parsed[2] ?? ''
-    if (
-      (WITHOUT_CHANGE.test(entry.text) || WITHOUT_CHANGE.test(entry.intro)) &&
-      EXIT.exec(summary)?.[1] !== '0'
-    )
-      continue
-    const name = namedLog(summary)
-    const text = name === undefined ? undefined : logs[name]
-    if (name === undefined || text === undefined) continue
-    const counted = figures(summary).map(
-      ([number, word]) => [number, word, numbersBefore(text, word)] as const
-    )
-    const compared = counted.some(([, , got]) => got.length > 0)
-      ? counted.filter(([, , got]) => got.length > 0)
-      : counted
-    for (const [number, word, got] of compared) {
-      if (got.includes(number)) continue
-      problems.push({
-        line: (parsed[1] ?? '').trim(),
-        problem:
-          got.length === 0
-            ? `the figure "${number} ${word}" is not in \`logs/${name}\`: it has no "<n> ${word}"`
-            : `the figure "${number} ${word}" is not in \`logs/${name}\`: it has ${[...new Set(got)].join(' or ')}`,
-      })
-    }
-  }
-  return problems
-}
-
 /**
  * The check command of a repository: the `check:` line of the first `## Commands` block of its
  * `AGENTS.md`; else `npm run check` when its manifest has a `check` script; else `null`.
@@ -465,8 +244,9 @@ export function checkCommandOf(agents: string, manifest: string): string[] | nul
   const line = agentsCommandLines(agents).find((command) => command.label === 'check')
   if (line !== undefined) return line.words
   if (manifest === '') return null
-  const json = JSON.parse(manifest) as { scripts?: { check?: unknown } } | null
-  return typeof json?.scripts?.check === 'string' ? ['npm', 'run', 'check'] : null
+  const json: unknown = JSON.parse(manifest)
+  const scripts = isRecord(json) ? json.scripts : undefined
+  return isRecord(scripts) && typeof scripts.check === 'string' ? ['npm', 'run', 'check'] : null
 }
 
 /** One problem when `checkCommand` is set and no entry of "Tests" runs it and reports `exit 0` (`G2.1`). */
@@ -535,103 +315,6 @@ function namedTests(issue: string): { item: string; file: string; name: string }
     }
   }
   return named
-}
-
-/** The value of the escape that starts at `text[i]` (after the backslash) and where it ends. */
-function unescape(text: string, i: number): { value: string; end: number } {
-  const c = text[i] ?? ''
-  const simple: Record<string, string> = {
-    n: '\n',
-    t: '\t',
-    r: '\r',
-    b: '\b',
-    f: '\f',
-    v: '\v',
-    '0': '\0',
-  }
-  if (c === 'x' && /^[0-9a-fA-F]{2}/.test(text.slice(i + 1, i + 3))) {
-    return { value: String.fromCharCode(parseInt(text.slice(i + 1, i + 3), 16)), end: i + 3 }
-  }
-  if (c === 'u') {
-    const braced = /^\{([0-9a-fA-F]+)\}/.exec(text.slice(i + 1))
-    if (braced) {
-      return {
-        value: String.fromCodePoint(parseInt(braced[1] ?? '0', 16)),
-        end: i + 1 + braced[0].length,
-      }
-    }
-    if (/^[0-9a-fA-F]{4}/.test(text.slice(i + 1, i + 5))) {
-      return { value: String.fromCharCode(parseInt(text.slice(i + 1, i + 5), 16)), end: i + 5 }
-    }
-  }
-  return { value: simple[c] ?? c, end: i + 1 }
-}
-
-/**
- * The string literal that starts at `source[at]` (a quote) when it is the whole first argument: its
- * value and the index after it, or `null` for a template with `${`, or a literal that is followed
- * by anything but `,` or `)`.
- */
-function stringLiteralAt(source: string, at: number): { value: string; end: number } | null {
-  const quote = source[at]
-  let value = ''
-  let i = at + 1
-  while (i < source.length) {
-    const c = source[i] ?? ''
-    if (c === '\\') {
-      const escape = unescape(source, i + 1)
-      value += escape.value
-      i = escape.end
-      continue
-    }
-    if (c === quote) {
-      const after = /^\s*([,)])/.exec(source.slice(i + 1))
-      return after ? { value, end: i + 1 } : null
-    }
-    if (quote === '`' && c === '$' && source[i + 1] === '{') return null
-    if (c === '\n' && quote !== '`') return null
-    value += c
-    i++
-  }
-  return null
-}
-
-/** The index after the bracket group that opens at `source[at]`, skipping the strings in it; `-1` when it never closes. */
-function skipGroup(source: string, at: number): number {
-  let depth = 0
-  for (let i = at; i < source.length; i++) {
-    const c = source[i] ?? ''
-    if (c === "'" || c === '"' || c === '`') {
-      for (i++; i < source.length && source[i] !== c; i++) if (source[i] === '\\') i++
-    } else if ('([{'.includes(c)) depth++
-    else if (')]}'.includes(c) && --depth === 0) return i + 1
-  }
-  return -1
-}
-
-/**
- * The titles of the tests of a file: the first argument, when it is a string literal, of each call
- * `it(`, `test(`, `it.each(…)(` and `test.each(…)(`; `.skip`, `.todo` and the rest are not read.
- *
- * @param source - The text of a test file.
- */
-function testTitles(source: string): string[] {
-  const titles: string[] = []
-  for (const call of source.matchAll(/(?<![\w$.])(?:it|test)(\.each)?\s*(?=[(`])/g)) {
-    let at = (call.index ?? 0) + call[0].length
-    if (call[1] !== undefined) {
-      at = skipGroup(source, at)
-      if (at === -1) continue
-      while (/\s/.test(source[at] ?? '')) at++
-    }
-    if (source[at] !== '(') continue
-    at++
-    while (/\s/.test(source[at] ?? '')) at++
-    if (!'\'"`'.includes(source[at] ?? '\0')) continue
-    const literal = stringLiteralAt(source, at)
-    if (literal) titles.push(literal.value)
-  }
-  return titles
 }
 
 /** Each named test of the issue's criteria whose file is missing or holds no title equal to the name. */
@@ -782,7 +465,7 @@ export function createDeps(cwd: string, syncList: URL = OWN_SYNC_LIST): LintDraf
         try {
           return await readFile(join(cwd, name), 'utf8')
         } catch (error) {
-          if ((error as NodeJS.ErrnoException).code === 'ENOENT') return ''
+          if (errorCode(error) === 'ENOENT') return ''
           throw error
         }
       }
@@ -793,7 +476,7 @@ export function createDeps(cwd: string, syncList: URL = OWN_SYNC_LIST): LintDraf
         await access(join(cwd, '.github/standard-sync.json'))
         return true
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+        if (errorCode(error) === 'ENOENT') return false
         throw error
       }
     },
@@ -808,7 +491,7 @@ export function createDeps(cwd: string, syncList: URL = OWN_SYNC_LIST): LintDraf
         try {
           times[name] = (await stat(join(packet, name))).mtimeMs
         } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+          if (errorCode(error) !== 'ENOENT') throw error
         }
       }
       return times
@@ -825,7 +508,7 @@ export function createDeps(cwd: string, syncList: URL = OWN_SYNC_LIST): LintDraf
           times[path] = (await stat(join(cwd, path))).mtimeMs
         } catch (error) {
           // a file the diff deletes has no time
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+          if (errorCode(error) !== 'ENOENT') throw error
         }
       }
       return times
@@ -836,7 +519,7 @@ export function createDeps(cwd: string, syncList: URL = OWN_SYNC_LIST): LintDraf
         try {
           texts[name] = await readFile(join(dir, name), 'utf8')
         } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+          if (errorCode(error) !== 'ENOENT') throw error
         }
       }
       return texts
@@ -849,16 +532,17 @@ export function createDeps(cwd: string, syncList: URL = OWN_SYNC_LIST): LintDraf
         try {
           texts[path] = await readFile(full, 'utf8')
         } catch (error) {
-          const code = (error as NodeJS.ErrnoException).code
+          const code = errorCode(error)
           if (code !== 'ENOENT' && code !== 'EISDIR') throw error
         }
       }
       return texts
     },
     syncedFiles: async () => {
-      const json = JSON.parse(await readFile(syncList, 'utf8')) as { files?: unknown }
-      if (!Array.isArray(json.files)) throw new Error('.github/standard-sync.json has no "files"')
-      return json.files.filter((file): file is string => typeof file === 'string')
+      const json: unknown = JSON.parse(await readFile(syncList, 'utf8'))
+      const files = isRecord(json) ? json.files : undefined
+      if (!Array.isArray(files)) throw new Error('.github/standard-sync.json has no "files"')
+      return arrayOf(files).filter((file): file is string => typeof file === 'string')
     },
   }
 }

@@ -286,14 +286,16 @@ async function setStatus(gh: Gh, params: ReadyParams, status: StatusField): Prom
   if (!passed) {
     // A fail never adds the issue: only an item that is Ready is taken out of the "can start" view.
     const items = at(issue, 'repository', 'issue', 'projectItems', 'nodes')
-    const own = Array.isArray(items)
+    const own: unknown = Array.isArray(items)
       ? items.find((item) => at(item, 'project', 'id') === status.projectId)
       : undefined
     const itemId = at(own, 'id')
     if (typeof itemId !== 'string') return 'not in the project, left alone'
     const current = await gh.graphql(ITEM_QUERY, { item: itemId })
-    if (at(current, 'node', 'fieldValueByName', 'optionId') !== readyId)
-      return `status left as it is (${String(at(current, 'node', 'fieldValueByName', 'name') ?? 'none')})`
+    if (at(current, 'node', 'fieldValueByName', 'optionId') !== readyId) {
+      const name = at(current, 'node', 'fieldValueByName', 'name')
+      return `status left as it is (${typeof name === 'string' ? name : 'none'})`
+    }
     await gh.graphql(SET_OPTION, {
       project: status.projectId,
       item: itemId,

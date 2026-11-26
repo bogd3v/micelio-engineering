@@ -207,7 +207,7 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
     throw new Error(`no milestone "${options.milestone}"; the repository has ${titles || 'none'}`)
   }
   const items = (await source.milestoneIssues(Number(milestone.number))).map(object)
-  const issues = items.filter((item) => item.pull_request == null)
+  const issues = items.filter((item) => (item.pull_request ?? null) === null)
   const maintainer =
     options.maintainer ??
     text(object(issues.toSorted((a, b) => Number(a.number) - Number(b.number))[0]?.user).login)
@@ -283,7 +283,7 @@ export async function metrics(source: Source, options: MetricsOptions): Promise<
 
   const fixes = (await source.allIssues())
     .map(object)
-    .filter((item) => item.pull_request == null && /^fix\b/.test(text(item.title)))
+    .filter((item) => (item.pull_request ?? null) === null && /^fix\b/.test(text(item.title)))
   const required = new Map<string, Set<string>>()
   const pullRows: PullRow[] = []
   for (const listed of (await source.pulls()).map(object)) {
@@ -545,7 +545,12 @@ function cites(body: string, pull: number): boolean {
 }
 
 function object(value: unknown): Record<string, unknown> {
-  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+  return isObject(value) ? value : {}
+}
+
+/** Whether `value` is an object, arrays included, so its keys can be read as `unknown` values. */
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }
 
 function text(value: unknown): string {

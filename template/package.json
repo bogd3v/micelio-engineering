@@ -9,8 +9,8 @@
     "node": ">=22.12"
   },
   "scripts": {
-    "dev": "tsc -b --watch",
-    "build": "tsc -b",
+    "dev": "tsc -b tsconfig.build.json --watch",
+    "build": "tsc -b tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

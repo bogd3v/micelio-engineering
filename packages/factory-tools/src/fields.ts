@@ -1,5 +1,6 @@
 import type { Gh } from './ready.js'
 import { errorLine } from './errors.js'
+import { isRecord, isStringMap } from './narrow.js'
 
 /** The project field that holds the release line of an issue's milestone. */
 export const RELEASE_LINE_FIELD = 'Release line'
@@ -55,13 +56,10 @@ export function parseProjectFields(text: string): ProjectFields {
     const byRepository = at(entry, 'frontByRepository')
     if (typeof releaseLine !== 'string' || typeof front !== 'string')
       throw new Error(`project fields: "${title}" needs releaseLine and front as strings`)
-    if (
-      byRepository !== undefined &&
-      !(isRecord(byRepository) && Object.values(byRepository).every((v) => typeof v === 'string'))
-    )
+    if (byRepository !== undefined && !isStringMap(byRepository))
       throw new Error(`project fields: frontByRepository of "${title}" must map names to strings`)
     fields[title] = { releaseLine, front }
-    if (byRepository) fields[title].frontByRepository = byRepository as Record<string, string>
+    if (isStringMap(byRepository)) fields[title].frontByRepository = byRepository
   }
   return fields
 }
@@ -151,7 +149,7 @@ export async function readIssueFields(
   if (!isRecord(issue)) throw new Error(`issue ${repo}#${number} not found`)
   const title = at(issue, 'milestone', 'title')
   const items = at(issue, 'projectItems', 'nodes')
-  const item = Array.isArray(items)
+  const item: unknown = Array.isArray(items)
     ? items.find((node) => at(node, 'project', 'id') === projectId)
     : undefined
   return { milestone: typeof title === 'string' ? title : null, item: isRecord(item) ? item : null }
@@ -351,11 +349,6 @@ export const SET_OPTION = `mutation($project: ID!, $item: ID!, $field: ID!, $opt
     value: { singleSelectOptionId: $option }
   }) { projectV2Item { id } }
 }`
-
-/** Whether `value` is a plain object. */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 /** `value.a.b…` when every step is an object, otherwise `undefined`. */
 export function at(value: unknown, ...keys: string[]): unknown {

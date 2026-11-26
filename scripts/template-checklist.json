@@ -41,6 +41,7 @@
       "package.json",
       "eslint.config.js",
       "tsconfig.json",
+      "tsconfig.build.json",
       ".github/workflows/release.yml",
       "scripts/release/version.mjs"
     ]

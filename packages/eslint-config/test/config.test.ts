@@ -1,16 +1,46 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ESLint } from 'eslint'
+import type { Linter } from 'eslint'
 import { describe, expect, it } from 'vitest'
 import micelio, { promiseChainRestriction } from '../src/index.js'
 
 const FIXTURE = fileURLToPath(new URL('../../../fixtures/basic/', import.meta.url))
 
+const TSCONFIG = fileURLToPath(new URL('../../tsconfig/tsconfig.json', import.meta.url))
+const TYPES = fileURLToPath(new URL('../../../node_modules/@types', import.meta.url))
+
+/**
+ * Lints `code` as `src/<name>` of a project under `TMPDIR` that extends `@micelio/tsconfig`, with
+ * this package's config, and returns the messages reported. The file is written to disk because the
+ * typed rules read it through its `tsconfig.json`.
+ */
+async function messagesFor(code: string, name = 'sample.ts'): Promise<Linter.LintMessage[]> {
+  const dir = await mkdtemp(join(tmpdir(), 'eslint-config-'))
+  try {
+    const tsconfig = {
+      extends: TSCONFIG,
+      compilerOptions: { typeRoots: [TYPES] },
+      include: ['src'],
+    }
+    await writeFile(join(dir, 'tsconfig.json'), JSON.stringify(tsconfig))
+    const filePath = join(dir, 'src', name)
+    await mkdir(dirname(filePath), { recursive: true })
+    await writeFile(filePath, code)
+    const eslint = new ESLint({ cwd: dir, overrideConfigFile: true, overrideConfig: micelio })
+    const [result] = await eslint.lintText(code, { filePath })
+    return result?.messages ?? []
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}
+
 /** Lints `code` as if it were `src/<name>` of the fixture and returns the rule ids reported. */
 async function ruleIdsFor(code: string, name = 'sample.ts'): Promise<string[]> {
-  const eslint = new ESLint({ cwd: FIXTURE })
-  const [result] = await eslint.lintText(code, { filePath: `${FIXTURE}src/${name}` })
-  return (result?.messages ?? []).map((message) => message.ruleId ?? 'parse-error')
+  return (await messagesFor(code, name)).map((message) => message.ruleId ?? 'parse-error')
 }
 
 describe('@micelio/eslint-config against the fixture', () => {
@@ -79,6 +109,72 @@ describe('@micelio/eslint-config against the fixture', () => {
       '/** Adds. */\nexport function add(a: number, b: number) {\n  return a + b;\n}\n'
     )
     expect(ids).toContain('@typescript-eslint/explicit-module-boundary-types')
+  })
+
+  it('reports a promise that is neither awaited nor returned', async () => {
+    const load = 'async function load(): Promise<number> {\n  return 1;\n}\n'
+    expect(await ruleIdsFor(`${load}load();\nexport {};\n`)).toContain(
+      '@typescript-eslint/no-floating-promises'
+    )
+    expect(
+      await ruleIdsFor(
+        `${load}export async function run(): Promise<number> {\n  return await load();\n}\n`,
+        'run.test.ts'
+      )
+    ).toEqual([])
+  })
+
+  it('reports an assertion that narrows, outside tests only', async () => {
+    const code =
+      'const value: unknown = JSON.parse("1");\nexport const size = (value as string).length;\n'
+    expect(await ruleIdsFor(`/** The size. */\n${code}`)).toContain(
+      '@typescript-eslint/no-unsafe-type-assertion'
+    )
+    expect(await ruleIdsFor(code, 'size.test.ts')).toEqual([])
+  })
+
+  it('reports a non-null assertion outside tests only', async () => {
+    const code = 'const list = [1];\nexport const first = list[0]!;\n'
+    expect(await ruleIdsFor(`/** The first. */\n${code}`)).toContain(
+      '@typescript-eslint/no-non-null-assertion'
+    )
+    expect(await ruleIdsFor(code, 'first.test.ts')).toEqual([])
+  })
+
+  it('reports a disable without a rule or without a reason', async () => {
+    expect(
+      await ruleIdsFor('// eslint-disable-next-line\nconsole.log("x");\nexport {};\n')
+    ).toContain('@eslint-community/eslint-comments/no-unlimited-disable')
+    expect(
+      await ruleIdsFor('// eslint-disable-next-line no-console\nconsole.log("x");\nexport {};\n')
+    ).toContain('@eslint-community/eslint-comments/require-description')
+    expect(
+      await ruleIdsFor(
+        '// eslint-disable-next-line no-console -- the fixture prints\nconsole.log("x");\nexport {};\n'
+      )
+    ).toEqual([])
+  })
+
+  it('reports a disable that suppresses nothing', async () => {
+    const messages = await messagesFor(
+      '// eslint-disable-next-line no-console -- nothing to suppress\nconsole.warn("x");\nexport {};\n'
+    )
+    expect(messages.map((message) => [message.ruleId, message.severity])).toEqual([[null, 2]])
+    expect(messages[0]?.message).toContain('Unused eslint-disable directive')
+  })
+
+  it('reports a TODO that does not name its issue', async () => {
+    expect(await ruleIdsFor('// TODO: later\nexport {};\n')).toContain('micelio/todo-names-issue')
+    expect(await ruleIdsFor('// TODO(#12): later\nexport {};\n')).toEqual([])
+  })
+
+  it('limits a file to 500 lines outside tests, skipping blank lines and comments', async () => {
+    const lines = (count: number): string =>
+      Array.from({ length: count }, (_, i) => `console.warn(${i});`).join('\n')
+    const padded = `${lines(500)}\n\n// a comment\nexport {};\n`
+    expect(await ruleIdsFor(padded)).toEqual(['max-lines'])
+    expect(await ruleIdsFor(`${lines(499)}\n\n// a comment\nexport {};\n`)).toEqual([])
+    expect(await ruleIdsFor(padded, 'long.test.ts')).toEqual([])
   })
 
   it('exports the promise-chain selector so repositories can add their own', () => {

@@ -546,10 +546,14 @@ describe('a panel that reads recordings', () => {
     expect(slots.split('\n')[0]).toBe('paused')
     expect(slots).toContain('\thold\theld')
     expect(slots).toMatch(/^orphan\t4242\t/m)
-    const comments = JSON.parse(read('comments-393.json'))
+    const comments = JSON.parse(read('comments-393.json')) as Parameters<typeof parseHeld>[0]
     expect(parseHeld(comments, ME, 393)).toMatchObject({ gate: 4 })
-    const stacks = JSON.parse(read('docker-compose-ls.json')).map((s: { Name: string }) => s.Name)
-    const agents = parseAgents(JSON.parse(read('terminals.json')))
+    const stacks = (JSON.parse(read('docker-compose-ls.json')) as { Name: string }[]).map(
+      (s) => s.Name
+    )
+    const agents = parseAgents(
+      JSON.parse(read('terminals.json')) as Parameters<typeof parseAgents>[0]
+    )
     const leases = [...slots.matchAll(/^workers\t(\S+)/gm)].map((m) => ({ agent: m[1]! }))
     expect(stacks.filter((n: string) => !stackOwned(n, agents, leases))).toEqual(['wt-160'])
     // Read as the panel reads it, with no program run.
