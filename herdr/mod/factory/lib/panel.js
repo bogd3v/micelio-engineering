@@ -525,7 +525,7 @@ function catsOf(row, onIt, master, theme) {
  * @param {{ value: { name: string, status: string }[], at: string | null, stale: boolean, error: string | null }} [input.stacks]
  * @param {Record<string, number>} [input.stackAges] when each unowned stack was created (milliseconds since the epoch), by project
  * @param {{ at: number, load: number }[]} [input.history]
- * @param {{ spaces: SpaceConfig[] }} input.config
+ * @param {{ spaces: SpaceConfig[], maintainer?: string }} input.config with `maintainer` `''` the panel says no login is named
  * @param {'dark' | 'light'} [input.theme] the theme the cat files are named for
  * @param {Record<string, boolean>} [input.open] the sections the maintainer opened or closed
  * @param {import('./quota.js').Quota | null} [input.quota] the last quota GitHub reported: the header says so while the pace is not `normal`
@@ -670,6 +670,13 @@ export function buildPanel({
 
   // The banners.
   const banners = {
+    maintainer:
+      config.maintainer === ''
+        ? {
+            title: 'No maintainer login.',
+            text: "Gates, time notes, held checks, decisions and tokens count only the maintainer's comments, and this layout names none. Run herdr/mod/install.sh --maintainer <login>.",
+          }
+        : null,
     saturated: saturated
       ? {
           title: `Load ${machine?.load1?.toFixed(0) ?? '—'} / ${cores} threads.`,

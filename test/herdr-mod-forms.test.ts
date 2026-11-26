@@ -157,7 +157,7 @@ const agents = parseAgents([
 ])
 const comment = (body: string, login = ME) => ({ user: { login }, body })
 /** The needs of one space with issues 410 (full) and 411 (normal) and these open pull requests. */
-function needsWith(pulls: Pull[], timeForms: Record<number, unknown> = {}) {
+function needsWith(pulls: Pull[], timeForms: Record<number, unknown> = {}, maintainer = ME) {
   const gate1 = (lane: Lane) => [
     {
       user: { login: ME },
@@ -180,7 +180,7 @@ function needsWith(pulls: Pull[], timeForms: Record<number, unknown> = {}) {
           created_at: iso(1000),
         })),
         comments: { 410: gate1('full'), 411: gate1('normal') },
-        maintainer: ME,
+        maintainer,
         pulls,
       },
     },
@@ -207,6 +207,15 @@ const firstTimeCard = (needs: { cards: { kind: string }[] }): TimeCard => {
 }
 
 describe('Log time on an open pull request', () => {
+  it('with no maintainer login, an open pull request gets no time card', () => {
+    const pulls = [
+      pull(7, 'Closes #410'),
+      pull(8, 'Closes #411', { reviews: [comment('time: 15m diff')] }),
+    ]
+    expect(timeCards(needsWith(pulls))).toHaveLength(1)
+    expect(timeCards(needsWith(pulls, {}, ''))).toEqual([])
+  })
+
   it('a pull request that has a time note from the maintainer gets no card', () => {
     const none = timeCards(needsWith([pull(1001, 'Closes #410')]))
     expect(none.map((c) => c.key)).toEqual(['time:micelio#410'])

@@ -18,6 +18,7 @@ import { stackOwned } from '../herdr/mod/factory/lib/actions.js'
 import { heldOrRed } from '../herdr/mod/factory/lib/settings.js'
 import { buildState } from '../herdr/mod/factory/lib/state.js'
 import { colours, THEMES } from '../herdr/mod/factory/lib/tokens.js'
+import { banners as bannersView } from '../herdr/mod/factory/views/banners.js'
 import { orphans as orphansView } from '../herdr/mod/factory/views/orphans.js'
 import { stacks as stacksView } from '../herdr/mod/factory/views/stacks.js'
 import { badge, button, cat, gateMark, laneTag } from '../herdr/mod/factory/views/ui.js'
@@ -267,6 +268,34 @@ describe('the panel', () => {
       ['orphans', '1'],
     ])
     expect(saturated.panel.strip[0]).toMatchObject({ tone: 'warn-fg', fill: 'warn-fill' })
+  })
+
+  it('a layout with no maintainer login shows the maintainer banner, and one with a login shows none', async () => {
+    const { panel, ...input } = await round(NORMAL)
+    expect(panel.banners.maintainer).toBeNull()
+    const none = buildPanel({ ...input, config: { ...input.config, maintainer: '' } })
+    expect(none.banners.maintainer).toEqual({
+      title: 'No maintainer login.',
+      text: "Gates, time notes, held checks, decisions and tokens count only the maintainer's comments, and this layout names none. Run herdr/mod/install.sh --maintainer <login>.",
+    })
+    expect(bannersView(viewContext(), panel.banners)).toEqual([])
+    const drawn = bannersView(viewContext(), none.banners)
+    expect(drawn).toHaveLength(1)
+    const title = drawing(drawn[0], 'No maintainer login.')
+    expect(said(title, 'text_color')).toEqual(['red'])
+    const box = drawn[0] as unknown as Element
+    expect(said(box, 'border_color')).toEqual(['red'])
+    expect(said(box, 'bg')).toEqual(['red-bg'])
+  })
+
+  it('readConfig reads an empty or placeholder maintainer as none', () => {
+    const read = (maintainer: unknown) => readConfig({ ...props(null), maintainer }).maintainer
+    for (const value of ['', '{{maintainer}}', 'under_score', '-dash', 'a'.repeat(40), 7]) {
+      expect(read(value), String(value)).toBe('')
+    }
+    for (const value of ['ale9420', 'a', 'Some-One', 'a'.repeat(39)]) {
+      expect(read(value)).toBe(value)
+    }
   })
 
   it('Machine is one line when nominal and opens with the alarm when saturated', async () => {

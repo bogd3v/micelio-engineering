@@ -68,8 +68,12 @@ function readSpaces(entries) {
   return [...byName.values()]
 }
 
+/** What GitHub accepts as a login, the rule of `herdr/mod/install.sh`. */
+const LOGIN = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/
+
 /**
- * The block's props as the panel reads them.
+ * The block's props as the panel reads them. A `maintainer` that is not a GitHub login (empty, or the
+ * layout template's `{{maintainer}}`) is `''`.
  *
  * @param {unknown} raw
  * @returns {{ checkout: string, maintainer: string, dockerHost: string, side: 'left' | 'right', fixture: string[] | null, spaces: import('./lib/panel.js').SpaceConfig[] }}
@@ -81,7 +85,10 @@ export function readConfig(raw) {
   const spaces = Array.isArray(props['spaces']) ? props['spaces'] : []
   return {
     checkout: typeof props['checkout'] === 'string' ? props['checkout'] : '',
-    maintainer: typeof props['maintainer'] === 'string' ? props['maintainer'] : '',
+    maintainer:
+      typeof props['maintainer'] === 'string' && LOGIN.test(props['maintainer'])
+        ? props['maintainer']
+        : '',
     dockerHost: typeof props['dockerHost'] === 'string' ? props['dockerHost'] : '',
     /** The side `install.sh --side` put the panel on: Customize shows it and never changes it. */
     side: props['side'] === 'left' ? 'left' : 'right',

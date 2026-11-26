@@ -331,6 +331,7 @@ export function buildBoard({
     .filter((ms) => ms !== null)
     .toSorted((a, b) => a - b)[0]
   const notes = [
+    config.maintainer === '' ? 'No maintainer login: the gates are not read' : null,
     stale ? 'GitHub is stale: the cards are as of the last good read' : null,
     notLive.length === 0
       ? null
