@@ -204,7 +204,14 @@ describe('Needs you', () => {
   it('a sign-off whose Progress names no worktree has a null worktree and the note NO_WORKTREE_NOTE instead of LOCKED_NOTE', () => {
     expect(NO_WORKTREE_NOTE).toBe("Open diff needs the worktree in the issue's Progress.")
     for (const body of [undefined, '## Progress\n\nNot started.\n']) {
-      const card = build([{ number: 389, title: 'cms', comments: atG5('full', 12), body }]).cards[0]
+      const card = build([
+        {
+          number: 389,
+          title: 'cms',
+          comments: atG5('full', 12),
+          ...(body === undefined ? {} : { body }),
+        },
+      ]).cards[0]
       expect(card.worktree).toBeNull()
       expect(card.lockedNote).toBe(NO_WORKTREE_NOTE)
     }

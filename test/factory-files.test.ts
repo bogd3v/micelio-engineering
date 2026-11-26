@@ -174,10 +174,11 @@ describe('the factory roles', () => {
 
   it("every git diff of the master's runbook follows git add -N", () => {
     const master = readFileSync(join(agents, 'master.md'), 'utf8')
-    for (const [name, text] of [
+    const documents: [string, string][] = [
       ['herdr/master.md', runbook],
       ['template/.claude/agents/master.md', master],
-    ]) {
+    ]
+    for (const [name, text] of documents) {
       const diffs = [...text.matchAll(/git( -C \S+)? diff\b/g)]
       expect(diffs.length, name).toBeGreaterThan(0)
       for (const diff of diffs) {
