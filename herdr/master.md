@@ -71,7 +71,7 @@ Todo → Ready → In Progress → **Review** → Done (`M.7`), changed with `gh
 
 ## The rounds
 
-A round is one worker pass followed by gates 2 to 4; each red gate 3 or 4 ends it. The same worker runs the next round without `/compact`: sent with `hc send`, it reaches the agent as text it cannot run.
+A round is one worker pass followed by gates 2 to 4; each red gate 3 or 4 ends it. A red gate 2 does not end the round ("Gate 2 — the draft", item 5). The same worker runs the next round without `/compact`: sent with `hc send`, it reaches the agent as text it cannot run.
 
 ### Gate 2 — the draft
 
@@ -79,6 +79,12 @@ A round is one worker pass followed by gates 2 to 4; each red gate 3 or 4 ends i
 2. Count the changed lines with the `--stat` line of the block in "The review packet" (generated files and snapshots left out). Above 400, write the number and the draft's reason in the gate 2 comment, or send the draft back when it gives none (standard, section 11; `.claude/agents/master.md`, step 3). It records and does not block: the maintainer reads the reason at gate 5.
 3. After that block's `add -N .`, write the issue's body with `gh issue view <N> --repo {{repo}} --json body -q .body > <packets>/<N>/issue.md`, then run `lint-draft` from the worktree with the command built in the checkout of `micelio-engineering` (`npm run build` there first): `(cd ../wt-<N> && node <checkout>/packages/factory-tools/dist/cli.js lint-draft --file <draft> --base "$(git merge-base HEAD origin/main)" --logs <packet>/logs --issue <packets>/<N>/issue.md)`. Its rules for "Instructions that were wrong or missing" and for the logs of the Tests section are in `packages/factory-tools/README.md`, "`lint-draft`" (`C.5`); a failure, a missing log included, bounces the draft like a missing part, not as one of the three rounds. Then, with the same `cli.js`, `docs-hits --base <that base> --draft <draft>`: a hit bounces the draft the same way (answer line: `packages/factory-tools/README.md`, "`docs-hits`").
 4. Check the diff against the lane (`G2.7`) from the same checkout: `(cd ../wt-<N> && node <checkout>/packages/factory-tools/dist/cli.js lint-lane --diff "$(git merge-base HEAD origin/main)" --lane <lane>)`. Exit 1 prints the lane the diff fits: move the issue to it, post the correction-log line (what: the diff fits that lane, not the issue's; category `issue`) and run the gates the first lane skipped.
+5. The gate 2 comment's first line is one of three:
+   - a pass: `**Gate 2, round K (master)** · pass` (what follows `pass` is free);
+   - a failed gate 2 (`G2.9`, e.g. the check command is red): `**Gate 2, round K (master)** · red: <the check and what it printed>`;
+   - a bounce of item 1 or item 3 (a missing part, `lint-draft` or `docs-hits`): `**Gate 2, round K (master)** · sent back (not a round)`.
+
+   A rebase or a merge of `main` after gate 3 or 4 has reported opens round K+1 at gate 2, and gates 3 and 4 run again in that round (a reread is allowed, `G3.5`). A red gate 2 sends the draft back to the worker in the same round, like a bounce; it is not one of the three red rounds of `P.1`. A check that is red because of `main` (its own coverage floor, for one) is a red gate 2, not `held |`: "A held check" is for load timeouts only.
 
 ### The review packet
 

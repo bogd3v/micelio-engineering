@@ -162,6 +162,16 @@ describe('Needs you', () => {
     expect(blocked.cards[0]!.age / MIN).toBe(23)
   })
 
+  it('a red gate 2 after gates 3 and 4 passed makes no sign-off card', () => {
+    const kinds = (comments: Comment[]) =>
+      build([{ number: 389, title: 'cms', comments }]).cards.map((c: { kind: string }) => c.kind)
+    const passed = atG5('full', 30)
+    expect(kinds(passed)).toEqual(['signoff'])
+    expect(
+      kinds([...passed, say('**Gate 2, round 2 (master)** · red: npm run check failed', 5)])
+    ).toEqual([])
+  })
+
   it('the sign-off is locked until the diff of that issue was opened', () => {
     const issues = [{ number: 389, title: 'cms', comments: atG5('full', 12) }]
     const locked = build(issues).cards[0]!

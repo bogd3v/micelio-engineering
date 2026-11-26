@@ -31,6 +31,8 @@ const MOD_LINES: Record<string, string[]> = {
  */
 const STEPS: Record<string, string[]> = {
   ...MOD_LINES,
+  '**Gate 2, round K (master)** · red': ['herdr/master.md', 'herdr/mod/README.md'],
+  'sent back (not a round)': ['herdr/master.md', 'herdr/mod/README.md'],
   lane: [
     'docs/engineering-standard.md',
     'docs/factory.md',

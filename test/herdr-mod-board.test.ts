@@ -312,6 +312,30 @@ describe('the board', () => {
     expect(columnOf(gates([]))).toBe('ready')
   })
 
+  it('columnOf puts an issue whose gate 2 reopened after gates 3 and 4 passed in G3, and one whose gate 2 is red in G2', () => {
+    const column = (...bodies: string[]) =>
+      columnOf(
+        parseGates({
+          comments: bodies.map((body, i) => ({
+            id: i + 1,
+            user: { login: 'm' },
+            created_at: `2026-11-24T1${i}:00:00Z`,
+            body,
+          })),
+          maintainer: 'm',
+        })
+      )
+    const passed = [
+      '**Gate 1 (master): pass**\n\nlane: normal\n',
+      '**Gate 2, round 1 (master)** · pass',
+      '**Gate 3, round 1 (reviewer-1)** · 0 Blocking',
+      '**Gate 4, round 1 (verifier-1)** · 0 mismatches',
+    ]
+    expect(column(...passed)).toBe('g5')
+    expect(column(...passed, '**Gate 2, round 2 (master)** · pass')).toBe('g3')
+    expect(column(...passed, '**Gate 2, round 2 (master)** · red: npm run check failed')).toBe('g2')
+  })
+
   it('the read of GitHub keeps the comments of an issue closed today and of no other closed one', async () => {
     const { github } = await round()
     const read = (space: string) =>

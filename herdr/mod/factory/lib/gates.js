@@ -2,6 +2,11 @@
 // calibration run. The `held` mark is read from the line that issue #303 defines; until then no
 // issue is held. The comments are the master's, posted under the maintainer's login
 // (`herdr/master.md`): only that login counts, as in `factory-tools metrics`.
+//
+// A later comment of a gate resets what the gates after it said: the mark of G2 to G4 is that of the
+// gate's last comment posted after the last comment of every earlier gate (G3 and G4 run together, so
+// G4 counts from after gates 1 and 2), and G5 is passed only by a pull request opened after the last
+// gate comment.
 
 import { toMs } from './time.js'
 
@@ -128,7 +133,8 @@ function outcomeOf(gate, line) {
   const mismatchesN = mismatches === null ? null : Number(mismatches[1])
   /** @type {Round['outcome']} */
   let outcome = 'passed'
-  if (/sent back/.test(lower)) outcome = 'sentBack'
+  if ((gate === 2 || gate === 3) && /^red\b/i.test(summaryOf(line))) outcome = 'red'
+  else if (/sent back/.test(lower)) outcome = 'sentBack'
   else if (/not ready|not started|\bheld\b/.test(lower)) outcome = 'red'
   else if (gate === 3 && blockingN !== null && blockingN > 0) outcome = 'red'
   else if (gate === 4 && mismatchesN !== null && mismatchesN > 0) outcome = 'red'
@@ -137,7 +143,11 @@ function outcomeOf(gate, line) {
 }
 
 /**
- * Reads an issue's comments.
+ * Reads an issue's comments. The mark of each of G2 to G4 is that of the gate's last comment, a
+ * `sent back` one included (it runs), among those posted after the last comment of every earlier
+ * gate, except that G4 counts from after the last comment of gates 1 and 2, not of gate 3; a gate
+ * with none is not reached. G5 is passed by a `Progress updated … pull request #N opened` comment
+ * posted after the last comment of gates 1 to 4.
  *
  * @param {object} input
  * @param {Comment[]} input.comments the issue's comments as REST returns them
@@ -182,6 +192,7 @@ export function parseGates({ comments, maintainer, closed = false, needsYou = fa
       ...outcomeOf(n, line),
     })
     since = at
+    opened = false
   }
   const omitted = calibration ? [] : OMITTED[lane]
   /** @type {string[]} */
@@ -192,8 +203,11 @@ export function parseGates({ comments, maintainer, closed = false, needsYou = fa
       marks.push('omitted')
       continue
     }
-    const verdicts = rounds.filter((r) => r.gate === gate && r.outcome !== 'sentBack')
-    const last = verdicts.at(-1)
+    // `rounds` is in the order posted: what came before the last comment of an earlier gate is stale.
+    const stale = rounds.findLastIndex((r) => r.gate < Math.min(gate, 3))
+    const last = rounds
+      .slice(stale + 1)
+      .findLast((r) => r.gate === gate && (gate > 1 || r.outcome !== 'sentBack'))
     /** @type {string} */
     let mark
     if (closed) mark = 'passed'
@@ -220,9 +234,10 @@ export function parseGates({ comments, maintainer, closed = false, needsYou = fa
 }
 
 /**
- * Marks what runs now: the first gates not reached after the last passed one run, and G5 needs the
- * maintainer once every gate before it has passed or is omitted. A blocked agent turns the running
- * gate into one that needs the maintainer.
+ * Marks what runs now: the first gates not reached or sent back after the last passed one run, and
+ * G5 needs the maintainer once every gate before it has passed or is omitted. A gate whose comments
+ * all came before a later comment of an earlier gate is not reached, and is marked as any other. A
+ * blocked agent turns the running gate into one that needs the maintainer.
  *
  * @param {string[]} marks changed in place
  * @param {Round[]} rounds
@@ -230,7 +245,7 @@ export function parseGates({ comments, maintainer, closed = false, needsYou = fa
  */
 function settle(marks, rounds, needsYou) {
   if (rounds.length === 0 || marks.includes('red')) return
-  const live = marks.findIndex((m) => m === 'notReached')
+  const live = marks.findIndex((m) => m === 'notReached' || m === 'running')
   if (live === -1) return
   const before = marks.slice(0, live).every((m) => m === 'passed' || m === 'omitted')
   if (!before) return
@@ -244,7 +259,7 @@ function settle(marks, rounds, needsYou) {
   }
   marks[live] = needsYou ? 'needs' : 'running'
   // Gates 3 and 4 run together (`pprrtt`): the reviewer and the verifier start in the same round.
-  if (live === 2 && marks[3] === 'notReached') marks[3] = needsYou ? 'needs' : 'running'
+  if (live === 2 && (marks[3] === 'notReached' || marks[3] === 'running')) marks[3] = marks[live]
 }
 
 /**
