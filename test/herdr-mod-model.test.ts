@@ -239,6 +239,71 @@ describe('gates', () => {
   })
 })
 
+describe('a new round of an earlier gate', () => {
+  const g2 = (k: number, tail = 'pass') => `**Gate 2, round ${k} (master)** · ${tail}`
+  const g3 = (k: number) => `**Gate 3, round ${k} (reviewer-1)** · 0 Blocking, 0 Important`
+  const g4 = (k: number) => `**Gate 4, round ${k} (verifier-1)** · 0 mismatches`
+  const opened = 'Progress updated by the master: pull request #12 opened'
+  /** The comments of these first lines, one every ten minutes. */
+  const thread = (...bodies: string[]): Comment[] => bodies.map((body, i) => comment(body, i * 10))
+  const passed = [GATE1('full'), g2(1), g3(1), g4(1)]
+
+  it('the recorded comments of #441 and #442 give a red gate 2 and no sign-off', () => {
+    const read = (n: number) => gates(json<Comment[]>(`comments-${n}.json`))
+    expect(read(441)).toMatchObject({ track: 'pxtttt', label: 'G2·r4 RED' })
+    expect(read(442)).toMatchObject({ track: 'pxtttt', label: 'G2·r2 RED' })
+  })
+
+  it('a new round of gate 2 after gates 3 and 4 passed runs gates 3 and 4 again until their new rounds report', () => {
+    expect(gates(thread(...passed)).track).toBe('ppppnt')
+    expect(gates(thread(...passed, g2(2))).track).toBe('pprrtt')
+    expect(gates(thread(...passed, g2(2), g3(2))).track).toBe('ppprtt')
+    expect(gates(thread(...passed, g2(2), g3(2), g4(2))).track).toBe('ppppnt')
+  })
+
+  it('a gate 4 verdict posted before the gate 3 verdict of the same round keeps its mark', () => {
+    const early = [...passed, g2(2), g4(2)]
+    expect(gates(thread(...early)).track).toBe('pprptt')
+    expect(gates(thread(...early, g3(2))).track).toBe('ppppnt')
+  })
+
+  it('a gate 2 bounce after gates 3 and 4 passed makes G2 running and gates 3 to 6 not reached', () => {
+    const bounced = thread(...passed, g2(2, 'sent back (not a round)'))
+    expect(gates(bounced).track).toBe('prtttt')
+    expect(gates(bounced, { needsYou: true }).track).toBe('pntttt')
+  })
+
+  it('a sent back gate 3 or 4 runs with its pair, and a blocked agent turns it into needs you', () => {
+    const back = (gate: number) => `**Gate ${gate}, round 1 (master)** · sent back (not a round)`
+    for (const gate of [3, 4]) {
+      const read = thread(GATE1('full'), g2(1), back(gate))
+      expect(gates(read).track, `gate ${gate}`).toBe('pprrtt')
+      expect(gates(read, { needsYou: true }).track, `gate ${gate}`).toBe('ppnntt')
+    }
+  })
+
+  it('a gate 3 comment whose summary starts with red is red whatever its Blocking count', () => {
+    for (const tail of [
+      'Red: reviewer-1 found 0 Blocking, 1 Important',
+      'red: 0 Blocking',
+      'RED, sent back to the worker',
+    ]) {
+      const read = gates(thread(GATE1('full'), g2(1), `**Gate 3, round 1 (master)** · ${tail}`))
+      expect(read.track, tail).toBe('ppxttt')
+      expect(read.rounds.at(-1)?.outcome, tail).toBe('red')
+    }
+    const green = thread(GATE1('full'), g2(1), '**Gate 3, round 1 (master)** · Pass: 0 Blocking')
+    expect(gates(green).marks[2]).toBe('passed')
+  })
+
+  it('a pull request opened before a new round of gate 2 no longer passes G5', () => {
+    expect(gates(thread(...passed, opened)).track).toBe('pppppr')
+    expect(gates(thread(...passed, opened, g2(2))).track).toBe('pprrtt')
+    expect(gates(thread(...passed, opened, g2(2), g3(2), g4(2))).track).toBe('ppppnt')
+    expect(gates(thread(...passed, opened, g2(2), g3(2), g4(2), opened)).track).toBe('pppppr')
+  })
+})
+
 describe('issues', () => {
   const issue = (number: number, body: string | null, state = 'open') => ({
     number,
