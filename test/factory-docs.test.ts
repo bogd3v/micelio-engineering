@@ -47,8 +47,8 @@ function unknownCitations(
 
 describe('the factory documents', () => {
   it('docs/factory.md and herdr/master.md stay under their word caps', () => {
-    expect(words(read('docs/factory.md'))).toBeLessThanOrEqual(6282)
-    expect(words(read('herdr/master.md'))).toBeLessThanOrEqual(4814)
+    expect(words(read('docs/factory.md'))).toBeLessThanOrEqual(6360)
+    expect(words(read('herdr/master.md'))).toBeLessThanOrEqual(4947)
   })
 
   it("herdr/master.md has the master write the worktree, packet directory, branch and draft to the issue's Progress before the worker's brief, and check it at gate 5", () => {

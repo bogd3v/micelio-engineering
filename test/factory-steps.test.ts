@@ -166,6 +166,7 @@ const STEPS: Record<string, string[]> = {
     'herdr/master.md',
     'docs/factory.md',
   ],
+  'factory-clean.sh': [`${AGENTS}master.md`, 'herdr/master.md', 'docs/factory.md'],
   'herdr agent get': ['herdr/factory-slot.sh', 'docs/factory.md'],
   'hc get': ['herdr/factory-slot.sh', 'herdr/master.md', 'docs/factory.md'],
   'hc run --bg': ['herdr/master.md', 'fixtures/factory/run-canary.sh'],

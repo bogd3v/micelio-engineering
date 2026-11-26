@@ -29,7 +29,7 @@ A green canary is posted as the five `Canary |` lines of `RUN.md`, each ending `
 1. Worker: `worker-<N>`, in `../wt-<N>` (branch `<type>/factory-<N>` from `origin/main`); sonnet, opus after two failed rounds or for contracts, security or concurrency (`M.4`).
 2. Reviewer: `reviewer-<N>`, `reviewer-<N>-r<K>` for round K ≥ 2, in the worker's worktree; opus, sonnet for a reread (`G3.5`). Verifier: `verifier-<N>`, `verifier-<N>-r<K>`, in a clean copy it builds; sonnet. Scribe: `scribe`, in `../wt-scribe`; sonnet.
 3. `<N>` is the issue number. Names match `[a-z][a-z0-9_-]{0,31}` and are unique among live agents. For an issue of a repository of `{{pairs}}`, `<N>` is `<tag><N>`: `worker-<tag><N>` in `wt-<tag><N>` of that repository's checkout, and `lint-lane` takes `owner/repo#<N>`.
-4. The lease (`B.2`) uses the name given to `hc run --name`. Before each worker: `herdr/factory-slot.sh reap`, then `herdr/factory-slot.sh acquire --pool workers --agent worker-<N>`; on exit 75 (full, or `paused`) the issue waits. When the issue leaves the pipeline: `herdr/factory-slot.sh release --agent worker-<N>` and `docker compose -p <project> down -v`. Start workers with `nice -n 10`; reviewers and verifiers keep normal priority so the gates run first. `factory-slot.sh status` shows slots, leases and any `orphan` (`B.3`).
+4. The lease (`B.2`) uses the name given to `hc run --name`. Before each worker: `herdr/factory-slot.sh reap`, then `herdr/factory-slot.sh acquire --pool workers --agent worker-<N>`; on exit 75 (full, or `paused`) the issue waits. When the issue leaves the pipeline: `herdr/factory-slot.sh release --agent worker-<N>` and `docker compose -p <project> down -v`. Start workers with `nice -n 10`; reviewers and verifiers keep normal priority so the gates run first. `factory-slot.sh status` shows slots, leases and any `orphan` (`B.3`). An issue's stacks are the Compose projects `<N>` (the worker's) and `<N>v` (the verifier's), and an image built for it is tagged `<N>` or `<N>v`.
 
 ## The host's runtime
 
@@ -176,6 +176,16 @@ When an issue's pull request is merged, or when the maintainer asks, and once mo
 3. After the pull request opens, replace only the text under `### Progress` and tick the epic's box with a script that edits that section and nothing else; save the body before and after and post both as a comment (`gh issue comment --body-file`). Never touch the title, the criteria or the scope.
 4. The `time: <minutes>m diff|report` line is the maintainer's, in a review comment on the pull request (`G5.5`); one the mod sent, the master posts as it came ("Lines from the mod").
 5. When `gh pr view <n> --json state -q .state` prints `MERGED` and step 3 of "The Project Status flow" allows Done, set it; run `factory-tools metrics` and tell the maintainer.
+
+## After the issue is closed
+
+Once step 5 of "Gate 5 — delivery" has set Done, `gh issue view <N> --json state -q .state` prints `CLOSED` and the issue's agents have ended ("Starting an agent", item 4), run [`herdr/factory-clean.sh`](factory-clean.sh) (`B.5`) with `--dry-run`, read its `would remove` list, then run it without:
+
+```bash
+herdr/factory-clean.sh {{repo}}#<N> <N> --checkout <the repository's checkout> --packets <packets> --dry-run
+```
+
+Report every `kept` and `stuck` line to the maintainer, and never remove one of those paths by hand. For an issue of `{{pairs}}` it takes `owner/repo#<N>`, the name `<tag><N>` and that repository's checkout. Run it too for a closed issue a past session left.
 
 ## Lines from the mod
 
