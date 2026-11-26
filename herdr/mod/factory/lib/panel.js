@@ -19,6 +19,9 @@ export const SECTIONS = ['machine', 'slots', 'workers', 'milestones', 'stacks', 
 /** How far back the load of the Machine section goes. */
 const HISTORY_MS = 15 * 60_000
 
+/** How much of an orphan's command line "Show process" shows, in characters. */
+const BRIEF_LENGTH = 120
+
 /** The token that colours a space's badge, by the space's position in the layout's props. */
 export const SPACE_COLOURS = ['space-m', 'space-f', 'space-p']
 
@@ -330,7 +333,7 @@ export function buildGithub({ now, spaces, reads, previous = null }) {
         entry.error = read.error
       } else {
         const pairs = pairsOf(space)
-        /** @param {PairRaw['issues']} issues @param {Pair | undefined} pair */
+        /** @param {PairRaw['issues']} issues @param {{ epic?: number | null | undefined } | undefined} pair */
         const own = (issues, pair) =>
           issues.filter((i) => (i.pull_request ?? null) === null && i.number !== pair?.epic)
         entry.raw = {
@@ -828,7 +831,8 @@ export function buildPanel({
     )
   }
   const stackRows = stacks.value.map((s) => {
-    const owner = owners(s.name)[0] ?? leaseOf(s.name)
+    // The first of an empty list is `undefined`, so the lease decides, and it can be `null`.
+    const owner = /** @type {string | null} */ (owners(s.name)[0] ?? leaseOf(s.name))
     const since = stackAges[s.name]
     return {
       name: s.name,
@@ -840,11 +844,14 @@ export function buildPanel({
     }
   })
 
-  // Orphans.
+  // Orphans. A command line can be a thousand characters long: the card shows the program and
+  // "Show process" a cut of the command.
   const orphans = (slots?.orphans ?? []).map((o) => ({
     pid: o.pid,
     command: o.command,
     cwd: o.cwd,
+    title: `${/** @type {string} */ (o.command.split(/\s+/)[0]).split('/').pop()} · ${o.cwd}`,
+    brief: o.command.length > BRIEF_LENGTH ? `${o.command.slice(0, BRIEF_LENGTH)}…` : o.command,
     line: `pid ${o.pid} · no slot · no owner`,
   }))
 

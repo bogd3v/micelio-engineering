@@ -321,7 +321,7 @@ export function keyMap(bindings) {
  * The action a key press of the focused panel runs: the id of a key of `keyMap` whose letter is that key
  * and that no `mod:factory` binding replaced, else `null`. Modifiers make it no key of the panel.
  *
- * @param {{ key: string, ctrl?: boolean, alt?: boolean, shift?: boolean, meta?: boolean }} press
+ * @param {{ key: string, ctrl?: boolean | undefined, alt?: boolean | undefined, shift?: boolean, meta?: boolean | undefined }} press
  * @param {ReturnType<typeof keyMap>} map
  * @returns {string | null}
  */

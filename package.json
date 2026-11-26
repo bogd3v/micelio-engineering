@@ -19,8 +19,9 @@
     "lint:licenses": "node scripts/check-licenses.mjs",
     "lint:standard": "npm run build && node packages/eslint-config/dist/lint-standard.js",
     "lint:unused": "knip",
-    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run lint:licenses && npm run lint:standard && npm run lint:unused",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test:coverage && npm run lint:licenses && npm run lint:standard && npm run lint:unused",
     "test": "npm run build && vitest run",
+    "test:coverage": "npm run build && vitest run --coverage",
     "verify:isolated": "node scripts/verify-isolated.mjs",
     "template": "node scripts/template.mjs",
     "verify:template": "node scripts/verify-template.mjs"
@@ -30,6 +31,7 @@
     "@micelio/prettier-config": "0.1.0",
     "@micelio/tsconfig": "0.1.0",
     "@types/node": "^22.20.5",
+    "@vitest/coverage-v8": "^5.1.0",
     "eslint": "^10.15.0",
     "knip": "^6.48.0",
     "prettier": "^3.9.10",

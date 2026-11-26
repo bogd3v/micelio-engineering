@@ -624,7 +624,7 @@ describe('standard-sync.sh raising the package', () => {
   })
 
   it('fails a repository without .nvmrc instead of guessing a Node', () => {
-    const w = world('1.3', '', raiser({ nvmrc: undefined }))
+    const w = world('1.3', '', { range: OLD })
     const result = sync(w, false)
     expect(result.status).toBe(1)
     expect(result.output).toContain('no .nvmrc')
@@ -982,7 +982,11 @@ describe('standard-sync.sh and the profile pin', () => {
       '',
     ].join('\n')
     for (const profile of [undefined, 'typescript', 'typescript, site-engine']) {
-      const w = world('1.3', '', { range: '^0.1.2', nvmrc: '22\n', profile })
+      const w = world('1.3', '', {
+        range: '^0.1.2',
+        nvmrc: '22\n',
+        ...(profile === undefined ? {} : { profile }),
+      })
       const result = sync({ ...w, env: { ...w.env, ...env } }, true)
       expect(result.status, result.output).toBe(0)
       expect(result.output, `profile ${profile ?? 'not pinned'}`).toBe(expected)
@@ -1061,7 +1065,11 @@ describe('standard-sync.sh and the profile pin', () => {
       ['typescript', ['typescript']],
       ['typescript, site-engine', ['site-engine', 'typescript']],
     ] as const) {
-      const w = world('1.3', '', { range: '^0.1.2', nvmrc: '22\n', profile })
+      const w = world('1.3', '', {
+        range: '^0.1.2',
+        nvmrc: '22\n',
+        ...(profile === undefined ? {} : { profile }),
+      })
       const result = sync(w, true)
       expect(result.status, result.output).toBe(0)
       const label = `profile ${profile ?? 'not pinned'}`

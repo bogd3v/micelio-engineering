@@ -69,6 +69,7 @@ describe('build-cats', () => {
   it('working has the wave marks, needs the magenta bell, idle the closed eyes at 0.55 opacity, held the pause mark, red an outline 30 wide in the red token', () => {
     for (const theme of ['dark', 'light']) {
       const t = TOKENS.themes[theme]
+      if (!t) throw new Error(`tokens.json has no ${theme} theme`)
       const wave = 'M226 296q-24 36 0 72M198 280q-38 52 0 104'
       const closed = 'M426 320Q458 350 490 320M561 320Q593 350 625 320'
       const bell = (s: string): string => elements(s)[2] ?? ''

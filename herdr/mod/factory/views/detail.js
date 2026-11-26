@@ -212,7 +212,7 @@ function agents(ctx, model) {
                   .w(col[2] ?? 100)
                   .flex_none()
                   .font_bold()
-                  .text_color(ctx.c[a.tone])
+                  .text_color(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (a.tone)])
                   .child(a.state)
               )
               .child(

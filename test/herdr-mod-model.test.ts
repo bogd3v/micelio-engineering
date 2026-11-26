@@ -478,8 +478,8 @@ describe('the spaces of the layout', () => {
       ['worker', 5, ''],
       ['worker', 267, 'pc'],
     ])
-    expect(agents.filter((a) => onPair(a, two)).map((a) => a.address)).toEqual(['a', 'b', 'c'])
-    expect(agents.filter((a) => onPair(a, own)).map((a) => a.address)).toEqual(['d'])
+    expect(agents.filter((a) => onPair(a, two!)).map((a) => a.address)).toEqual(['a', 'b', 'c'])
+    expect(agents.filter((a) => onPair(a, own!)).map((a) => a.address)).toEqual(['d'])
   })
 })
 

@@ -134,7 +134,12 @@ export function board(ctx, model) {
               .px(12)
               .py(6)
               .child(label(s.label, ctx.c['muted'], 11))
-              .child(div().font_bold().text_color(ctx.c[s.tone]).child(s.value))
+              .child(
+                div()
+                  .font_bold()
+                  .text_color(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (s.tone)])
+                  .child(s.value)
+              )
           )
       )
     )

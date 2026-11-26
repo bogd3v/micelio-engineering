@@ -457,7 +457,10 @@ export function needsYou(ctx, needs, collapsed = false) {
   const keys = ['needs']
   // Hidden in Customize while something waits: the heading and its count, no cards.
   if (collapsed) {
-    items[0] = items[0].pb(14).border_b(1).border_color(ctx.c['line'])
+    items[0] = /** @type {import('gpui-kit').NativeElement} */ (items[0])
+      .pb(14)
+      .border_b(1)
+      .border_color(ctx.c['line'])
     return { items, keys }
   }
   needs.cards.forEach((card, i) => {
@@ -489,6 +492,10 @@ export function needsYou(ctx, needs, collapsed = false) {
     )
     keys.push(`card-${i}`)
   })
-  items[items.length - 1] = items[items.length - 1].border_b(1).border_color(ctx.c['line'])
+  items[items.length - 1] = /** @type {import('gpui-kit').NativeElement} */ (
+    items[items.length - 1]
+  )
+    .border_b(1)
+    .border_color(ctx.c['line'])
   return { items, keys }
 }

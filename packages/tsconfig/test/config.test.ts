@@ -45,13 +45,40 @@ describe('@micelio/tsconfig against the fixture', () => {
     expect(diagnosticsFor('export const n: string = null;\n')).toContain(2322)
   })
 
+  it('rejects an unchecked index access and an optional field set to undefined', () => {
+    expect(
+      diagnosticsFor('const xs: string[] = [];\nexport const n: number = xs[0].length;\n')
+    ).toContain(2532)
+    expect(diagnosticsFor('export const o: { a?: string } = { a: undefined };\n')).toContain(2375)
+  })
+
+  it('rejects what each of the other options beyond strict catches', () => {
+    const cases: [string, number, string][] = [
+      [
+        'noImplicitOverride',
+        4114,
+        'class A { f(): void {} }\nexport class B extends A { f(): void {} }\n',
+      ],
+      ['noImplicitReturns', 7030, 'export function f(x: boolean) {\n  if (x) return 1;\n}\n'],
+      [
+        'noFallthroughCasesInSwitch',
+        7029,
+        'export function f(x: number): number {\n  let n = 0;\n  switch (x) {\n    case 1:\n      n += 1;\n    case 2:\n      n += 2;\n  }\n  return n;\n}\n',
+      ],
+      ['isolatedModules', 2748, 'declare const enum E { A }\nexport const a: number = E.A;\n'],
+      ['erasableSyntaxOnly', 1294, 'export enum E { A }\n'],
+    ]
+    for (const [option, code, source] of cases) {
+      expect(diagnosticsFor(source), option).toContain(code)
+    }
+  })
+
   it('follows the Node major of .nvmrc', () => {
     const major = Number(readFileSync(`${ROOT}.nvmrc`, 'utf8').trim())
     const level = LANGUAGE_LEVEL_OF_NODE[major]
-    expect(
-      level,
-      `.nvmrc says Node ${major}: add its language level to this test and the base`
-    ).toBeDefined()
+    if (level === undefined) {
+      throw new Error(`.nvmrc says Node ${major}: add its language level to this test and the base`)
+    }
     const { options } = parseFixtureConfig()
     expect(ts.ScriptTarget[options.target ?? 0]).toBe(level)
     expect(options.lib).toEqual([`lib.${level.toLowerCase()}.d.ts`])

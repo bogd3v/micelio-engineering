@@ -23,8 +23,13 @@ export function confirmation(ctx, ask, tone) {
     .p(10)
     .bg(ctx.c['surface2'])
     .border_1()
-    .border_color(ctx.c[tone])
-    .child(displayBold(div()).text_size(13).text_color(ctx.c[tone]).child(ask.title))
+    .border_color(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (tone)])
+    .child(
+      displayBold(div())
+        .text_size(13)
+        .text_color(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (tone)])
+        .child(ask.title)
+    )
     .child(label(ask.detail, ctx.c['fg'], 11.5))
     .child(
       h_flex()
@@ -53,7 +58,7 @@ export function confirmation(ctx, ask, tone) {
 export function stacks(ctx, s) {
   const right = h_flex()
     .gap(4)
-    .child(label(s.count.split(' · ')[0], ctx.c['muted'], 11))
+    .child(label(/** @type {string} */ (s.count.split(' · ')[0]), ctx.c['muted'], 11))
     .child(s.unowned > 0 ? label(`· ${s.unowned} unowned`, ctx.c['magenta'], 11) : div())
   const box = section(ctx).child(heading(ctx, 'stacks', 'Stacks up', s.open, right))
   if (!s.open) return box

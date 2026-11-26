@@ -54,7 +54,7 @@ export function buildState({ now, fetched, previous = null }) {
   for (const name of SOURCES) sources[name] = { ...(previous?.sources[name] ?? empty()) }
   /**
    * @param {string} name
-   * @param {{ at?: string, error?: string }} read
+   * @param {{ at?: string, error?: string | undefined }} read
    * @param {() => unknown} parse
    */
   const take = (name, read, parse) => {

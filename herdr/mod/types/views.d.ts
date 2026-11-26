@@ -16,6 +16,7 @@ import type {
 } from '../factory/lib/settings.js'
 import type { createOutbox, Form, TimeLogForm } from '../factory/lib/needs.js'
 import type { buildState } from '../factory/lib/state.js'
+import type { Colours } from '../factory/lib/tokens.js'
 import type { factoryShare } from '../factory/lib/board.js'
 import type { Github } from '../factory/lib/panel.js'
 import type { Confirmation } from '../factory/lib/actions.js'
@@ -151,7 +152,7 @@ export interface Ui {
 /** What every view is given. */
 export interface ViewContext {
   /** The colours to draw with, by the names of `design/tokens.json`. */
-  c: Record<string, string>
+  c: Colours
   theme: 'dark' | 'light'
   dark: boolean
   ui: Ui

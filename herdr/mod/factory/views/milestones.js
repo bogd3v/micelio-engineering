@@ -80,7 +80,7 @@ export function milestones(ctx, m) {
                     .font_bold()
                     .text_size(11)
                     .whitespace_nowrap()
-                    .text_color(ctx.c[issue.tone])
+                    .text_color(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (issue.tone)])
                     .child(issue.label)
                 )
             )

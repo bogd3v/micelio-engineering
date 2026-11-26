@@ -892,7 +892,7 @@ describe('lint-draft figures of the Tests section against their logs', () => {
     )
     const texts = { 'a.log': vitest, 'b.log': vitest }
     expect(lintDraft(draft, withLogs(texts))).toHaveLength(1)
-    expect(lintDraft(draft, { ...withLogs(texts), logContents: undefined })).toEqual([])
+    expect(lintDraft(draft, { changed: [], synced: SYNCED, checkCommand: null })).toEqual([])
   })
 
   it('createDeps reads the texts of the named logs and runLintDraft hands them to the rule', async () => {

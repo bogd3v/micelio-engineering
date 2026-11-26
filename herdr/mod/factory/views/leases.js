@@ -43,7 +43,7 @@ export function leases(ctx, w) {
                 .items_center()
                 .justify_center()
                 .text_size(13)
-                .bg(ctx.c[/** @type {string} */ (cell.colour)])
+                .bg(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (cell.colour)])
                 .text_color(ctx.c['badge-fg'])
                 .tooltip(cell.title)
                 .child(cell.label)

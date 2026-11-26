@@ -62,7 +62,7 @@ async function fixtureDetail(number = 302): Promise<Detail> {
     terminals: () => [],
     config,
   })
-  const github = (await a.readGithub(config.spaces[0])) as Extract<
+  const github = (await a.readGithub(config.spaces[0]!)) as Extract<
     Awaited<ReturnType<typeof a.readGithub>>,
     { at: string }
   >
@@ -70,7 +70,7 @@ async function fixtureDetail(number = 302): Promise<Detail> {
   const issue = github.issues.find((i: { number: number }) => i.number === number)
   return buildDetail({
     issue: issue!,
-    comments: github.comments[number],
+    comments: github.comments[number]!,
     maintainer: github.maintainer,
     space: SPACE,
     agents: parseAgents(read.terminals!),
@@ -396,16 +396,16 @@ describe('an issue of another repository of the space', () => {
       terminals: () => [],
       config,
     })
-    const github = (await a.readGithub(config.spaces[0])) as Extract<
+    const github = (await a.readGithub(config.spaces[0]!)) as Extract<
       Awaited<ReturnType<typeof a.readGithub>>,
       { at: string }
     >
     const [other] = github.others!
-    const issue = other.issues.find((i: { number: number }) => i.number === 5)
+    const issue = other!.issues.find((i: { number: number }) => i.number === 5)
     const read = await a.readAgents()
     const detail = buildDetail({
       issue: issue!,
-      comments: other.comments[5],
+      comments: other!.comments[5]!,
       maintainer: github.maintainer,
       space: {
         repo: 'bogd3v/fixture-two',

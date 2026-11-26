@@ -182,7 +182,9 @@ export function parseHeld(comments, maintainer, number) {
     const line = /^held \| [^|]*\| (?:[\w.-]+\/[\w.-]+)?#(\d+) \| G([2-6]) \| (.+)$/m.exec(body)
     if (line !== null) {
       held =
-        Number(line[1]) === number ? { gate: Number(line[2]), reason: line[3].trim(), at } : null
+        Number(line[1]) === number
+          ? { gate: Number(line[2]), reason: /** @type {string} */ (line[3]).trim(), at }
+          : null
       continue
     }
     const gate = /^gate (\d)\b/i.exec(firstLine(body))

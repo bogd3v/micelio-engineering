@@ -9,6 +9,11 @@ import { defineConfig } from 'vitest/config'
  * when it fails, so a targeted `npx vitest run <file>` finds `dist/` on a clean copy;
  * `test/setup/tmpdir.ts` gives each run a fresh `TMPDIR` under the one it was started with, and
  * fails when a test leaves an entry in it.
+ *
+ * `npm run test:coverage` measures coverage with v8 and fails below the floor in `thresholds`: the
+ * lines and branches measured on `main` when the floor was set (issue #445), rounded down to a whole
+ * percent. A floor is never lowered (section 8 of the standard); `test/coverage-floor.test.ts`
+ * holds the measured values.
  */
 const requested = Number(process.env['VITEST_MAX_WORKERS'])
 const maxWorkers = Number.isInteger(requested) && requested > 0 ? requested : undefined
@@ -19,5 +24,10 @@ export default defineConfig({
     globalSetup: ['test/setup/build.ts', 'test/setup/tmpdir.ts'],
     include: ['packages/*/test/**/*.test.ts', 'test/**/*.test.ts'],
     testTimeout: 60_000,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text-summary'],
+      thresholds: { lines: 95, branches: 84 },
+    },
   },
 })

@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createAdapters, dockerArgs, readConfig } from '../herdr/mod/factory/adapters.js'
 import {
   buildGithub,
@@ -18,6 +18,140 @@ import { stackOwned } from '../herdr/mod/factory/lib/actions.js'
 import { heldOrRed } from '../herdr/mod/factory/lib/settings.js'
 import { buildState } from '../herdr/mod/factory/lib/state.js'
 import { colours, THEMES } from '../herdr/mod/factory/lib/tokens.js'
+import { orphans as orphansView } from '../herdr/mod/factory/views/orphans.js'
+import { stacks as stacksView } from '../herdr/mod/factory/views/stacks.js'
+import { badge, button, cat, gateMark, laneTag } from '../herdr/mod/factory/views/ui.js'
+import type { ViewContext } from '../herdr/mod/types/views.js'
+
+// The app's UI modules exist only inside it: each element here records the calls made on it.
+const ui = vi.hoisted(() => {
+  const element = (): unknown => {
+    const calls: [string, unknown[]][] = []
+    const node: unknown = new Proxy(
+      {},
+      {
+        get: (_, name) =>
+          name === 'calls'
+            ? calls
+            : (...args: unknown[]) => {
+                calls.push([String(name), args])
+                return node
+              },
+      }
+    )
+    return node
+  }
+  return { element }
+})
+// An image keeps its path as a call named `source`, so a test can read what is drawn.
+vi.mock('gpui-kit', () => ({
+  div: ui.element,
+  image: (path: string) => (ui.element() as { source: (p: string) => unknown }).source(path),
+}))
+vi.mock('gpui-base', () => ({ h_flex: ui.element, v_flex: ui.element }))
+
+/** An element of the stub above, as the view built it. */
+interface Element {
+  calls: [string, unknown[]][]
+}
+
+/** Every element in a drawn tree, the root included. */
+function elements(root: unknown): Element[] {
+  if (Array.isArray(root)) return root.flatMap(elements)
+  if (root === null || (typeof root !== 'object' && typeof root !== 'function')) return []
+  const calls = (root as Partial<Element>).calls
+  if (!Array.isArray(calls)) return []
+  return [root as Element, ...calls.flatMap(([, args]) => args.flatMap(elements))]
+}
+
+/** The texts drawn as children of an element. */
+const texts = (e: Element): string[] =>
+  e.calls
+    .filter(([name]) => name === 'child')
+    .flatMap(([, args]) => args.filter((a): a is string => typeof a === 'string'))
+
+/** The first argument of each call named `name` on an element. */
+const said = (e: Element, name: string): unknown[] =>
+  e.calls.filter(([n]) => n === name).map(([, args]) => args[0])
+
+/** The colour tokens an element was drawn with. */
+const paint = (e: Element) => ({
+  bg: said(e, 'bg'),
+  text: said(e, 'text_color'),
+  border: said(e, 'border_color'),
+})
+
+/** The paths of the images in a drawn tree, in order. */
+const images = (root: unknown): unknown[] => elements(root).flatMap((e) => said(e, 'source'))
+
+/** The only element of a tree that draws `text` as its own child. */
+function drawing(root: unknown, text: string): Element {
+  const found = elements(root).filter((e) => texts(e).includes(text))
+  expect(found, text).toHaveLength(1)
+  return found[0] as Element
+}
+
+/** Runs the click handler an element recorded, as the app does, with `cx`. */
+function click(e: Element, cx: unknown): void {
+  expect(said(e, 'on_click')).toHaveLength(1)
+  ;(said(e, 'on_click')[0] as (event: unknown, cx: unknown) => void)(null, cx)
+}
+
+/** Colours whose value is their own token name, so a test reads which token a view used. */
+const TOKENS = Object.fromEntries(Object.keys(THEMES.dark).map((name) => [name, name]))
+
+/** The `ctx` of a view, with a spy for each thing the view may call. */
+function viewContext({ dark = true, confirmation = null as unknown } = {}) {
+  const ctx = {
+    c: TOKENS,
+    dark,
+    ui: {
+      processes: {},
+      confirmation,
+      formatAge,
+      lockedNote: 'locked while no master answers',
+      toggle: vi.fn(),
+      confirm: vi.fn(),
+      cancel: vi.fn(),
+      askBringDown: vi.fn(),
+      showProcess: vi.fn(),
+      askTerminate: vi.fn(),
+    },
+  }
+  return ctx as typeof ctx & ViewContext
+}
+
+/** A `panel.sections.stacks` of one owned stack and two that nothing owns. */
+const STACKS = {
+  open: true,
+  count: '3 · 2 unowned',
+  unowned: 2,
+  error: null as string | null,
+  rows: [
+    { name: 'wt-1', status: 'running(1)', owner: 'worker-1', removable: false, age: null },
+    { name: 'wt-2', status: 'running(2)', owner: null, removable: true, age: '3 min' },
+    { name: 'wt-3', status: 'exited(1)', owner: null, removable: true, age: null },
+  ],
+}
+
+/** A row of `panel.sections.orphans`. */
+const orphanRow = (pid: number) => ({
+  pid,
+  command: `sleep ${pid}`,
+  cwd: '/home/factory/tmp/repo',
+  title: `sleep · repo of ${pid}`,
+  brief: `sleep ${pid}`,
+  line: `pid ${pid} · no slot · no owner`,
+})
+
+/** A live `panel.sections.orphans` of two processes. */
+const ORPHANS = {
+  open: true,
+  dim: false,
+  note: null as string | null,
+  count: '2',
+  rows: [orphanRow(11), orphanRow(22)],
+}
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const MOD = join(ROOT, 'herdr/mod/factory')
@@ -178,7 +312,7 @@ describe('the panel', () => {
     expect(stale.sections.milestones.dim).toBe(true)
     expect(stale.sections.milestones.note).toBe('as of 15:57 UTC · not live')
     // It keeps its last rows, and the machine, the slots and the stacks are the live ones.
-    expect(stale.sections.milestones.spaces[0].issues.map((i: { id: string }) => i.id)).toEqual([
+    expect(stale.sections.milestones.spaces[0]!.issues.map((i: { id: string }) => i.id)).toEqual([
       '#788',
       '#792',
       '#801',
@@ -240,7 +374,7 @@ describe('the panel', () => {
 
   it('an issue row has its track, gate label, lane tag and the cat file of each agent on it', async () => {
     const { panel } = await round(NORMAL)
-    const rows = panel.sections.milestones.spaces[0].issues as {
+    const rows = panel.sections.milestones.spaces[0]!.issues as {
       id: string
       marks: string[]
       label: string
@@ -277,13 +411,13 @@ describe('the panel', () => {
     expect(rows.map((r) => r.id)).toEqual(['#788', '#792', '#801', '#810'])
     const written = new Set(readdirSync(cats))
     for (const row of rows) for (const c of row.cats) expect(written.has(c.file)).toBe(true)
-    const light = (await round(NORMAL, 1, 'light')).panel.sections.milestones.spaces[0].issues
-    expect(light[1].cats[0].file).toBe('worker-working-head-light.svg')
+    const light = (await round(NORMAL, 1, 'light')).panel.sections.milestones.spaces[0]!.issues
+    expect(light[1]!.cats[0]!.file).toBe('worker-working-head-light.svg')
   })
 
   it('the rows and the NEEDS count follow the agents of the moment, not those of the last read of GitHub', async () => {
     const input = await round(NORMAL)
-    expect(input.panel.strip[3].value).toBe('2')
+    expect(input.panel.strip[3]!.value).toBe('2')
     const terminals = JSON.parse(
       await readFile(join(ROOT, FIXTURES, 'normal/terminals.json'), 'utf8')
     ) as {
@@ -300,8 +434,8 @@ describe('the panel', () => {
     })
     // GitHub is not read again: only the agents changed.
     const panel = buildPanel({ ...input, state })
-    expect(panel.strip[3].value).toBe('3')
-    const row = panel.sections.milestones.spaces[0].issues.find(
+    expect(panel.strip[3]!.value).toBe('3')
+    const row = panel.sections.milestones.spaces[0]!.issues.find(
       (i: { id: string }) => i.id === '#792'
     )
     expect(row!.marks[1]).toBe('needs')
@@ -333,6 +467,44 @@ describe('the panel', () => {
       'verifier-810',
     ])
     expect(saturated.sections.workers.count).toBe('6/6 · next worker waits')
+  })
+
+  it("an orphan's row names its program and folder in its title and cuts its command to 120 characters", async () => {
+    const { panel } = await round([`${FIXTURES}/orphans`, FIXTURES])
+    const [row] = panel.sections.orphans.rows
+    expect(row!.command.length).toBeGreaterThan(1000)
+    expect(row!.title).toBe(`zsh · ${row!.cwd}`)
+    expect(row!.brief).toBe(`${row!.command.slice(0, 120)}…`)
+    // A command of 120 characters or fewer is whole.
+    const short = (await round(NORMAL)).panel.sections.orphans.rows[0]!
+    expect(short).toMatchObject({ title: `sleep · ${short.cwd}`, brief: 'sleep 602' })
+  })
+
+  it('the orphans view draws the title on one line and never the whole command', () => {
+    const command = `/usr/bin/zsh -c ${'x'.repeat(1000)}`
+    const row = {
+      pid: 498144,
+      command,
+      cwd: '/home/factory/tmp/repo',
+      title: 'zsh · /home/factory/tmp/repo',
+      brief: `${command.slice(0, 120)}…`,
+      line: 'pid 498144 · no slot · no owner',
+    }
+    const ctx = {
+      c: {},
+      ui: {
+        processes: { 498144: { cores: '0.0', ageMs: 1000 } },
+        confirmation: null,
+        formatAge,
+      },
+    }
+    const drawn = elements(orphansView(ctx, { open: true, count: '1', rows: [row] }))
+    const title = drawn.filter((e) => texts(e).includes(row.title))
+    expect(title).toHaveLength(1)
+    expect(title[0]?.calls.map(([name]) => name)).toContain('truncate')
+    const all = drawn.flatMap(texts)
+    expect(all).toContain(`command  ${row.brief}`)
+    expect(all.filter((text) => text.includes(command))).toEqual([])
   })
 })
 
@@ -392,7 +564,7 @@ describe('a space of several repositories', () => {
     })
     const config = readConfig({ ...props(null), spaces: PAIRS })
     expect(config.spaces).toHaveLength(1)
-    const space = config.spaces[0]
+    const space = config.spaces[0]!
     const read = await a.readGithub(space)
     expect(read).toMatchObject({
       issues: [{ number: 5 }],
@@ -504,7 +676,7 @@ describe('a space of several repositories', () => {
         github: null,
         stacks: { value: [{ name: 'wt-tw5', status: 'up' }], at: null, stale: false, error: null },
         config,
-      }).sections.stacks.rows[0].owner
+      }).sections.stacks.rows[0]!.owner
     expect(leased('worker-tw5')).toBe('worker-tw5')
     expect(leased('worker-5')).toBeNull()
     expect(stackOwned('wt-tw5', agents, [], ['tw'])).toBe(false)
@@ -552,7 +724,7 @@ describe('a space of several repositories', () => {
     })
     const state = { stale: false, sources: {} }
     const panel = buildPanel({ now, state, github, config })
-    const rows = panel.sections.milestones.spaces[0].issues as {
+    const rows = panel.sections.milestones.spaces[0]!.issues as {
       id: string
       note: string
       marks: string[]
@@ -695,7 +867,7 @@ describe('the adapters', () => {
     await a.readSlots()
     await a.readMachine()
     await a.readStacks()
-    await a.readGithub(SPACES[0])
+    await a.readGithub(SPACES[0]!)
     const lines = calls.map(([cmd, args]) => [cmd, ...args].join(' '))
     expect(lines.filter((l) => !l.startsWith('gh '))).toEqual([
       `bash ${ROOT.replace(/\/$/, '')}/herdr/factory-slot.sh status`,
@@ -767,14 +939,14 @@ describe('the adapters', () => {
     let github = buildGithub({
       now: first,
       spaces: config.spaces,
-      reads: { 'micelio-engineering': await a.readGithub(config.spaces[0]) },
+      reads: { 'micelio-engineering': await a.readGithub(config.spaces[0]!) },
     })
     failing = true
     github = buildGithub({
       now: first + 90_000,
       spaces: config.spaces,
       previous: github,
-      reads: { 'micelio-engineering': await a.readGithub(config.spaces[0]) },
+      reads: { 'micelio-engineering': await a.readGithub(config.spaces[0]!) },
     })
     const state = buildState({
       now: first + 90_000,
@@ -846,5 +1018,312 @@ describe('the views', () => {
       size: 380,
       focusable: true,
     })
+  })
+
+  it("the stacks view shows each stack's owner, or NO AGENT with its age, and the unowned count and the docker error", () => {
+    const drawn = stacksView(viewContext(), { ...STACKS, error: 'no daemon' })
+    expect(elements(drawn).flatMap(texts)).toEqual([
+      '// STACKS UP [-]',
+      '3',
+      '· 2 unowned',
+      '! docker: no daemon',
+      'wt-1',
+      'worker-1',
+      'running(1)',
+      'wt-2',
+      'NO AGENT · 3 min',
+      'running(2)',
+      'wt-3',
+      'NO AGENT',
+      'exited(1)',
+      'BRING DOWN WT-2…',
+      'BRING DOWN WT-3…',
+    ])
+    expect(paint(drawing(drawn, '· 2 unowned')).text).toEqual(['magenta'])
+    expect(paint(drawing(drawn, '! docker: no daemon')).text).toEqual(['red'])
+    expect(paint(drawing(drawn, 'worker-1')).text).toEqual(['muted'])
+    expect(paint(drawing(drawn, 'NO AGENT · 3 min')).text).toEqual(['magenta'])
+    expect(paint(drawing(drawn, 'NO AGENT')).text).toEqual(['magenta'])
+    // Every stack owned and docker answering: neither the unowned count nor an error.
+    const owned = stacksView(viewContext(), {
+      ...STACKS,
+      count: '1',
+      unowned: 0,
+      rows: STACKS.rows.slice(0, 1),
+    })
+    expect(elements(owned).flatMap(texts)).toEqual([
+      '// STACKS UP [-]',
+      '1',
+      'wt-1',
+      'worker-1',
+      'running(1)',
+    ])
+  })
+
+  it('the stacks view offers Bring down only on a removable stack and confirms only the stack it names', () => {
+    const cx = { name: 'cx' }
+    const ctx = viewContext()
+    const drawn = stacksView(ctx, STACKS)
+    const offered = elements(drawn).filter((e) => said(e, 'on_click').length > 0)
+    // The heading, and one button for each stack nothing owns.
+    expect(offered.flatMap(texts)).toEqual([
+      '// STACKS UP [-]',
+      'BRING DOWN WT-2…',
+      'BRING DOWN WT-3…',
+    ])
+    expect(paint(drawing(drawn, 'BRING DOWN WT-3…'))).toEqual({
+      bg: [],
+      text: ['fg'],
+      border: ['fg'],
+    })
+    click(drawing(drawn, 'BRING DOWN WT-3…'), cx)
+    expect(ctx.ui.askBringDown.mock.calls).toEqual([['wt-3', cx]])
+    expect(elements(drawn).flatMap(texts)).not.toContain('CONFIRM')
+
+    const ask = { kind: 'stack', target: 'wt-3', title: 'Bring down wt-3?', detail: 'removes it' }
+    const asking = viewContext({ confirmation: ask })
+    const asked = stacksView(asking, STACKS)
+    // Once, after the button of the stack it names.
+    expect(elements(asked).flatMap(texts).slice(-6)).toEqual([
+      'BRING DOWN WT-2…',
+      'BRING DOWN WT-3…',
+      'Bring down wt-3?',
+      'removes it',
+      'CONFIRM',
+      'CANCEL',
+    ])
+    expect(paint(drawing(asked, 'Bring down wt-3?')).text).toEqual(['red'])
+    const [box] = elements(asked).filter((e) => said(e, 'bg').includes('surface2'))
+    expect(paint(box as Element)).toEqual({ bg: ['surface2'], text: [], border: ['red'] })
+    expect(paint(drawing(asked, 'CONFIRM'))).toEqual({
+      bg: ['red'],
+      text: ['btn-fg'],
+      border: ['red'],
+    })
+    expect(paint(drawing(asked, 'CANCEL'))).toEqual({ bg: [], text: ['fg'], border: ['fg'] })
+    click(drawing(asked, 'CONFIRM'), cx)
+    expect(asking.ui.confirm.mock.calls).toEqual([[cx]])
+    expect(asking.ui.cancel).not.toHaveBeenCalled()
+    click(drawing(asked, 'CANCEL'), cx)
+    expect(asking.ui.cancel.mock.calls).toEqual([[cx]])
+    expect(asking.ui.confirm).toHaveBeenCalledTimes(1)
+
+    // Another kind, a stack that is not there, and a stack that is not removable: no question.
+    for (const other of [
+      { ...ask, kind: 'process' },
+      { ...ask, target: 'wt-9' },
+      { ...ask, target: 'wt-1' },
+    ]) {
+      const quiet = stacksView(viewContext({ confirmation: other }), STACKS)
+      expect(elements(quiet).flatMap(texts), `${other.kind} ${other.target}`).not.toContain(
+        'CONFIRM'
+      )
+    }
+  })
+
+  it("a folded section draws only its heading, and the heading's click toggles it", () => {
+    const cx = { name: 'cx' }
+    const sections = [
+      {
+        name: 'stacks',
+        view: stacksView,
+        model: { ...STACKS, open: false, error: 'no daemon' },
+        drawn: ['// STACKS UP [+]', '3', '· 2 unowned'],
+        colour: 'cyan',
+      },
+      {
+        name: 'orphans',
+        view: orphansView,
+        model: { ...ORPHANS, open: false, dim: true, note: 'not live' },
+        drawn: ['// ORPHANS [+]', '[2]'],
+        colour: 'red',
+      },
+    ]
+    for (const { name, view, model, drawn, colour } of sections) {
+      const ctx = viewContext()
+      const folded = (view as (c: unknown, m: unknown) => unknown)(ctx, model)
+      expect(elements(folded).flatMap(texts), name).toEqual(drawn)
+      const title = drawing(folded, drawn[0] as string)
+      expect(paint(title).text, name).toEqual([colour])
+      const clickable = elements(folded).filter((e) => said(e, 'on_click').length > 0)
+      expect(clickable, name).toHaveLength(1)
+      expect(clickable[0], name).toBe(title)
+      expect(ctx.ui.toggle).not.toHaveBeenCalled()
+      click(title, cx)
+      expect(ctx.ui.toggle.mock.calls, name).toEqual([[name, cx]])
+    }
+  })
+
+  it('the orphans view shows and terminates its own pid and confirms only the process it names', () => {
+    const cx = { name: 'cx' }
+    /** The card of each orphan, in order. */
+    const cards = (root: unknown) => elements(root).filter((e) => said(e, 'mt').includes(10))
+    const ctx = viewContext()
+    const drawn = orphansView(ctx, ORPHANS)
+    expect(cards(drawn)).toHaveLength(2)
+    const [, second] = cards(drawn)
+    click(drawing(second, 'SHOW PROCESS'), cx)
+    expect(ctx.ui.showProcess.mock.calls).toEqual([[22, cx]])
+    expect(ctx.ui.askTerminate).not.toHaveBeenCalled()
+    click(drawing(second, 'TERMINATE…'), cx)
+    expect(ctx.ui.askTerminate.mock.calls).toEqual([[22, cx]])
+    expect(paint(drawing(second, 'TERMINATE…'))).toEqual({
+      bg: ['red'],
+      text: ['btn-fg'],
+      border: ['red'],
+    })
+    expect(elements(drawn).flatMap(texts)).not.toContain('CONFIRM')
+
+    const ask = { kind: 'process', target: '22', title: 'Terminate pid 22?', detail: 'SIGTERM' }
+    const asked = orphansView(viewContext({ confirmation: ask }), ORPHANS)
+    const [one, two] = cards(asked)
+    expect(elements(one).flatMap(texts)).not.toContain('CONFIRM')
+    expect(elements(two).flatMap(texts).slice(-4)).toEqual([
+      'Terminate pid 22?',
+      'SIGTERM',
+      'CONFIRM',
+      'CANCEL',
+    ])
+    expect(paint(drawing(asked, 'Terminate pid 22?')).text).toEqual(['red'])
+
+    // Another kind with the same target, and another pid: no question.
+    for (const other of [
+      { ...ask, kind: 'stack' },
+      { ...ask, target: '33' },
+    ]) {
+      const quiet = orphansView(viewContext({ confirmation: other }), ORPHANS)
+      expect(elements(quiet).flatMap(texts), `${other.kind} ${other.target}`).not.toContain(
+        'CONFIRM'
+      )
+    }
+  })
+
+  it('a section whose source is not live draws its note and dims its rows', () => {
+    const note = 'as of 16:00 UTC · not live'
+    const dimmed = (root: unknown) => elements(root).filter((e) => said(e, 'opacity').length > 0)
+    const stale = orphansView(viewContext(), { ...ORPHANS, dim: true, note })
+    expect(paint(drawing(stale, `! ${note}`)).text).toEqual(['red'])
+    const [rows, ...rest] = dimmed(stale)
+    expect(rest).toEqual([])
+    expect(said(rows as Element, 'opacity')).toEqual([0.6])
+    const inside = elements(rows).flatMap(texts)
+    expect(inside).toContain('sleep · repo of 11')
+    expect(inside).toContain('sleep · repo of 22')
+    // The heading and the note stay at full strength.
+    expect(inside).not.toContain('// ORPHANS [-]')
+    expect(inside).not.toContain(`! ${note}`)
+
+    const live = orphansView(viewContext(), ORPHANS)
+    expect(dimmed(live)).toEqual([])
+    expect(
+      elements(live)
+        .flatMap(texts)
+        .filter((t) => t.startsWith('!'))
+    ).toEqual([])
+    expect(elements(live).flatMap(texts)).toContain('sleep · repo of 11')
+  })
+
+  it('a badge, a lane tag and a gate mark draw each kind with its colours, and glow only in the dark theme', () => {
+    const ctx = viewContext()
+    const small = badge(ctx, 'M', 'space-m') as unknown as Element
+    expect(texts(small)).toEqual(['M'])
+    expect([said(small, 'w'), said(small, 'h')]).toEqual([[16], [16]])
+    expect(paint(small)).toEqual({ bg: ['space-m'], text: ['badge-fg'], border: [] })
+    const large = badge(ctx, 'F', 'space-f', 24) as unknown as Element
+    expect([said(large, 'w'), said(large, 'h')]).toEqual([[24], [24]])
+    expect(paint(badge(ctx, 'X', 'no-such-token') as unknown as Element)).toEqual({
+      bg: ['muted'],
+      text: ['badge-fg'],
+      border: [],
+    })
+    expect(paint(badge(ctx, '!', 'warn-fill') as unknown as Element)).toEqual({
+      bg: ['warn-fill'],
+      text: ['warn-fg'],
+      border: [],
+    })
+
+    const lanes = {
+      FULL: { bg: ['fg'], text: ['bg'], border: ['fg'], dashed: false },
+      EXPRESS: { bg: [], text: ['muted'], border: ['muted'], dashed: true },
+      NORMAL: { bg: [], text: ['fg'], border: ['fg'], dashed: false },
+    }
+    for (const [lane, { dashed, ...colours }] of Object.entries(lanes)) {
+      const tag = laneTag(ctx, lane) as unknown as Element
+      expect(texts(tag), lane).toEqual([lane])
+      expect(paint(tag), lane).toEqual(colours)
+      expect(said(tag, 'border_dashed').length > 0, lane).toBe(dashed)
+    }
+
+    const flat = {
+      passed: { bg: ['cyan-dim'], text: [], border: [], dashed: false },
+      held: { bg: ['warn-fill'], text: [], border: ['fg'], dashed: false },
+      red: { bg: ['red-bg'], text: [], border: ['red'], dashed: false },
+      omitted: { bg: [], text: [], border: ['muted'], dashed: true },
+      notReached: { bg: ['track'], text: [], border: [], dashed: false },
+    }
+    for (const dark of [true, false]) {
+      for (const [mark, { dashed, ...colours }] of Object.entries(flat)) {
+        const box = gateMark(viewContext({ dark }), mark) as unknown as Element
+        expect(paint(box), mark).toEqual(colours)
+        expect(said(box, 'border_dashed').length > 0, mark).toBe(dashed)
+        expect(images(box), mark).toEqual([])
+      }
+    }
+    for (const [mark, colour] of [
+      ['running', 'cyan'],
+      ['needs', 'magenta'],
+    ] as const) {
+      const glowing = gateMark(viewContext(), mark)
+      expect(images(glowing), mark).toEqual([`mods/factory/glow-${colour}.svg`])
+      expect(
+        elements(glowing).flatMap((e) => said(e, 'bg')),
+        mark
+      ).toEqual([colour])
+      const light = gateMark(viewContext({ dark: false }), mark) as unknown as Element
+      expect(images(light), mark).toEqual([])
+      expect(paint(light), mark).toEqual({ bg: [colour], text: [], border: [] })
+    }
+  })
+
+  it('a cat glows only when it works or needs the maintainer, in the dark theme', () => {
+    const file = 'worker-working-head-dark.svg'
+    const picture = `mods/factory/cats/${file}`
+    const drawn = (dark: boolean, state: string) =>
+      images(cat(viewContext({ dark }), file, 24, state))
+    expect(drawn(true, 'working')).toEqual(['mods/factory/glow-cyan.svg', picture])
+    expect(drawn(true, 'needs')).toEqual(['mods/factory/glow-magenta.svg', picture])
+    for (const state of ['idle', 'held', 'red'])
+      expect(drawn(true, state), state).toEqual([picture])
+    for (const state of ['working', 'needs', 'idle', 'held', 'red'])
+      expect(drawn(false, state), state).toEqual([picture])
+    // No file: an empty box of the same size, so the row does not move.
+    for (const none of [null, undefined]) {
+      const box = cat(viewContext(), none, 24, 'working') as unknown as Element
+      expect(images(box)).toEqual([])
+      expect([said(box, 'w'), said(box, 'h')]).toEqual([[24], [24]])
+    }
+  })
+
+  it('a disabled button is flat, has no click and shows its tip or the locked note', () => {
+    const ctx = viewContext()
+    const press = vi.fn()
+    const options = { disabled: true, primary: true, click: press }
+    const tipped = button(ctx, 'go', 'GO', {
+      ...options,
+      tip: 'no free slot',
+    }) as unknown as Element
+    const locked = button(ctx, 'stop', 'STOP', options) as unknown as Element
+    expect(said(tipped, 'tooltip')).toEqual(['no free slot'])
+    expect(said(locked, 'tooltip')).toEqual(['locked while no master answers'])
+    for (const [text, el] of [
+      ['GO', tipped],
+      ['STOP', locked],
+    ] as const) {
+      expect(texts(el)).toEqual([text])
+      expect(paint(el), text).toEqual({ bg: ['track'], text: ['muted'], border: ['track'] })
+      expect(said(el, 'on_click'), text).toEqual([])
+      expect(said(el, 'cursor_pointer'), text).toEqual([])
+    }
+    expect(press).not.toHaveBeenCalled()
   })
 })

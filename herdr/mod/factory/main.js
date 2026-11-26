@@ -120,6 +120,9 @@ import { MONO } from './views/ui.js'
 /** @typedef {Parameters<typeof factoryShare>[0]} ShareInput */
 /** @typedef {import('../types/views.js').DetailProps} DetailProps */
 /** @typedef {import('../types/views.js').LogProps} LogProps */
+/** @typedef {import('./lib/needs.js').Form} Form */
+/** @typedef {import('./lib/needs.js').TimeLogForm} TimeLogForm */
+/** @typedef {import('../types/views.js').FormInputs} FormInputs */
 
 /** What the slots, the machine, the agents and the stacks are read every, and GitHub. */
 const FAST_MS = 5000
@@ -131,6 +134,7 @@ export default class Factory
   )
 {
   /**
+   * @override
    * @param {unknown} _props
    * @param {Context} cx
    */
@@ -495,15 +499,15 @@ export default class Factory
     const handMin = InputState.new({ placeholder: 'min' })
     const remark = InputState.new({ placeholder: 'the admin page, headed Chromium' })
     readMin.on('change', (_e, cx) => {
-      this.forms[number].readMin = readMin.value().trim()
+      ;/** @type {Form} */ (this.forms[number]).readMin = readMin.value().trim()
       cx.notify()
     })
     handMin.on('change', (_e, cx) => {
-      this.forms[number].handMin = handMin.value().trim()
+      ;/** @type {Form} */ (this.forms[number]).handMin = handMin.value().trim()
       cx.notify()
     })
     remark.on('change', (_e, cx) => {
-      this.forms[number].remark = remark.value()
+      ;/** @type {Form} */ (this.forms[number]).remark = remark.value()
       cx.notify()
     })
     this.formInputs[number] = { readMin, handMin, remark }
@@ -522,15 +526,15 @@ export default class Factory
       const handMin = InputState.new({ placeholder: 'min' })
       const remark = InputState.new({ placeholder: 'the admin page, headed Chromium' })
       readMin.on('change', (_e, cx) => {
-        this.timeForms[number].readMin = readMin.value().trim()
+        ;/** @type {TimeLogForm} */ (this.timeForms[number]).readMin = readMin.value().trim()
         cx.notify()
       })
       handMin.on('change', (_e, cx) => {
-        this.timeForms[number].handMin = handMin.value().trim()
+        ;/** @type {TimeLogForm} */ (this.timeForms[number]).handMin = handMin.value().trim()
         cx.notify()
       })
       remark.on('change', (_e, cx) => {
-        this.timeForms[number].remark = remark.value()
+        ;/** @type {TimeLogForm} */ (this.timeForms[number]).remark = remark.value()
         cx.notify()
       })
       this.timeInputs[number] = { readMin, handMin, remark }
@@ -564,7 +568,7 @@ export default class Factory
     Object.assign(form, patch)
     if (patch['read'] === 'report') {
       form.readMin = ''
-      this.formInputs[number].readMin.set_value('')
+      ;/** @type {FormInputs} */ (this.formInputs[number]).readMin.set_value('')
     } else if (patch['read'] === 'diff') {
       form.readMin = null
     }
@@ -581,7 +585,7 @@ export default class Factory
       const at = this.diffs[number]
       if (form.readMin !== null || at === undefined) continue
       const tracked = String(Math.max(1, Math.floor((this.now - at) / 60_000)))
-      const input = this.formInputs[number].readMin
+      const input = /** @type {FormInputs} */ (this.formInputs[number]).readMin
       if (input.value() !== tracked) input.set_value(tracked)
     }
     cx.notify()
@@ -781,8 +785,8 @@ export default class Factory
       board: s.board,
       sections: s.order.map((name, i) => ({
         name,
-        title: SECTION_INFO[name][0],
-        desc: SECTION_INFO[name][1],
+        title: /** @type {[string, string]} */ (SECTION_INFO[name])[0],
+        desc: /** @type {[string, string]} */ (SECTION_INFO[name])[1],
         on: !s.hidden.includes(name),
         first: i === 0,
         last: i === s.order.length - 1,
@@ -894,7 +898,12 @@ export default class Factory
       if (space !== undefined) this.openDetail(space.name, number)
       return
     }
-    const at = name === 'top' ? 0 : name === 'reveal' ? this.order.indexOf(argument) : -1
+    const at =
+      name === 'top'
+        ? 0
+        : name === 'reveal'
+          ? /** @type {(string | undefined)[]} */ (this.order).indexOf(argument)
+          : -1
     if (at >= 0) this.scroll.scroll_to_item(at)
   }
 
@@ -962,9 +971,15 @@ export default class Factory
           for (const [number, patch] of Object.entries(forms.time)) {
             this.setTimeForm(key(number), { open: true, ...patch }, cx)
             const form = this.timeForms[number]
-            this.timeInputs[number].readMin.set_value(form.readMin)
-            this.timeInputs[number].handMin.set_value(form.handMin)
-            this.timeInputs[number].remark.set_value(form.remark)
+            ;/** @type {FormInputs} */ (this.timeInputs[number]).readMin.set_value(
+              /** @type {TimeLogForm} */ (form).readMin
+            )
+            ;/** @type {FormInputs} */ (this.timeInputs[number]).handMin.set_value(
+              /** @type {TimeLogForm} */ (form).handMin
+            )
+            ;/** @type {FormInputs} */ (this.timeInputs[number]).remark.set_value(
+              /** @type {TimeLogForm} */ (form).remark
+            )
           }
           if (this.logState !== null && forms.log !== null) {
             const { form, inputs } = this.logState
@@ -1331,7 +1346,9 @@ export default class Factory
     this.order = [
       ...shown.map(() => ''),
       ...chosen.flatMap(({ name }) =>
-        name === 'needs' ? needs.keys : drawn[name].map(() => name)
+        name === 'needs'
+          ? needs.keys
+          : /** @type {import('gpui-kit').NativeElement[]} */ (drawn[name]).map(() => name)
       ),
     ]
     return v_flex()
@@ -1354,7 +1371,9 @@ export default class Factory
           .track_scroll(this.scroll)
           .children([
             ...shown,
-            ...chosen.flatMap(({ name }) => drawn[name]),
+            ...chosen.flatMap(
+              ({ name }) => /** @type {import('gpui-kit').NativeElement[]} */ (drawn[name])
+            ),
             footer(ctx, keyMap(keys())),
           ])
       )

@@ -344,7 +344,8 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
       if (dirs !== null) {
         githubReads[space.name] = (githubReads[space.name] ?? 0) + 1
         const failure = await fixtureText('github-error.txt')
-        if (failure !== null && githubReads[space.name] > 1) return { error: failure.trim() }
+        if (failure !== null && /** @type {number} */ (githubReads[space.name]) > 1)
+          return { error: failure.trim() }
         const stamp = await fixtureText('github-at.txt')
         if (stamp !== null) at = stamp.trim()
         const today = iso(await now()).slice(0, 10)
@@ -395,7 +396,7 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
               })
             )
             batch.forEach((issue, k) => {
-              comments[issue.number] = got[k]
+              comments[issue.number] = /** @type {import('./lib/gates.js').Comment[]} */ (got[k])
             })
           }
           parts.push({ issues, comments })

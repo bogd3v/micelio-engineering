@@ -548,8 +548,12 @@ async function withFields(world: World, issue: IssueFields = {}): Promise<Return
     if (issue.milestone !== undefined)
       node.milestone = issue.milestone === null ? null : { title: issue.milestone }
     if (issue.item === false) node.projectItems.nodes = []
-    if (issue.releaseLine) node.projectItems.nodes[0].releaseLine = issue.releaseLine
-    if (issue.front) node.projectItems.nodes[0].front = issue.front
+    if (issue.releaseLine || issue.front) {
+      const [item] = node.projectItems.nodes
+      if (!item) throw new Error('issue-fields.json has no project item')
+      if (issue.releaseLine) item.releaseLine = issue.releaseLine
+      if (issue.front) item.front = issue.front
+    }
     return data
   }
   return base
@@ -759,7 +763,11 @@ describe('the backfill', () => {
         if (query.includes('releaseLine:')) {
           const data = (JSON.parse(issue) as { data: IssueData }).data
           const value = over.values?.[variables.number as number]
-          if (value) data.repository.issue.projectItems.nodes[0].releaseLine = value
+          if (value) {
+            const [item] = data.repository.issue.projectItems.nodes
+            if (!item) throw new Error('the recorded issue has no project item')
+            item.releaseLine = value
+          }
           return data
         }
         writes.push(`status ${JSON.stringify(variables)}`)

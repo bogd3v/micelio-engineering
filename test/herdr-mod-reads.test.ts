@@ -159,7 +159,7 @@ describe('the time limits of the reads', () => {
       { sleep: time.sleep }
     )
     const github = buildGithub({ now, spaces: SPACES, reads: first.reads })
-    expect(github.spaces['micelio-engineering'].stale).toBe(false)
+    expect(github.spaces['micelio-engineering']!.stale).toBe(false)
     const pending = readSlow(
       { now: async () => now + 60_000, readGithub: () => NEVER, readPulls: async () => [] },
       SPACES,

@@ -159,19 +159,19 @@ describe('Needs you', () => {
       'master:tfix-master',
       'signoff:micelio#389',
     ])
-    expect(blocked.cards[0].age / MIN).toBe(23)
+    expect(blocked.cards[0]!.age / MIN).toBe(23)
   })
 
   it('the sign-off is locked until the diff of that issue was opened', () => {
     const issues = [{ number: 389, title: 'cms', comments: atG5('full', 12) }]
-    const locked = build(issues).cards[0]
+    const locked = build(issues).cards[0]!
     expect(locked.locked).toBe(true)
     expect(locked.form).toBeNull()
     expect(cardMessages(locked)).toEqual([])
     // A diff opened for another issue unlocks nothing.
     const other = build(issues, { diffs: { 451: NOW - 5 * MIN } }).cards[0]
     expect(cardMessages(other)).toEqual([])
-    const open = build(issues, { diffs: { 389: NOW - 5 * MIN } }).cards[0]
+    const open = build(issues, { diffs: { 389: NOW - 5 * MIN } }).cards[0]!
     expect(open.locked).toBe(false)
     expect(cardMessages(open)).toEqual([
       { target: 'tfix-master', text: 'approved, sign off #389\ntime: 5m diff' },
@@ -180,7 +180,7 @@ describe('Needs you', () => {
 
   it('a sign-off whose issue names its worktree under ## Progress has that worktree, so Open diff is enabled', () => {
     const body = '## Why\n\nx\n\n## Progress\n\nWorktree `/w/wt-389`, branch `fix/factory-389`.\n'
-    const card = build([{ number: 389, title: 'cms', comments: atG5('full', 12), body }]).cards[0]
+    const card = build([{ number: 389, title: 'cms', comments: atG5('full', 12), body }]).cards[0]!
     expect(card.worktree).toBe('/w/wt-389')
     expect(card.lockedNote).toBe(LOCKED_NOTE)
     const same = build([
@@ -190,7 +190,7 @@ describe('Needs you', () => {
         comments: atG5('full', 12),
         body: body.replace('## P', '### P'),
       },
-    ]).cards[0]
+    ]).cards[0]!
     expect(same.worktree).toBe('/w/wt-389')
     expect(same.lockedNote).toBe(LOCKED_NOTE)
   })
@@ -198,7 +198,14 @@ describe('Needs you', () => {
   it('a sign-off whose Progress names no worktree has a null worktree and the note NO_WORKTREE_NOTE instead of LOCKED_NOTE', () => {
     expect(NO_WORKTREE_NOTE).toBe("Open diff needs the worktree in the issue's Progress.")
     for (const body of [undefined, '## Progress\n\nNot started.\n']) {
-      const card = build([{ number: 389, title: 'cms', comments: atG5('full', 12), body }]).cards[0]
+      const card = build([
+        {
+          number: 389,
+          title: 'cms',
+          comments: atG5('full', 12),
+          ...(body === undefined ? {} : { body }),
+        },
+      ]).cards[0]!
       expect(card.worktree).toBeNull()
       expect(card.lockedNote).toBe(NO_WORKTREE_NOTE)
     }
@@ -240,20 +247,20 @@ describe('Needs you', () => {
   it('the message for #389 after 11 minutes on the diff is approved, sign off #389 and time: 11m diff', () => {
     const card = build([{ number: 389, title: 'cms', comments: atG5('full', 12) }], {
       diffs: { 389: NOW - 11 * MIN },
-    }).cards[0]
+    }).cards[0]!
     expect(card.lines).toBe('approved, sign off #389\ntime: 11m diff')
     expect(card.form!.tracked).toBe(11)
     // The minutes are editable, and a remark loses its parentheses.
     const edited = build([{ number: 389, title: 'cms', comments: atG5('full', 12) }], {
       diffs: { 389: NOW - 11 * MIN },
       forms: { 389: { readMin: '14', remark: 'the (admin) page' } },
-    }).cards[0]
+    }).cards[0]!
     expect(edited.lines).toBe('approved, sign off #389\ntime: 14m diff (the admin page)')
     // An invalid form sends nothing.
     const bad = build([{ number: 389, title: 'cms', comments: atG5('full', 12) }], {
       diffs: { 389: NOW - 11 * MIN },
       forms: { 389: { readMin: 'x' } },
-    }).cards[0]
+    }).cards[0]!
     expect(cardMessages(bad)).toEqual([])
     expect(bad.form!.error).toBe('Reading minutes: a whole number.')
   })
@@ -332,7 +339,7 @@ describe('Needs you', () => {
 
   it("a notification's action scrolls the docked panel to Needs you, and does not open a new copy of the mod", () => {
     const [card] = build([{ number: 389, title: 'cms', comments: atG5('full', 12) }]).cards
-    const note = notificationFor(card)
+    const note = notificationFor(card!)
     expect(note.action).toEqual({ name: 'factory.reveal:needs' })
     expect(note.title).toBe('Needs you')
     expect(note.body).toBe('micelio#389 · G5 · Ready for your sign-off. cms')
@@ -353,14 +360,14 @@ describe('Needs you', () => {
         build([{ number: 389, title: 'cms', comments: atG5(lane, 12) }], {
           diffs: { 389: NOW - 11 * MIN },
           forms: { 389: { hand: 'stack', handMin: '4' } },
-        }).cards[0]
+        }).cards[0]!
     )
     expect(lanes.map((c: { form?: { showHands: boolean } | null }) => c.form!.showHands)).toEqual([
       true,
       false,
     ])
-    expect(lanes[0].lines).toBe('approved, sign off #389\ntime: 11m diff, 4m stack')
-    expect(lanes[1].lines).toBe('approved, sign off #389\ntime: 11m diff')
+    expect(lanes[0]!.lines).toBe('approved, sign off #389\ntime: 11m diff, 4m stack')
+    expect(lanes[1]!.lines).toBe('approved, sign off #389\ntime: 11m diff')
     expect(
       timeLine({ read: 'diff', readMin: 3, hand: 'test', handMin: 2, lane: 'express' }).line
     ).toBe('time: 3m diff')
@@ -380,7 +387,7 @@ describe('Needs you', () => {
       { letter: 'A', text: 'Oracle accepts it' },
       { letter: 'B', text: 'Reorder' },
     ])
-    const card = build([{ number: 792, title: 'tab order', comments }]).cards[0]
+    const card = build([{ number: 792, title: 'tab order', comments }]).cards[0]!
     expect(card.kind).toBe('decision')
     expect(card.master).toBe('tfix-master')
     const text = answerLine(792, 'A', 'the note')
@@ -575,8 +582,8 @@ describe('a space of two repositories', () => {
     const batches = needs.cards.filter((c: { kind: string }) => c.kind === 'batch')
     expect(batches).toHaveLength(1)
     const [batch] = batches
-    expect(batch.key).toBe('express:fixture-space')
-    expect(batch.items!.map((i: { label: string }) => i.label)).toEqual([
+    expect(batch!.key).toBe('express:fixture-space')
+    expect(batch!.items!.map((i: { label: string }) => i.label)).toEqual([
       'fixture-space#6',
       'fixture-space bogd3v/fixture-two#6',
     ])

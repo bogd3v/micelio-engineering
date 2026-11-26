@@ -180,12 +180,15 @@ export function button(
   el.cursor_pointer().on_click(/** @type {ClickHandler} */ (o.click))
   if (o.primary === true) {
     return el
-      .bg(ctx.c[tone])
-      .text_color(ctx.c[o.fg ?? 'badge-fg'])
+      .bg(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (tone)])
+      .text_color(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (o.fg ?? 'badge-fg')])
       .border_1()
-      .border_color(ctx.c[tone])
+      .border_color(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (tone)])
   }
-  return el.text_color(ctx.c[tone]).border_1().border_color(ctx.c[tone])
+  return el
+    .text_color(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (tone)])
+    .border_1()
+    .border_color(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (tone)])
 }
 
 /**
@@ -211,7 +214,7 @@ export function heading(ctx, name, title, open, right, colour = 'cyan') {
         .flex()
         .items_center()
         .text_size(12)
-        .text_color(ctx.c[colour])
+        .text_color(ctx.c[/** @type {import('../lib/tokens.js').Token} */ (colour)])
         .on_click((_e, cx) => ctx.ui.toggle(name, cx))
         .child(`// ${title.toUpperCase()} ${open ? '[-]' : '[+]'}`)
     )

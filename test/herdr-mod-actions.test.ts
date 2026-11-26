@@ -268,7 +268,7 @@ describe('a held check', () => {
     const retries = createRetries({
       send: (target: string, text: string) => sent.push([target, text]),
     })
-    retries.arm(card.key, card.ref!, card.master!)
+    retries.arm(card!.key, card!.ref!, card!.master!)
     expect(retries.check(30, 32)).toEqual([])
     expect(retries.check(5, 32)).toEqual(['retry bogd3v/micelio-cms#531'])
     expect(retries.check(5, 32)).toEqual([])
@@ -421,10 +421,26 @@ describe('the orphans', () => {
     expect(calls).toEqual([])
     expect(await actions.confirm()).toEqual({ ok: true, note: 'pid 4242 ended' })
     expect(calls).toHaveLength(1)
-    const [cmd, args] = calls[0]
+    const [call] = calls
+    if (!call) throw new Error('no command ran')
+    const [cmd, args] = call
     expect(cmd).toBe('sh')
     expect(args[1]).toContain('kill -TERM -- "-$pg"')
     expect(args.at(-1)).toBe('4242')
+  })
+
+  it('confirming Terminate runs nothing when the pid left the orphans after it was asked', async () => {
+    const { calls, exec } = recorder()
+    let left = false
+    const actions = createActions({
+      exec,
+      config,
+      facts: () => ({ ...facts(), orphans: left ? [] : facts().orphans }),
+    })
+    expect(actions.askTerminate(4242).ok).toBe(true)
+    left = true
+    expect(await actions.confirm()).toEqual({ ok: false, note: 'pid 4242 is no longer an orphan' })
+    expect(calls).toEqual([])
   })
 
   it("Show process reads the process's cores and age with ps, and a fixture reads its file", async () => {
@@ -534,7 +550,7 @@ describe('a panel that reads recordings', () => {
     expect(parseHeld(comments, ME, 393)).toMatchObject({ gate: 4 })
     const stacks = JSON.parse(read('docker-compose-ls.json')).map((s: { Name: string }) => s.Name)
     const agents = parseAgents(JSON.parse(read('terminals.json')))
-    const leases = [...slots.matchAll(/^workers\t(\S+)/gm)].map((m) => ({ agent: m[1] }))
+    const leases = [...slots.matchAll(/^workers\t(\S+)/gm)].map((m) => ({ agent: m[1]! }))
     expect(stacks.filter((n: string) => !stackOwned(n, agents, leases))).toEqual(['wt-160'])
     // Read as the panel reads it, with no program run.
     const a = createAdapters({

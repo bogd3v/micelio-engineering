@@ -293,7 +293,7 @@ describe('the board', () => {
   it('the read of GitHub keeps the comments of an issue closed today and of no other closed one', async () => {
     const { github } = await round()
     const read = (space: string) =>
-      Object.keys(github.spaces[space].raw!.comments)
+      Object.keys(github.spaces[space]!.raw!.comments)
         .map(Number)
         .toSorted((x, y) => x - y)
     expect(read('micelio-engineering')).toContain(810)
