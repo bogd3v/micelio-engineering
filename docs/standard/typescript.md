@@ -1,6 +1,6 @@
 # Micelio engineering standard: TypeScript profile
 
-Profile `typescript` of standard version 2.0 (2026-11-06). Canonical copy: `bogd3v/micelio-engineering`, `docs/standard/typescript.md`.
+Profile `typescript` of standard version 2.5 (2026-11-26). Canonical copy: `bogd3v/micelio-engineering`, `docs/standard/typescript.md`.
 
 How a repository in TypeScript on Node meets the core, `docs/engineering-standard.md`. Every Micelio repository pins it. Each section has the number of the section of the core it belongs to, and "section N" means that section of the core.
 
@@ -8,8 +8,14 @@ How a repository in TypeScript on Node meets the core, `docs/engineering-standar
 
 ### TypeScript
 
-- Every TypeScript project **must** compile under `strict`, and `npm run typecheck` **must** cover every project of the repository, tests included.
-- No `any`. Data that crosses a boundary (HTTP, CMS, storage, environment) enters as `unknown` and is narrowed by a schema or a type guard.
+- Every TypeScript project **must** extend `@micelio/tsconfig` and compile under `strict` and the checks the base adds: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noImplicitReturns`, `noFallthroughCasesInSwitch`, `isolatedModules` and `erasableSyntaxOnly`. A project never turns one off; where a framework's own types make one impossible, the exception is an ADR of the repository (section 16). `npm run typecheck` **must** cover every project of the repository, tests included, and JavaScript that is not generated is checked with `checkJs`.
+- No `any`, written or received: a value a library types as `any` is narrowed before it is used. Data that crosses a boundary (HTTP, CMS, storage, environment) enters as `unknown` and is narrowed by a schema or a type guard.
+- A type assertion never narrows. `as` is for `as const` and for widening; `satisfies` checks a literal against a type. No non-null `!` outside tests. A test may assert the type of a fixture.
+- Schemas are written with Zod, the one validation library, and the type is inferred from the schema, never written a second time by hand. A schema whose format belongs to a framework (a Strapi content type) keeps that format.
+- A value with a fixed set of shapes is a union discriminated by a literal field, and a `switch` over it names every member: no `default` that would hide a new one.
+- No `enum`, `namespace` or parameter property: a union of string literals, or an `as const` object when the values are needed at run time.
+- Every promise is awaited or returned. One left to run on purpose is marked `void`, with the reason on the line.
+- A function **should** not change the data it receives: parameters and exported types use `readonly` arrays and fields unless changing them is the function's job.
 - Exported functions, composables and services declare their parameter and return types. Type-only imports use `import type`.
 
 ### Where types and constants live
@@ -28,7 +34,7 @@ Reach decides the place. A declaration starts in the file that uses it and is pr
 - A shared file holds declarations only: no logic and no runtime imports.
 - A shared constant is a value with a meaning beyond one function: a limit, a path, a key, a prefix, a content type UID. A pattern or literal that only makes sense inside one function stays with it, named, at the top of its file.
 - A self-contained unit keeps its own copies on purpose: a boot migration, the fediverse plugin, a theme package.
-- Export only what another file imports. An export nothing uses is removed.
+- Export only what another file imports. An export nothing uses is removed. `npm run lint:unused` fails on one.
 - Each `AGENTS.md` names the shared folders of its repository, and a check fails when a type or constant declared outside these places is imported by two or more files.
 
 ### Style
@@ -36,7 +42,7 @@ Reach decides the place. A declaration starts in the file that uses it and is pr
 - Each repository has exactly one formatter configuration, checked in CI. Formatting is never discussed in review: if the formatter accepts it, it is fine.
 - `async`/`await` with `try`/`catch`. No `.then()`, `.catch()` or `.finally()` chains. `Promise.all`, `race`, `any` and `allSettled` are fine when awaited. `new Promise` only inside a small helper that adapts an event or callback API.
 - Pure logic lives in small functions without framework imports (`app/helpers/`, `src/utils/`) and is unit-tested there. Components, controllers and routes stay thin.
-- A file **should** stay under about 500 lines and do one job; split it when it passes either limit.
+- A source file **must** stay under 500 lines, not counting blank lines and comments, and do one job; a test file **should**.
 - Within a file the order is: imports, types, constants, the exported API, private helpers.
 - Dead code is deleted, not commented out. Git keeps the history.
 
@@ -44,7 +50,9 @@ Reach decides the place. A declaration starts in the file that uses it and is pr
 
 - Catch an error only where it can be handled or given context. Never swallow one: an empty `catch` needs a comment that says why nothing is lost.
 - At a boundary, turn the error into the right answer for the caller (an HTTP status and code, a neutral fallback) and log the cause on the server.
-- "Not found" is a normal result, not an exception.
+- An outcome the caller handles in the normal flow (not found, invalid input, a refused transition) is a return value, `null` or a discriminated union, not an exception.
+- Throw only `Error` objects. An error the caller is expected to handle is a class with a stable `code`, declared in the file of its domain; at an HTTP boundary that `code` is the one of the problem detail.
+- An error caught to add context is thrown again with `{ cause }`; its message is not copied into a new one.
 - Use the platform's logger (`strapi.log` in the CMS, `console.warn` and `console.error` in Nitro). `console.log` does not ship outside scripts.
 - Logs **must not** contain secrets, tokens, email addresses or raw IP addresses.
 
@@ -129,11 +137,13 @@ export function readingMinutes(markdown: string, wordsPerMinute = 230): number
 - Comments inside a function are short and say why, not what. Anything longer goes in `docs/` or an ADR and the comment points to it.
 - A `TODO` names its issue: `// TODO(#123): …`. Without an issue it is not a plan.
 - A suppression (`eslint-disable-next-line`, `@ts-expect-error`) covers one line and carries its reason on that line. `@ts-ignore`, `@ts-nocheck` and file-wide disables are not used.
+- Lint fails on a suppression without its rule or its reason, on one that suppresses nothing, on a file-wide disable and on a `TODO` without its issue.
 
 ## 8. Tests
 
 - Levels, from cheapest to most expensive: unit (pure helpers), component, integration (a real build, a real Strapi on SQLite), end to end (Playwright), contract (theme checks, visual regression, axe) and performance budgets. `AGENTS.md` lists the commands of each repository.
 - Prefer the real thing to a mock. The CMS suites boot a real Strapi; the frontend replaces Strapi only at the HTTP boundary, with one shared mock server.
+- Every repository has `npm run test:coverage` with a floor in its test configuration. The floor starts at the value measured when the repository adopts it, rounded down to a whole percent, and only goes up.
 
 ## 10. Dependencies, licences, supply chain and runtime
 
@@ -147,6 +157,7 @@ export function readingMinutes(markdown: string, wordsPerMinute = 230): number
 - Every published artifact (an image, a theme package) carries a software bill of materials and a signed build provenance attestation, and the operator documentation says how to verify them.
 - The OpenSSF Scorecard runs on every repository. A finding is fixed or written down with the reason, like a dependency alert.
 - All repositories run the same Node major. `.nvmrc` is the source: CI reads it, and `engines` and `@types/node` match it.
+- All repositories run the same TypeScript major, the one `@micelio/tsconfig` declares as its peer. When the pinned Node major has less than a year of support left, an ADR of `micelio-engineering` names the next one and the date of the move.
 
 ## 11. Git, pull requests and review
 
@@ -197,7 +208,8 @@ Every repository exposes the same script names, and `npm run check` runs the fas
 | Types | `npm run typecheck` | Yes |
 | Lint, including the repository's own rules | `npm run lint` | Yes |
 | Format | `npm run format:check`, or the stylistic rules inside lint | Yes |
-| Tests with the coverage floor | `npm run test` or `npm run test:coverage` | Yes |
+| Tests with the coverage floor | `npm run test:coverage` | Yes |
+| Unused exports | `npm run lint:unused` | Yes |
 | Licences | `npm run lint:licenses` and `reuse lint` | Yes (allowlist) |
 | The copy of this standard | `npm run lint:standard` | Yes |
 | Build | `npm run build` | No |
