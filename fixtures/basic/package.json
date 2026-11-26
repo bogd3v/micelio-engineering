@@ -12,7 +12,7 @@
   "devDependencies": {
     "@micelio/eslint-config": "^0.2.11",
     "@micelio/prettier-config": "^0.1.0",
-    "@micelio/tsconfig": "^0.1.0"
+    "@micelio/tsconfig": "^0.2.0"
   },
   "prettier": "@micelio/prettier-config"
 }
