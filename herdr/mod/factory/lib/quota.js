@@ -8,10 +8,10 @@
 export const COMMENTS_MAX_AGE_MS = 10 * 60_000
 
 /** The pace is `slow` while fewer calls than this remain. */
-export const SLOW_BELOW = 500
+const SLOW_BELOW = 500
 
 /** At the `slow` pace, at most one slow read in this time. */
-export const SLOW_EVERY_MS = 5 * 60_000
+const SLOW_EVERY_MS = 5 * 60_000
 
 /**
  * @typedef {object} Reply

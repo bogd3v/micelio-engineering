@@ -10,10 +10,10 @@ import { parseDecision } from './decision.js'
 import { catState, formatAge } from './panel.js'
 
 /** The six columns of "Gates by round". */
-export const GATE_NAMES = ['G1 READY', 'G2 WORKER', 'G3 REVIEW', 'G4 SCRIPT', 'G5 YOU', 'G6 CI']
+const GATE_NAMES = ['G1 READY', 'G2 WORKER', 'G3 REVIEW', 'G4 SCRIPT', 'G5 YOU', 'G6 CI']
 
 /** The closing sentence of the overlay. */
-export const CLOSING = "The worker's pane opens read-only. Answers always go through the master."
+const CLOSING = "The worker's pane opens read-only. Answers always go through the master."
 
 /** The role whose agent runs G2, G3 and G4. */
 const GATE_ROLE = ['worker', 'reviewer', 'verifier']

@@ -10,7 +10,7 @@
 import { toMs } from './time.js'
 
 /** The heavy slots and worker leases of the script's defaults (`FACTORY_HEAVY_SLOTS`, `FACTORY_WORKER_SLOTS`). */
-export const DEFAULT_TOTALS = { heavy: 3, workers: 6 }
+const DEFAULT_TOTALS = { heavy: 3, workers: 6 }
 
 /**
  * @typedef {object} HeavySlot

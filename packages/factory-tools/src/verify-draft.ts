@@ -71,13 +71,13 @@ export const LOG = /\blogs\/([^\s`),;]+)/
 const NUMBER = String.raw`\d{1,3}(?:[ ,]\d{3})+|\d+`
 const MAX_BUFFER = 256 * 1024 * 1024
 /** The default of `--timeout`, in minutes. */
-export const DEFAULT_TIMEOUT_MINUTES = 10
+const DEFAULT_TIMEOUT_MINUTES = 10
 /** The largest `--timeout`, in minutes: a longer delay does not fit a Node timer. */
-export const MAX_TIMEOUT_MINUTES = 35_791
+const MAX_TIMEOUT_MINUTES = 35_791
 /** How long a timed-out command's process group has between `SIGTERM` and `SIGKILL`. */
-export const KILL_GRACE_MS = 10_000
+const KILL_GRACE_MS = 10_000
 /** How many lines of a command's output are printed under its `mismatch:` line. */
-export const OUTPUT_LINES = 40
+const OUTPUT_LINES = 40
 
 /** The items of the Tests section, bullets and numbered, each with its continuation lines; `null` when there is no section. */
 export function testsEntries(draft: string): Entry[] | null {

@@ -104,7 +104,7 @@ export function matchGlob(glob: string, path: string): boolean {
 }
 
 /** Whether a path is one of the `NORMATIVE` files or inside one of its folders. */
-export function isNormative(path: string): boolean {
+function isNormative(path: string): boolean {
   return NORMATIVE.some((entry) => (entry.endsWith('/') ? path.startsWith(entry) : path === entry))
 }
 

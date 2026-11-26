@@ -45,7 +45,7 @@ export const ALERTS = [
 export const SATURATED_MS = 60_000
 
 /** The sound `playSound` plays with a notification: Herdr's own attention sound. */
-export const SOUND = 'blocked'
+const SOUND = 'blocked'
 
 /** @typedef {{ panel: boolean, board: boolean, order: string[], hidden: string[], alerts: { needs: boolean, saturated: boolean, held: boolean, sound: boolean } }} Settings */
 
@@ -162,7 +162,7 @@ export function shownCount(settings) {
  * @param {any} sections `buildPanel(...).sections`
  * @returns {string[]}
  */
-export function redSections(sections) {
+function redSections(sections) {
   /** @type {string[]} */
   const red = []
   if (sections.machine?.saturated === true) red.push('machine')
@@ -268,7 +268,7 @@ export function createLook() {
 }
 
 /** The keys of the panel: its id, the default letter, what it does, and the command that can replace the letter. */
-export const KEYS = [
+const KEYS = [
   { id: 'next', letter: 'N', label: 'next pending', command: 'factory.next' },
   { id: 'sign', letter: 'S', label: 'sign off', command: null },
   { id: 'pause', letter: 'P', label: 'pause workers', command: null },

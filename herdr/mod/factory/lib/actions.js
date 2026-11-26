@@ -8,17 +8,17 @@
 // program is run and no retry is sent, whatever a click asks for; the buttons say so.
 
 /** What a click says when the panel reads recordings. */
-export const FIXTURE_NOTE = 'Fixture: nothing was run.'
+const FIXTURE_NOTE = 'Fixture: nothing was run.'
 
 import { dockerArgs } from '../adapters.js'
 import { issueOfName } from './agents.js'
 import { refText } from './time.js'
 
 /** The exit status `factory-slot.sh hold` gives when no heavy slot is free. */
-export const NO_FREE_SLOT = 75
+const NO_FREE_SLOT = 75
 
 /** A retry is armed when the 1-minute load falls under this share of the core count. */
-export const RETRY_SHARE = 0.75
+const RETRY_SHARE = 0.75
 
 /**
  * The load a retry waits for: three quarters of the core count.
@@ -26,7 +26,7 @@ export const RETRY_SHARE = 0.75
  * @param {number} cores
  * @returns {number}
  */
-export const retryBelow = (cores) => cores * RETRY_SHARE
+const retryBelow = (cores) => cores * RETRY_SHARE
 
 /**
  * The threshold as the button writes it: `24` for 32 cores, `4.5` for 6.

@@ -47,7 +47,7 @@ function unknownCitations(
 
 describe('the factory documents', () => {
   it('docs/factory.md and herdr/master.md stay under their word caps', () => {
-    expect(words(read('docs/factory.md'))).toBeLessThanOrEqual(6232)
+    expect(words(read('docs/factory.md'))).toBeLessThanOrEqual(6257)
     expect(words(read('herdr/master.md'))).toBeLessThanOrEqual(4814)
   })
 

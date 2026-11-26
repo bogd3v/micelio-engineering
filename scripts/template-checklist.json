@@ -47,7 +47,7 @@
   },
   {
     "box": "The scripts `dev`, `build`, `typecheck`, `lint`, `lint:fix`, `lint:standard`, `test` and `check`",
-    "files": ["package.json"]
+    "files": ["package.json", "knip.json"]
   },
   {
     "box": "CI with the required checks of section 15 called from the reusable workflows of `micelio-engineering`, the DCO check, Dependabot and the Scorecard workflow",

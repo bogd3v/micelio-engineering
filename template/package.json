@@ -17,11 +17,12 @@
     "lint:licenses": "node scripts/check-licenses.mjs",
     "lint:standard": "micelio-lint-standard",
     "lint:ee": "micelio-lint-ee --allow package-lock.json",
+    "lint:unused": "knip",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test:coverage && npm run lint:licenses && npm run lint:standard && npm run lint:ee"
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test:coverage && npm run lint:licenses && npm run lint:standard && npm run lint:ee && npm run lint:unused"
   },
   "devDependencies": {
     "@micelio/eslint-config": "^{{eslint-config-version}}",
@@ -30,6 +31,7 @@
     "@types/node": "{{types-node}}",
     "@vitest/coverage-v8": "{{vitest}}",
     "eslint": "{{eslint}}",
+    "knip": "{{knip}}",
     "prettier": "{{prettier}}",
     "typescript": "{{typescript}}",
     "vitest": "{{vitest}}"

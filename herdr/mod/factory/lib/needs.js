@@ -58,7 +58,7 @@ const oneLine = (text) => text.replaceAll(/\s+/g, ' ').trim()
  * @param {string} maintainer
  * @returns {string}
  */
-export function laneWhy(comments, maintainer) {
+function laneWhy(comments, maintainer) {
   const gate1 = comments
     .filter((c) => c.user?.login === maintainer && /^gate 1\b/i.test(firstLine(c.body ?? '')))
     .toSorted((a, b) => (toMs(a.created_at) ?? 0) - (toMs(b.created_at) ?? 0))
@@ -126,7 +126,7 @@ export function signOffMessage(issue, time = null) {
  * @param {{ number: number, ref?: string, lane: string, read: boolean, master: string | null }[]} items
  * @returns {{ target: string, text: string }[]}
  */
-export function sharedMessages(items) {
+function sharedMessages(items) {
   /** @type {Map<string, string[]>} */
   const byMaster = new Map()
   for (const item of items) {

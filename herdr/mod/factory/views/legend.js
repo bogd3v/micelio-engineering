@@ -66,5 +66,3 @@ export function footer(ctx, keys = []) {
       })
     )
 }
-
-export { div }

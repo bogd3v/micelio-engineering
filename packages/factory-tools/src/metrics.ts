@@ -120,7 +120,7 @@ export interface PullRow {
 }
 
 /** The numbers of the pull requests of one lane. */
-export interface LaneRow {
+interface LaneRow {
   lane: Lane
   /** Pull requests of the lane. */
   pulls: number
@@ -137,7 +137,7 @@ export interface LaneRow {
 }
 
 /** The calibration runs of one lane: its issues that ran `full` as a sample. */
-export interface CalibrationRow {
+interface CalibrationRow {
   lane: Lane
   /** Issues of the lane marked `(calibration: full)`. */
   runs: number
