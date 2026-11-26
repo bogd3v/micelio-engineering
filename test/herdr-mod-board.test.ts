@@ -120,6 +120,28 @@ describe('the board', () => {
     )
   })
 
+  it("with no maintainer login, the Board's note says the gates are not read", async () => {
+    const { github, config } = await round()
+    const now = Date.parse('2026-11-24T16:00:00Z')
+    const state = { sources: {} }
+    const none = { ...config, maintainer: '' }
+    expect(buildBoard({ now, state, github, config: none }).note).toBe(
+      'No maintainer login: the gates are not read'
+    )
+    // The other notes follow it.
+    const stale = buildGithub({
+      now,
+      spaces: config.spaces,
+      reads: Object.fromEntries(
+        config.spaces.map((s: { name: string }) => [s.name, { error: 'gh' }])
+      ),
+      previous: github,
+    })
+    expect(buildBoard({ now, state, github: stale, config: none }).note).toBe(
+      'No maintainer login: the gates are not read · GitHub is stale: the cards are as of the last good read'
+    )
+  })
+
   it('each issue of the fixture is in one column, the one of its last gate comment', async () => {
     const { board } = await round()
     const byColumn = Object.fromEntries((board.columns as Column[]).map((c) => [c.key, ids(c)]))

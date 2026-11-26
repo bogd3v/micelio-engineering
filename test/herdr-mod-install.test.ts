@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import {
   existsSync,
   mkdirSync,
@@ -29,7 +30,40 @@ afterEach(() => {
 const install = (...args: string[]) =>
   spawnSync('bash', [INSTALL, ...args], {
     encoding: 'utf8',
-    env: { ...process.env, HERDR_APP_DIR: app },
+    env: { ...process.env, HERDR_APP_DIR: app, FACTORY_MAINTAINER: 'someone' },
+  })
+
+/** `install.sh` with `FACTORY_MAINTAINER` out of the environment, or set to `maintainer`. */
+const installFrom = (maintainer: string | undefined, ...args: string[]) => {
+  const env: NodeJS.ProcessEnv = { ...process.env, HERDR_APP_DIR: app }
+  delete env['FACTORY_MAINTAINER']
+  if (maintainer !== undefined) env['FACTORY_MAINTAINER'] = maintainer
+  return spawnSync('bash', [INSTALL, ...args], { encoding: 'utf8', env })
+}
+
+const NO_MAINTAINER =
+  'install.sh: no maintainer: give --maintainer <login> or set FACTORY_MAINTAINER\n'
+
+const layoutText = () => readFileSync(join(app, 'layouts/factory.json'), 'utf8')
+
+const installedMaintainer = () => /"maintainer": "([^"]*)"/.exec(layoutText())?.[1]
+
+/** Writes a layout and records its hash, as an earlier install of it would have. */
+const recordedLayout = (text: string) => {
+  mkdirSync(join(app, 'layouts'), { recursive: true })
+  writeFileSync(join(app, 'layouts/factory.json'), text)
+  writeFileSync(
+    join(app, 'factory-mod-install.json'),
+    JSON.stringify({
+      files: { 'layouts/factory.json': createHash('sha256').update(text).digest('hex') },
+    })
+  )
+}
+
+const layoutWith = (maintainer: string) =>
+  JSON.stringify({
+    id: 'root',
+    children: [{ id: 'factory', content: { props: { maintainer } } }],
   })
 
 /** The files under `dir`, relative, sorted. */
@@ -110,7 +144,7 @@ describe('install.sh', () => {
       try {
         const run = spawnSync('bash', [INSTALL], {
           encoding: 'utf8',
-          env: { ...env, HERDR_APP_DIR: dir },
+          env: { ...env, HERDR_APP_DIR: dir, FACTORY_MAINTAINER: 'someone' },
         })
         expect(run.status).toBe(0)
         const text = readFileSync(join(dir, 'layouts/factory.json'), 'utf8')
@@ -147,6 +181,96 @@ describe('install.sh', () => {
       n.id === 'factory' ? n : (n.children ?? []).map(find).find(Boolean)
     const layout = JSON.parse(readFileSync(join(app, 'layouts/factory.json'), 'utf8')) as Node
     expect(find(layout)?.content?.props?.spaces).toEqual(spaces)
+  })
+
+  it('install.sh with no --maintainer and no FACTORY_MAINTAINER keeps the maintainer of the layout it installed, and says so', () => {
+    expect(installFrom(undefined, '--maintainer', 'ale9420').status).toBe(0)
+    const run = installFrom(undefined)
+    expect(run.status).toBe(0)
+    expect(run.stderr).toBe('install.sh: maintainer ale9420, kept from the installed layout\n')
+    expect(installedMaintainer()).toBe('ale9420')
+    // An empty FACTORY_MAINTAINER is no source either.
+    expect(installFrom('').status).toBe(0)
+    expect(installedMaintainer()).toBe('ale9420')
+  })
+
+  it('install.sh with no maintainer from any source writes nothing and exits 2', () => {
+    for (const run of [installFrom(undefined), installFrom('')]) {
+      expect(run.status).toBe(2)
+      expect(run.stderr).toBe(NO_MAINTAINER)
+      expect(walk(app)).toEqual([])
+    }
+    // A layout it did not write is not read, even with a login in it; nor is one it wrote that was
+    // edited since, nor one it wrote with no login.
+    const mine = layoutWith('ale9420')
+    mkdirSync(join(app, 'layouts'), { recursive: true })
+    writeFileSync(join(app, 'layouts/factory.json'), mine)
+    const unrecorded = installFrom(undefined)
+    expect(unrecorded.status).toBe(2)
+    expect(unrecorded.stderr).toBe(NO_MAINTAINER)
+    expect(walk(app)).toEqual(['layouts/factory.json'])
+
+    recordedLayout(mine)
+    writeFileSync(join(app, 'layouts/factory.json'), layoutWith('other'))
+    const edited = installFrom(undefined)
+    expect(edited.status).toBe(2)
+    expect(edited.stderr).toBe(NO_MAINTAINER)
+    expect(layoutText()).toBe(layoutWith('other'))
+
+    // No `maintainer` key at all is no login either, not the word `undefined`.
+    const noKey = JSON.stringify({ id: 'factory', content: { props: {} } })
+    for (const text of [layoutWith(''), layoutWith('{{maintainer}}'), noKey]) {
+      recordedLayout(text)
+      const run = installFrom(undefined)
+      expect(run.status).toBe(2)
+      expect(run.stderr).toBe(NO_MAINTAINER)
+      expect(layoutText()).toBe(text)
+      expect(walk(app)).toEqual(['factory-mod-install.json', 'layouts/factory.json'])
+    }
+  })
+
+  it('install.sh --maintainer takes precedence over FACTORY_MAINTAINER, and FACTORY_MAINTAINER over the installed layout', () => {
+    expect(installFrom(undefined, '--maintainer', 'first').status).toBe(0)
+    // With no other source, the installed layout is the one.
+    const fromLayout = installFrom(undefined)
+    expect(fromLayout.status).toBe(0)
+    expect(fromLayout.stderr).toBe('install.sh: maintainer first, kept from the installed layout\n')
+    expect(installedMaintainer()).toBe('first')
+    // FACTORY_MAINTAINER wins over the layout, which still says `first`.
+    const fromEnv = installFrom('second')
+    expect(fromEnv.status).toBe(0)
+    expect(fromEnv.stderr).toBe('')
+    expect(installedMaintainer()).toBe('second')
+    const fromOption = installFrom('second', '--maintainer', 'third')
+    expect(fromOption.status).toBe(0)
+    expect(fromOption.stderr).toBe('')
+    expect(installedMaintainer()).toBe('third')
+    // The option wins over a value of the environment that is no login.
+    expect(installFrom('not a login', '--maintainer', 'fourth').status).toBe(0)
+    expect(installedMaintainer()).toBe('fourth')
+  })
+
+  it('install.sh refuses a --maintainer that is not a GitHub login and writes nothing', () => {
+    const refused = () => {
+      for (const value of ['', '{{maintainer}}', '-dash', 'under_score', 'a b', 'a'.repeat(40)]) {
+        const run = installFrom('someone', '--maintainer', value)
+        expect(run.status, value).toBe(2)
+        expect(run.stderr, value).toContain('--maintainer')
+      }
+      const bare = installFrom('someone', '--maintainer')
+      expect(bare.status).toBe(2)
+      expect(bare.stderr).toContain('--maintainer')
+      const fromEnv = installFrom('under_score')
+      expect(fromEnv.status).toBe(2)
+      expect(fromEnv.stderr).toContain('--maintainer')
+    }
+    refused()
+    expect(walk(app)).toEqual([])
+    // Over an install, with a login to keep: still nothing is written.
+    expect(installFrom(undefined, '--maintainer', 'a'.repeat(39)).status).toBe(0)
+    const before = layoutText()
+    refused()
+    expect(layoutText()).toBe(before)
   })
 
   it('install.sh refuses an option it does not know', () => {

@@ -373,8 +373,9 @@ export function buildNeeds({
       })
 
       // An open pull request with no `time:` note of the maintainer: a silent approval for `metrics`. One
-      // card for each issue, the first pull request that names it.
-      for (const pull of raw.pulls) {
+      // card for each issue, the first pull request that names it. With no maintainer login, a pull
+      // request with a note cannot be told from one without, so there is no card.
+      for (const pull of raw.maintainer === '' ? [] : raw.pulls) {
         const number = pullIssue(pull.body)
         const row = number === null ? undefined : rows.find((r) => r.number === number)
         if (number === null || row === undefined) continue

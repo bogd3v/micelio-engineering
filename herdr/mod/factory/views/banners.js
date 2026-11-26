@@ -1,4 +1,5 @@
-// The saturation alarm, the stale banner and the line of the paused factory.
+// The saturation alarm, the banners of a missing maintainer and of a stale GitHub, and the line of the
+// paused factory.
 
 import { div } from 'gpui-kit'
 import { h_flex } from 'gpui-base'
@@ -29,7 +30,8 @@ export function banners(ctx, banners, controls = null) {
         .child(div().child(banners.saturated.text))
     )
   }
-  if (banners.stale !== null) {
+  for (const red of [banners.maintainer, banners.stale]) {
+    if (red === null) continue
     out.push(
       div()
         .mx(16)
@@ -40,8 +42,8 @@ export function banners(ctx, banners, controls = null) {
         .bg(ctx.c['red-bg'])
         .text_size(12)
         .text_color(ctx.c['fg'])
-        .child(div().font_bold().text_color(ctx.c['red']).child(banners.stale.title))
-        .child(div().child(banners.stale.text))
+        .child(div().font_bold().text_color(ctx.c['red']).child(red.title))
+        .child(div().child(red.text))
     )
   }
   if (controls !== null) out.push(controls)

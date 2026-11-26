@@ -12,7 +12,11 @@
 # `dockerHost` prop, unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock (the rule of
 # herdr/factory-agent.sh, ADR-0002): the panel passes it to `docker -H`, as Herdr's `exec` has no environment.
 #
-#   --maintainer <login>   the GitHub login whose gate comments count (default $FACTORY_MAINTAINER)
+#   --maintainer <login>   the GitHub login whose gate comments count. It is taken from the first of:
+#                          this option, $FACTORY_MAINTAINER, the one of the installed layouts/factory.json
+#                          (only when this installer wrote that file and nobody changed it; it says so on
+#                          stderr). With none of them, or with a value that is not a GitHub login, it
+#                          writes nothing and exits 2.
 #   --spaces <file.json>   the layout's `spaces`, copied as it is: [{ "name", "repo", "milestone", "epic", "tag" }, …];
 #                          entries that share a name are one space (herdr/mod/README.md, "Configure")
 #   --side left|right      the side of the panel in the layout (default right): the first or the last child of work-body
@@ -24,17 +28,20 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECKOUT="$(cd "$HERE/../.." && pwd)"
 APP="${HERDR_APP_DIR:-$HOME/.config/herdr-app}"
-MAINTAINER="${FACTORY_MAINTAINER:-}"
+MAINTAINER=""
+MAINTAINER_GIVEN=""
 SPACES=""
 SIDE="right"
 FIXTURES=()
 
 die() { echo "install.sh: $*" >&2; exit 2; }
-usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --maintainer) MAINTAINER="${2:-}"; shift 2 ;;
+    --maintainer)
+      [[ $# -ge 2 ]] || die "--maintainer takes a GitHub login"
+      MAINTAINER="$2"; MAINTAINER_GIVEN=1; shift 2 ;;
     --spaces) SPACES="${2:-}"; shift 2 ;;
     --side) SIDE="${2:-}"; shift 2 ;;
     --fixture) FIXTURES+=("${2:-}"); shift 2 ;;
@@ -44,6 +51,39 @@ while [[ $# -gt 0 ]]; do
 done
 [[ "$SIDE" == left || "$SIDE" == right ]] || die "--side takes left or right, not: $SIDE"
 [[ -z "$SPACES" || -f "$SPACES" ]] || die "no such file: $SPACES"
+
+# What GitHub accepts as a login (LC_ALL=C: the ranges are ASCII only).
+is_login() { local LC_ALL=C; [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}$ ]]; }
+
+# The `maintainer` of the installed layout, when it is as this installer wrote it; else nothing.
+installed_maintainer() {
+  APP="$APP" node -e '
+const fs = require("node:fs");
+const path = require("node:path");
+const crypto = require("node:crypto");
+try {
+  const file = path.join(process.env.APP, "layouts/factory.json");
+  const recorded = JSON.parse(fs.readFileSync(path.join(process.env.APP, "factory-mod-install.json"), "utf8")).files ?? {};
+  const bytes = fs.readFileSync(file);
+  if (recorded["layouts/factory.json"] === crypto.createHash("sha256").update(bytes).digest("hex")) {
+    const find = (n) => (n.id === "factory" ? n : (n.children ?? []).map(find).find(Boolean));
+    const { maintainer } = find(JSON.parse(bytes)).content.props;
+    if (typeof maintainer === "string") process.stdout.write(maintainer);
+  }
+} catch {}
+'
+}
+
+if [[ -n "$MAINTAINER_GIVEN" ]]; then
+  is_login "$MAINTAINER" || die "--maintainer takes a GitHub login, not: \"$MAINTAINER\""
+elif [[ -n "${FACTORY_MAINTAINER:-}" ]]; then
+  MAINTAINER="$FACTORY_MAINTAINER"
+  is_login "$MAINTAINER" || die "FACTORY_MAINTAINER is not a GitHub login: \"$MAINTAINER\"; give --maintainer <login>"
+else
+  MAINTAINER="$(installed_maintainer)"
+  is_login "$MAINTAINER" || die "no maintainer: give --maintainer <login> or set FACTORY_MAINTAINER"
+  echo "install.sh: maintainer $MAINTAINER, kept from the installed layout" >&2
+fi
 
 STAGE="$(mktemp -d "${TMPDIR:-/tmp}/factory-mod-install.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
