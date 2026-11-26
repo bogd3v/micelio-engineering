@@ -21,13 +21,15 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run lint:licenses && npm run lint:standard && npm run lint:ee && npm run lint:unused"
+    "test:coverage": "vitest run --coverage",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test:coverage && npm run lint:licenses && npm run lint:standard && npm run lint:ee && npm run lint:unused"
   },
   "devDependencies": {
     "@micelio/eslint-config": "^{{eslint-config-version}}",
     "@micelio/prettier-config": "^{{prettier-config-version}}",
     "@micelio/tsconfig": "^{{tsconfig-version}}",
     "@types/node": "{{types-node}}",
+    "@vitest/coverage-v8": "{{vitest}}",
     "eslint": "{{eslint}}",
     "knip": "{{knip}}",
     "prettier": "{{prettier}}",

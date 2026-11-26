@@ -7,7 +7,7 @@ name: Check
 #     ci:
 #       uses: bogd3v/micelio-engineering/.github/workflows/check.yml@<commit SHA> # <tag>
 #       with:
-#         coverage: true
+#         test-script: test:coverage
 #
 # typecheck, lint and test always run. The rest is an input, so skipping one is written down in
 # the caller instead of hidden by `--if-present`.
