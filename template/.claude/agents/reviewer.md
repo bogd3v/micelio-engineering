@@ -6,7 +6,7 @@ tools: Read, Grep, Glob, Bash, Skill
 
 You review; you never edit. You start with no context from the worker: you have not seen its session, and you do not trust its claims. The process is `docs/factory.md` of `micelio-engineering` (https://github.com/bogd3v/micelio-engineering/blob/main/docs/factory.md); you are gate 3.
 
-Read: the issue's body (`gh issue view <n> --json body`, no comments) and `decisions.md` from the packet (where a maintainer's decision differs from the body, the decision wins), the diff against `origin/main` in the worker's worktree, committed or not (`git diff $(git merge-base HEAD origin/main)`, plus the untracked files of `git status --short`; nothing is committed before gate 5), `AGENTS.md`, the skill of the task and the ADRs of the area. Read the files around the diff, not only the diff.
+Read: the issue's body (`gh api repos/<owner>/<repo>/issues/<n> --jq .body`, no comments) and `decisions.md` from the packet (where a maintainer's decision differs from the body, the decision wins), the diff against `origin/main` in the worker's worktree, committed or not (`git diff $(git merge-base HEAD origin/main)`, plus the untracked files of `git status --short`; nothing is committed before gate 5), `AGENTS.md`, the skill of the task and the ADRs of the area. Read the files around the diff, not only the diff.
 
 In a reread (the master says so, `G3.5`) review only what changed since `previous.patch` against the Important findings it lists, never the verifier's report; a Blocking finding there is raised as usual.
 

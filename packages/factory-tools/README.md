@@ -29,7 +29,7 @@ npm run lint-issue --workspace packages/factory-tools -- --file test/fixtures/pa
 npx @micelio/factory-tools lint-issue bogd3v/micelio#729
 ```
 
-A target `owner/repo#n` is read with `gh issue view --json title,body`, so `gh` must be installed
+A target `owner/repo#n` is read with `gh api repos/<owner>/<repo>/issues/<n>`, so `gh` must be installed
 and signed in. `--file <path>` reads a Markdown file instead: the first line is `# <title>`, the
 rest is the body; give `--repo owner/repo`, the issue's repository, for every issue outside the
 repository the command runs in: it resolves a bare `#n` in "Depends on" and sets the repository of
@@ -53,16 +53,16 @@ lane: full
 
 ### Rules
 
-| Rule           | Passes when                                                                                                                                                                                                                                                                |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `title`        | The title starts with a type of the Task template (`feat`, `fix`, `docs`, `refactor`, `style`, `test`, `ci`, `perf`, `chore`), an optional `(scope)` and `: `; with a `!` before the colon when a line or list item of the body starts with `BREAKING CHANGE:` (section 7) |
-| `task-parts`   | The five parts of a task are headings with something under them: Why, What to build, Requirements, Acceptance criteria, Progress. HTML comments and empty bullets left by the template do not count                                                                        |
-| `criteria`     | At least one item of "Acceptance criteria" names a command, a test or a file: it contains a backtick or `npm run`                                                                                                                                                          |
-| `citations`    | The body, outside HTML comments, cites a file path (`a/b.ts`, `dir/`, `AGENTS.md`; not a URL, nor `Node.js`) and an ADR or document: `ADR-n`, a `.md` file or a path under `docs/`, or a section of the standard                                                           |
-| `out-of-scope` | There is a non-empty "Out of scope" section, or a line outside code that starts with "Out of scope" and says something                                                                                                                                                     |
-| `delivery`     | There is a non-empty "Delivery" section                                                                                                                                                                                                                                    |
-| `depends-on`   | Every issue listed after "Depends on" (up to the end of that sentence) or in a "Depends on" section, is closed (`gh issue view --json state`). A bare `#n` belongs to the issue's repository                                                                               |
-| `lane`         | Exactly one item of "Acceptance criteria" starts "Verified by the maintainer", and it reads "by reading the diff" in `express` and `normal`, or "on the stack" (or "on the run `AGENTS.md` names") in `full`. The report names the lane and the sentence it expected       |
+| Rule           | Passes when                                                                                                                                                                                                                                                                                    |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`        | The title starts with a type of the Task template (`feat`, `fix`, `docs`, `refactor`, `style`, `test`, `ci`, `perf`, `chore`), an optional `(scope)` and `: `; with a `!` before the colon when a line or list item of the body starts with `BREAKING CHANGE:` (section 7)                     |
+| `task-parts`   | The five parts of a task are headings with something under them: Why, What to build, Requirements, Acceptance criteria, Progress. HTML comments and empty bullets left by the template do not count                                                                                            |
+| `criteria`     | At least one item of "Acceptance criteria" names a command, a test or a file: it contains a backtick or `npm run`                                                                                                                                                                              |
+| `citations`    | The body, outside HTML comments, cites a file path (`a/b.ts`, `dir/`, `AGENTS.md`; not a URL, nor `Node.js`) and an ADR or document: `ADR-n`, a `.md` file or a path under `docs/`, or a section of the standard                                                                               |
+| `out-of-scope` | There is a non-empty "Out of scope" section, or a line outside code that starts with "Out of scope" and says something                                                                                                                                                                         |
+| `delivery`     | There is a non-empty "Delivery" section                                                                                                                                                                                                                                                        |
+| `depends-on`   | Every issue listed after "Depends on" (up to the end of that sentence) or in a "Depends on" section, is closed (the `state` of `gh api repos/<owner>/<repo>/issues/<n>`; a merged pull request does not count, one closed without merging does). A bare `#n` belongs to the issue's repository |
+| `lane`         | Exactly one item of "Acceptance criteria" starts "Verified by the maintainer", and it reads "by reading the diff" in `express` and `normal`, or "on the stack" (or "on the run `AGENTS.md` names") in `full`. The report names the lane and the sentence it expected                           |
 
 Headings are matched at any level, ignoring case, emphasis and a trailing colon, by their name or
 a name that starts with it as a whole word (`## Why this matters`, `## Out of scope (see #40)`).
