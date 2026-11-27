@@ -17,6 +17,13 @@ on:
 
 permissions: {}
 
+# A new push to a pull request cancels the run of that pull request before it. Every other run
+# (main, the schedule, an issue, a manual start) has a group of its own, its run id, so it is never
+# cancelled and never waits behind another.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   check:
     if: ${{ github.event_name != 'schedule' && github.event_name != 'issues' }}
