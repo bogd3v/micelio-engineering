@@ -93,7 +93,11 @@ const config: Linter.Config[] = defineConfig(
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
       '@typescript-eslint/await-thenable': 'error',
-      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+      // A `default` would hide a member added later to the union (TypeScript profile, section 4)
+      '@typescript-eslint/switch-exhaustiveness-check': [
+        'error',
+        { allowDefaultCaseForExhaustiveSwitch: false },
+      ],
       '@typescript-eslint/only-throw-error': 'error',
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/prefer-readonly': 'error',
