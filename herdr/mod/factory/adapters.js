@@ -7,7 +7,7 @@
 // giving it), everything is read from there and not from the machine, so a screen can be reproduced:
 // `status.txt`, `loadavg`, `meminfo`, `hwmon.json`, `cores`, `terminals.json`, `issues.json`
 // (`issues-<space>.json` first), `comments-<n>.json`, `docker-compose-ls.json`, `process-<pid>.json` (an orphan's cores and minutes), `stack-ages.json` (the minutes before `now.txt` each stack was created), `loadhistory.json`,
-// `milestones-<space>.json` (`milestones.json`) and `project-fields.json` (the factory's share), `diffs.json` (the minutes before `now.txt` each issue's diff was opened), `forms.json` (what the "Log time" and correction forms hold), `pulls-<space>.json` (the open pull requests, with their comments and reviews), `commit-<n>.txt` (the commit message of an issue's packet), `worktree-<n>.json` (the branch and the lines changed of an issue's worktree), `now.txt` for the clock, `github-at.txt` for the time of the GitHub reads that work and
+// `milestones-<space>.json` (`milestones.json`) and `project-fields.json` (the factory's share; the milestones are also the banner of the spaces'), `epic-<space>.json` (the epic of the space's first pair, for that banner), `diffs.json` (the minutes before `now.txt` each issue's diff was opened), `forms.json` (what the "Log time" and correction forms hold), `pulls-<space>.json` (the open pull requests, with their comments and reviews), `commit-<n>.txt` (the commit message of an issue's packet), `worktree-<n>.json` (the branch and the lines changed of an issue's worktree), `now.txt` for the clock, `github-at.txt` for the time of the GitHub reads that work and
 // `github-error.txt`: with it, the first GitHub read of each space works and every later one fails with
 // its text, as a `gh` that stops answering does. A pair of a space tagged `<tag>` (`pairsOf` of
 // `lib/panel.js`) has its own files, with the space and the tag, and the tag before an issue's number:
@@ -508,7 +508,8 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
   }
 
   /**
-   * The milestones of the repository of each pair of each space, for the factory's share:
+   * The milestones of the repository of each pair of each space, each with its `state` (`open` when it
+   * has none), for the factory's share and the banner of the spaces:
    * `gh api repos/<repo>/milestones` (`milestones-<space>.json`, `milestones-<space>-<tag>.json` for a
    * tagged pair, then `milestones.json`, in a fixture), one read for each repository.
    *
@@ -528,10 +529,35 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
                 (await fixtureJson('milestones.json')))
               : await gh(`repos/${pair.repo}/milestones?state=all&per_page=100`)
           if (!Array.isArray(list)) return { error: `no milestones for ${pair.repo}` }
-          byRepo[pair.repo] = /** @type {import('./lib/board.js').RepoMilestone[]} */ (list)
+          const milestones = /** @type {import('./lib/board.js').RepoMilestone[]} */ (list)
+          byRepo[pair.repo] = milestones.map((m) => ({
+            ...m,
+            state: m.state === 'closed' ? 'closed' : 'open',
+          }))
         }
       }
       return { at, byRepo }
+    } catch (error) {
+      return { error: reason(error) }
+    }
+  }
+
+  /**
+   * The epic of a space's first pair: `gh api repos/<repo>/issues/<epic>` (`epic-<space>.json` in a
+   * fixture). A space with no epic is not asked for.
+   *
+   * @param {import('./lib/panel.js').SpaceConfig} space
+   * @returns {Promise<{ issue: import('./lib/spaces.js').EpicIssue } | { error: string }>}
+   */
+  async function readEpic(space) {
+    try {
+      const found =
+        dirs !== null
+          ? await fixtureJson(`epic-${space.name}.json`)
+          : await gh(`repos/${space.repo}/issues/${space.epic}`)
+      return found !== null && typeof found === 'object'
+        ? { issue: /** @type {import('./lib/spaces.js').EpicIssue} */ (found) }
+        : { error: `no epic of ${space.name}` }
     } catch (error) {
       return { error: reason(error) }
     }
@@ -740,6 +766,7 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
     readGithub,
     readPulls,
     readMilestones,
+    readEpic,
     readProjectFields,
     readStacks,
     readStackAge,
