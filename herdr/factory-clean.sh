@@ -5,7 +5,7 @@
 #
 # <name> is the issue's name in herdr/master.md (<N>, or <tag><N>), [a-z0-9]{1,16}; --checkout is the
 # repository's checkout whose sibling is wt-<name>; --packets holds <name>/. In this order it removes:
-#   1. nothing, exit 1, while the issue is not CLOSED or `factory-slot.sh status` lists an agent of it
+#   1. nothing, exit 1, while the issue is not closed or `factory-slot.sh status` lists an agent of it
 #   2. the worktree wt-<name> and its branch, when clean and its pull request is MERGED (else `kept`)
 #   3. the packet <packets>/<name>/, when the worktree was removed or did not exist
 #   4. the scratch of worker-<name>, reviewer-<name>[-r<K>] and verifier-<name>[-r<K>] under FACTORY_TMP
@@ -52,8 +52,9 @@ number="${BASH_REMATCH[2]}"
 # Physical, as `git worktree list` prints the paths.
 checkout="$(cd "$checkout" && pwd -P)"
 
-state=$(gh issue view "$number" --repo "$repo" --json state -q .state 2>/dev/null)
-[[ "$state" == CLOSED ]] || refuse "$issue is not closed (state: ${state:-unknown})"
+# A refused call prints the error body on stdout, so its output is no state.
+state=$(gh api "repos/$repo/issues/$number" --jq .state 2>/dev/null) || state=""
+[[ "$state" == closed ]] || refuse "$issue is not closed (state: ${state:-unknown})"
 
 # An agent of the issue: worker-<name>, reviewer-<name>[-r<K>], verifier-<name>[-r<K>].
 agents="^(worker-$name|(reviewer|verifier)-$name(-r[0-9]+)?)\$"
@@ -104,7 +105,8 @@ if [[ -e "$wt" ]]; then
     echo "kept $wt: uncommitted work"
   elif [[ -z "$branch" ]]; then
     echo "kept $wt: no branch checked out"
-  elif ! merged=$(gh pr list --repo "$repo" --head "$branch" --state merged --json number -q '.[].number' 2>/dev/null); then
+  elif ! merged=$(gh api "repos/$repo/pulls?head=${repo%/*}:$branch&state=closed&per_page=100" \
+    --jq '.[] | select(.merged_at != null) | .number' 2>/dev/null); then
     echo "kept $wt: cannot read the pull requests of $branch"
   elif [[ -z "$merged" ]]; then
     echo "kept $wt: the pull request of $branch is not merged"

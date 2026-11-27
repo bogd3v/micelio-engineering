@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { issueFromMarkdown, sections } from '../src/issue.js'
+import { issueFromGh, issueFromMarkdown, sections } from '../src/issue.js'
 import type { Issue, IssueRef } from '../src/issue.js'
 import { RULE_IDS, lintIssue } from '../src/rules.js'
 import type { RuleId } from '../src/rules.js'
@@ -397,7 +397,7 @@ describe('the command line', () => {
 })
 
 describe('the lanes of the own repository of the issue', () => {
-  /** A `gh` on the PATH that answers `issue view` with `issue` and the `AGENTS.md` call with `agents` (null: 404). */
+  /** A `gh` on the PATH that answers `api repos/example/site/issues/5` with `issue` and the `AGENTS.md` call with `agents` (null: 404). */
   async function withFakeGh(
     issue: Issue,
     agents: string | null,
@@ -411,7 +411,7 @@ describe('the lanes of the own repository of the issue', () => {
         '#!/bin/sh',
         'case "$*" in',
         `  *contents/AGENTS.md*) ${agents === null ? 'echo "gh: Not Found (HTTP 404)" >&2; exit 1' : `cat "${dir}/AGENTS.md"`} ;;`,
-        `  *"issue view"*) cat "${dir}/issue.json" ;;`,
+        `  "api repos/example/site/issues/5") cat "${dir}/issue.json" ;;`,
         '  *) echo "unexpected: $*" >&2; exit 1 ;;',
         'esac',
         '',
@@ -484,6 +484,90 @@ describe('the lanes of the own repository of the issue', () => {
       expect(result.stdout.split('\n')[0]).toBe('lane: full')
       expect(result.status).toBe(0)
     })
+  })
+})
+
+describe('the live form, over the REST API', () => {
+  /**
+   * Runs the built CLI on `example/site#5`, which depends on `#3`, with a `gh` that answers as
+   * `gh api repos/<repo>/issues/<n>` does: the REST object, whose `state` is `open` or `closed`.
+   * Any other call fails. Returns the report and the calls made.
+   */
+  async function live(
+    state: 'open' | 'closed',
+    pull?: { merged_at: string | null }
+  ): Promise<{ stdout: string; stderr: string; status: number | null; calls: string[] }> {
+    const issue = await variant('Part of example/site#1.', 'Depends on #3.')
+    const dir = await mkdtemp(join(tmpdir(), 'lint-issue-rest-'))
+    try {
+      await writeFile(
+        join(dir, '5.json'),
+        JSON.stringify({ number: 5, title: issue.title, body: issue.body, state: 'open' })
+      )
+      await writeFile(
+        join(dir, '3.json'),
+        JSON.stringify({ number: 3, title: 'x', state, pull_request: pull })
+      )
+      const script = [
+        '#!/bin/sh',
+        `echo "$*" >> "${dir}/calls"`,
+        'case "$*" in',
+        '  *contents/AGENTS.md*) echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;',
+        `  "api repos/example/site/issues/5") cat "${dir}/5.json" ;;`,
+        `  "api repos/example/site/issues/3") cat "${dir}/3.json" ;;`,
+        '  *) echo "unexpected: $*" >&2; exit 1 ;;',
+        'esac',
+        '',
+      ].join('\n')
+      await writeFile(join(dir, 'gh'), script, { mode: 0o755 })
+      const result = spawnSync('node', [CLI, 'lint-issue', 'example/site#5'], {
+        cwd: PACKAGE,
+        encoding: 'utf8',
+        env: { ...process.env, PATH: `${dir}:${process.env.PATH ?? ''}` },
+      })
+      const calls = (await readFile(join(dir, 'calls'), 'utf8')).trim().split('\n')
+      return { stdout: result.stdout, stderr: result.stderr, status: result.status, calls }
+    } finally {
+      await rm(dir, { recursive: true })
+    }
+  }
+
+  it('the live form reads the issue and the state of each dependency with gh api repos/<repo>/issues/<n> and runs no gh issue or graphql call', async () => {
+    const { stderr, calls } = await live('closed')
+    expect(stderr).toBe('')
+    expect(calls).toEqual([
+      'api repos/example/site/issues/5',
+      'api -H Accept: application/vnd.github.raw repos/example/site/contents/AGENTS.md',
+      'api repos/example/site/issues/3',
+    ])
+    for (const call of calls) expect(call).not.toMatch(/^issue|graphql/)
+  })
+
+  it('a dependency whose REST state is closed passes the depends-on rule, and one that is open fails it', async () => {
+    const closed = await live('closed')
+    expect(closed.stdout).not.toContain('`depends-on`')
+    expect(closed.status).toBe(0)
+    const open = await live('open')
+    expect(open.stdout).toContain('`depends-on`: depends on example/site#3 is open.')
+    expect(open.status).toBe(1)
+  })
+
+  it('a dependency that is a merged pull request fails depends-on, and one closed without merging passes it, as with gh issue view', async () => {
+    const merged = await live('closed', { merged_at: '2026-11-26T20:35:34Z' })
+    expect(merged.stdout).toContain('`depends-on`: depends on example/site#3 is open.')
+    expect(merged.status).toBe(1)
+    const unmerged = await live('closed', { merged_at: null })
+    expect(unmerged.stdout).not.toContain('`depends-on`')
+    expect(unmerged.status).toBe(0)
+  })
+
+  it('reads an issue whose REST body is null as one with an empty body', () => {
+    expect(issueFromGh({ title: 'chore: x', body: null }, 'example/site')).toEqual({
+      title: 'chore: x',
+      body: '',
+      repo: 'example/site',
+    })
+    expect(() => issueFromGh({ title: 'chore: x' }, 'example/site')).toThrow('no title or body')
   })
 })
 

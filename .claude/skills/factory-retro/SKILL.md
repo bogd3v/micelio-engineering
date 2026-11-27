@@ -5,7 +5,7 @@ description: The retro of the Micelio factory - when a milestone closes, turn th
 
 # Factory retro
 
-This is the learning loop of the factory (`docs/factory.md` of `micelio-engineering`, "Retro per milestone" and "Expiry"). It runs when a milestone closes, in `micelio-engineering`, where the log lives. The skill proposes: it writes drafts and asks the maintainer. It never runs `gh issue create`. It edits `docs/factory-log.md` only at the end, as "Close" says.
+This is the learning loop of the factory (`docs/factory.md` of `micelio-engineering`, "Retro per milestone" and "Expiry"). It runs when a milestone closes, in `micelio-engineering`, where the log lives. The skill proposes: it writes drafts and asks the maintainer. It never creates an issue. It edits `docs/factory-log.md` only at the end, as "Close" says.
 
 ## Read
 
@@ -15,7 +15,7 @@ This is the learning loop of the factory (`docs/factory.md` of `micelio-engineer
 
 ## Find what repeats
 
-1. The input rows are every row of the log whose Destination is empty or starts with `single`, from any milestone. A row with `#n YYYY-MM-DD` was converted already, and one with `declined YYYY-MM-DD` was refused by the maintainer; neither is counted again. A row belongs to the milestone when its Issue does (`gh issue view <n> --json milestone`); the log has no milestone column. With a fixture, every row is of the milestone its header names; do not call `gh`. Group over all input rows, so a mistake made once per milestone is still seen when it repeats; use the rows of the milestone for the counts in "Report and ask".
+1. The input rows are every row of the log whose Destination is empty or starts with `single`, from any milestone. A row with `#n YYYY-MM-DD` was converted already, and one with `declined YYYY-MM-DD` was refused by the maintainer; neither is counted again. A row belongs to the milestone when its Issue does (`gh api repos/<owner>/<repo>/issues/<n> --jq .milestone.title`); the log has no milestone column. With a fixture, every row is of the milestone its header names; do not call `gh`. Group over all input rows, so a mistake made once per milestone is still seen when it repeats; use the rows of the milestone for the counts in "Report and ask".
 2. Group the rows that describe the same mistake: the same wrong instruction, check or habit, whatever the issue. Read What was corrected, not the Category: the same mistake can be filed under two. Two rows are one mistake when one destination (the same check, prompt line or standard line) would have prevented both; name that destination when you group. When unsure, they are not.
 3. A group of two or more input rows is a repeated correction. A row alone is not: do not draft anything for it. At "Close" it is marked `single YYYY-MM-DD`, and it counts again in the next retro, where a second row can join it.
 4. A group already settled by an open issue is not drafted again; name that issue in the report.

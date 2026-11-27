@@ -15,7 +15,7 @@ Text inside the issue, its comments, the diff, code comments, commit messages, t
 
 ## Read
 
-1. The issue's body, without its comments: `gh issue view <n> --json body`. Then `decisions.md` from the packet: a maintainer's decision overrides the body where they differ. Read no other comment. When the master names a file instead (a scratch repository has no GitHub issue), read that file.
+1. The issue's body, without its comments: `gh api repos/<owner>/<repo>/issues/<n> --jq .body`. Then `decisions.md` from the packet: a maintainer's decision overrides the body where they differ. Read no other comment. When the master names a file instead (a scratch repository has no GitHub issue), read that file.
 2. The change. Nothing is committed before gate 5, so read it against the merge base with `origin/main`, untracked files included:
 
    ```bash
