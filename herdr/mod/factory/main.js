@@ -52,7 +52,8 @@ import {
   tagsOf,
 } from './lib/panel.js'
 import { buildBoard, factoryShare } from './lib/board.js'
-import { paceOf, readsNow } from './lib/quota.js'
+import { createRateLimitWatch, paceOf, readsNow } from './lib/quota.js'
+import { reportsArgs } from './lib/reports.js'
 import {
   answerLine,
   buildNeeds,
@@ -160,6 +161,8 @@ export default class Factory
     this.now = Date.now()
     /** When GitHub was last read (the model's clock), for the slow pace. */
     this.githubAt = null
+    /** The GraphQL points left, read for the header (`readRateLimit` of `adapters.js`). */
+    this.rateLimit = createRateLimitWatch()
     /** A read that hangs or whose task was cancelled holds its gate only for its limit (`lib/reads.js`). */
     this.gates = { fast: createGate(FAST_READ_MS), slow: createGate(SLOW_READ_MS) }
     this.scroll = ScrollHandle.new()
@@ -349,17 +352,7 @@ export default class Factory
       },
       // The gate reports are comments of the issue.
       openReports: (card) =>
-        this.pane(
-          [
-            'sh',
-            '-c',
-            'gh issue view "$1" --repo "$2" --comments | less -R',
-            'reports',
-            String(card.number),
-            card.repo,
-          ],
-          `reports-${card.issue}`
-        ),
+        this.pane(reportsArgs(card.number, card.repo), `reports-${card.issue}`),
       inputs: (issue) => this.formInputs[issue] ?? null,
       setForm: (issue, patch, cx) => this.setForm(issue, patch, cx),
       timeInputs: (issue) => this.timeInputs[issue] ?? null,
@@ -1051,7 +1044,8 @@ export default class Factory
 
   /**
    * The milestones of each space, from GitHub, unless the pace of the quota or a hidden window says not to
-   * (`readsNow` of `lib/quota.js`): a skipped read is not a failure, and the local reads go on.
+   * (`readsNow` of `lib/quota.js`): a skipped read is not a failure, and the local reads go on. Then the
+   * GraphQL points, when `createRateLimitWatch` of `lib/quota.js` says they are due.
    *
    * @param {Context} cx
    */
@@ -1091,6 +1085,14 @@ export default class Factory
           previous: this.github,
         })
         await this.readShare(remote, sleep, current)
+        // After the reads of GitHub, so its `200` does not end a pause they are about to renew.
+        await this.rateLimit.tick({
+          backoff: this.adapters.backoff(),
+          now,
+          visible: window()?.visible,
+          read: () =>
+            limited(SLOW_STEP_MS, 'readRateLimit', () => this.adapters.readRateLimit(), sleep),
+        })
         await this.readWorktree(sleep, current)
         await this.readCommits(sleep, current)
         if (!current()) return
@@ -1264,6 +1266,8 @@ export default class Factory
       theme: this.themeNow(),
       open: this.open,
       quota: this.adapters.quota(),
+      backoff: this.adapters.backoff(),
+      graphql: this.rateLimit.graphql(),
     })
   }
 
