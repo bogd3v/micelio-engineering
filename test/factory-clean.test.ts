@@ -73,6 +73,9 @@ function git(cwd: string, ...args: string[]): string {
   return r.stdout
 }
 
+/** The commit checked out in `cwd`. */
+const headOf = (cwd: string): string => git(cwd, 'rev-parse', 'HEAD').trim()
+
 /** Writes an executable `sh` script. */
 function script(path: string, body: string): void {
   writeFileSync(path, `#!/bin/sh\n${body}`)
@@ -83,7 +86,9 @@ function script(path: string, body: string): void {
  * `gh` as gh 2.97.0 answers `gh api`: with `--jq` it prints the filter's result and exits 0 (here
  * run by `jq` over the REST objects: `merged_at` is set for each number of `GH_MERGED` and `null`
  * for each of `GH_CLOSED`); a request GitHub refuses prints the error body on stdout and
- * `gh: <message> (HTTP <code>)` on stderr and exits 1 (`GH_STATE=fail`, `GH_PR=fail`).
+ * `gh: <message> (HTTP <code>)` on stderr and exits 1 (`GH_STATE=fail`, `GH_PR=fail`). Each object
+ * has `head.sha`: the merged ones take the words of `GH_HEADS` in order, the last one repeating,
+ * and the closed ones take `GH_LOCAL_HEAD`.
  */
 function stubGh(bin: string): void {
   script(
@@ -103,8 +108,12 @@ case "$2" in
   "repos/example/repo/pulls?head=example:${BRANCH}&state=closed&per_page=100")
     [ "$GH_PR" = fail ] && refused
     {
-      for n in $GH_MERGED; do echo "{\\"number\\":$n,\\"merged_at\\":\\"2026-01-01T00:00:00Z\\"}"; done
-      for n in $GH_CLOSED; do echo "{\\"number\\":$n,\\"merged_at\\":null}"; done
+      set -- $GH_HEADS
+      for n in $GH_MERGED; do
+        echo "{\\"number\\":$n,\\"merged_at\\":\\"2026-01-01T00:00:00Z\\",\\"head\\":{\\"sha\\":\\"$1\\"}}"
+        [ $# -gt 1 ] && shift
+      done
+      for n in $GH_CLOSED; do echo "{\\"number\\":$n,\\"merged_at\\":null,\\"head\\":{\\"sha\\":\\"$GH_LOCAL_HEAD\\"}}"; done
     } | jq -s . | jq -r "$4" ;;
   *) exit 64 ;;
 esac
@@ -114,7 +123,7 @@ esac
 
 /** The two calls the script makes, as the stub records them. */
 const STATE_CALL = 'api repos/example/repo/issues/77 --jq .state'
-const MERGED_CALL = `api repos/example/repo/pulls?head=example:${BRANCH}&state=closed&per_page=100 --jq .[] | select(.merged_at != null) | .number`
+const MERGED_CALL = `api repos/example/repo/pulls?head=example:${BRANCH}&state=closed&per_page=100 --jq .[] | select(.merged_at != null) | .head.sha`
 
 /**
  * `docker` 29.10.0: records each call in `docker` and the `DOCKER_HOST` it got in `docker-host`;
@@ -208,6 +217,8 @@ function clean(
     merged?: string
     closed?: string
     pr?: string
+    /** `head.sha` of the merged pull requests, in order; by default the worktree's `HEAD`. */
+    heads?: string[]
     name?: string
     dry?: boolean
     env?: Record<string, string>
@@ -215,6 +226,7 @@ function clean(
 ): Run {
   const args = [ISSUE, opts.name ?? NAME, '--checkout', checkout, '--packets', packets]
   if (opts.dry === true) args.push('--dry-run')
+  const local = existsSync(join(worktree, '.git')) ? headOf(worktree) : ''
   const r = spawnSync('bash', [SCRIPT, ...args], {
     env: {
       HOME: root,
@@ -227,6 +239,8 @@ function clean(
       GH_MERGED: opts.merged ?? '12',
       GH_CLOSED: opts.closed ?? '',
       GH_PR: opts.pr ?? '',
+      GH_HEADS: (opts.heads ?? [local]).join(' '),
+      GH_LOCAL_HEAD: local,
       ...opts.env,
     },
     encoding: 'utf8',
@@ -457,6 +471,41 @@ describe('factory-clean.sh', () => {
     expect(r.out).toContain(`kept ${worktree}: the pull request of ${BRANCH} is not merged\n`)
     expect(existsSync(worktree)).toBe(true)
     expect(hasBranch()).toBe(true)
+  })
+
+  it('keeps the worktree, its branch and its packet when the branch has a commit its merged pull request does not have', () => {
+    const merged = headOf(worktree)
+    git(worktree, 'commit', '-q', '--allow-empty', '-m', 'after the merge')
+    const local = headOf(worktree)
+    for (const dry of [true, false]) {
+      const r = clean({ heads: [merged], dry })
+      expect(r.err, String(dry)).toBe('')
+      expect(r.code, String(dry)).toBe(0)
+      // The first two lines are those of steps 2 and 3: no line removes the worktree or the branch.
+      expect(r.out.split('\n').slice(0, 2), String(dry)).toEqual([
+        `kept ${worktree}: commits after the pull request`,
+        `kept ${join(packets, NAME)}: its worktree stays`,
+      ])
+    }
+    expect(headOf(worktree)).toBe(local)
+    expect(git(checkout, 'rev-parse', BRANCH).trim()).toBe(local)
+    expect(existsSync(join(packets, NAME, 'logs/check.log'))).toBe(true)
+  })
+
+  it("keeps a worktree behind its merged pull request's head, and removes one at the head of any of several", () => {
+    const behind = headOf(worktree)
+    git(worktree, 'commit', '-q', '--allow-empty', '-m', 'pushed from elsewhere')
+    const ahead = headOf(worktree)
+    git(worktree, 'reset', '-q', '--hard', behind)
+    expect(clean({ heads: [ahead] }).out).toContain(
+      `kept ${worktree}: commits after the pull request\n`
+    )
+    expect(existsSync(worktree)).toBe(true)
+    expect(hasBranch()).toBe(true)
+
+    const r = clean({ merged: '12 14', heads: [ahead, behind] })
+    expect(r.out).toContain(`removed ${worktree}\n`)
+    expect(hasBranch()).toBe(false)
   })
 
   it('keeps a wt-name that is no worktree of the checkout, or one with no branch, and its packet', () => {
