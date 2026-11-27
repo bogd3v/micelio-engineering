@@ -141,6 +141,15 @@ describe('@micelio/eslint-config against the fixture', () => {
     expect(await ruleIdsFor(code, 'first.test.ts')).toEqual([])
   })
 
+  it('reports a default in a switch that already names every member of a union, and not one over a string', async () => {
+    const rank = (type: string): string =>
+      `/** The rank. */\nexport function rank(side: ${type}): number {\n  switch (side) {\n    case 'left':\n      return 1;\n    case 'right':\n      return 2;\n    default:\n      return 0;\n  }\n}\n`
+    expect(await ruleIdsFor(rank("'left' | 'right'"))).toEqual([
+      '@typescript-eslint/switch-exhaustiveness-check',
+    ])
+    expect(await ruleIdsFor(rank('string'))).toEqual([])
+  })
+
   it('reports a disable without a rule or without a reason', async () => {
     expect(
       await ruleIdsFor('// eslint-disable-next-line\nconsole.log("x");\nexport {};\n')
