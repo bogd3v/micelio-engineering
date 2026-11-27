@@ -16,6 +16,7 @@ import {
 } from '../herdr/mod/factory/lib/panel.js'
 import { reportsArgs } from '../herdr/mod/factory/lib/reports.js'
 import { parseAgents } from '../herdr/mod/factory/lib/agents.js'
+import { readEpics } from '../herdr/mod/factory/lib/reads.js'
 import { stackOwned } from '../herdr/mod/factory/lib/actions.js'
 import { heldOrRed } from '../herdr/mod/factory/lib/settings.js'
 import { buildState } from '../herdr/mod/factory/lib/state.js'
@@ -1431,5 +1432,158 @@ describe('the views', () => {
       expect(said(el, 'cursor_pointer'), text).toEqual([])
     }
     expect(press).not.toHaveBeenCalled()
+  })
+})
+
+describe('the banner of the spaces', () => {
+  const NOW = Date.parse('2026-11-26T12:00:00Z')
+  const MICELIO = 'bogd3v/micelio'
+  const CORE = 'bogd3v/micelio-plugin-core'
+  const recorded = (name: string): unknown =>
+    JSON.parse(readFileSync(join(ROOT, FIXTURES, 'spaces-check', name), 'utf8'))
+  const milestonesOf = (repo: string) => `repos/${repo}/milestones?state=all&per_page=100`
+  const epicOf = (repo: string, n: number) => `repos/${repo}/issues/${n}`
+  const ANSWERS: Record<string, unknown> = {
+    [milestonesOf(MICELIO)]: recorded('milestones-micelio.json'),
+    [milestonesOf(CORE)]: recorded('milestones-micelio-pc.json'),
+    [epicOf(MICELIO, 62)]: recorded('epic-micelio.json'),
+    [epicOf(CORE, 62)]: recorded('epic-micelio-plugin-core-62.json'),
+  }
+  /** The first entry of the `spaces` installed on 2026-11-26, and the one that followed it. */
+  const WRONG = { name: 'micelio', repo: MICELIO, milestone: 15, epic: 62 }
+  const FOLLOWING = { name: 'micelio', repo: CORE, milestone: 4, epic: 62, tag: 'pc' }
+
+  /**
+   * One round of the panel over a `gh` that answers the endpoints of `answers`, and fails the others as
+   * `gh api --include` does for a 404.
+   */
+  async function check(spaces: unknown[], answers: Record<string, unknown> = ANSWERS) {
+    const config = readConfig({ ...props(null), spaces })
+    const calls: string[] = []
+    const a = createAdapters({
+      exec: async (_cmd: string, args: string[]) => {
+        const endpoint = String(args[1])
+        calls.push(endpoint)
+        return endpoint in answers
+          ? {
+              code: 0,
+              stdout: `HTTP/2.0 200 OK\r\n\r\n${JSON.stringify(answers[endpoint])}`,
+              stderr: '',
+            }
+          : {
+              code: 1,
+              stdout: 'HTTP/2.0 404 Not Found\r\n\r\n{"message":"Not Found"}',
+              stderr: 'gh: Not Found (HTTP 404)\n',
+            }
+      },
+      readTextFile,
+      terminals: () => [],
+      config,
+      clock: () => NOW,
+    })
+    const read = await a.readMilestones(config.spaces)
+    const epics = await readEpics(a, config.spaces, {
+      sleep: () => new Promise<never>(() => {}),
+      now: NOW,
+      remote: true,
+      previous: {},
+    })
+    const panel = buildPanel({
+      now: NOW,
+      state: buildState({ now: NOW, fetched: {} }),
+      github: null,
+      config,
+      milestones: 'byRepo' in read ? read.byRepo : null,
+      epics,
+    })
+    return { panel, calls }
+  }
+  const lines = async (spaces: unknown[], answers?: Record<string, unknown>) =>
+    (await check(spaces, answers)).panel.banners.spaces
+
+  it('a pair whose milestone is closed puts its line in the spaces banner', async () => {
+    const open = { name: 'micelio', repo: MICELIO, milestone: 18 }
+    expect(await lines([open])).toBeNull()
+    // Every pair is checked, the tagged one too.
+    const { panel } = await check([
+      { ...open, milestone: 15 },
+      { name: 'micelio', repo: CORE, milestone: 3, tag: 'pc' },
+    ])
+    expect(panel.banners.spaces).toEqual([
+      `micelio: milestone 15 of ${MICELIO} is closed`,
+      `micelio: milestone 3 of ${CORE} is closed`,
+    ])
+    const drawn = bannersView(viewContext(), panel.banners)
+    expect(drawn).toHaveLength(1)
+    expect(elements(drawn[0]).flatMap(texts)).toEqual(panel.banners.spaces)
+    const box = drawn[0] as unknown as Element
+    expect(said(box, 'border_color')).toEqual(['red'])
+    expect(said(box, 'bg')).toEqual(['red-bg'])
+  })
+
+  it('a pair whose milestone its repository does not have puts its line in the spaces banner', async () => {
+    expect(await lines([{ name: 'micelio', repo: MICELIO, milestone: 99 }])).toEqual([
+      `micelio: ${MICELIO} has no milestone 99`,
+    ])
+  })
+
+  it('a first pair whose epic is a pull request, a closed issue or an issue that is not an epic puts its line in the spaces banner', async () => {
+    const issue = { state: 'open', title: 'Something', labels: [] as { name: string }[] }
+    const pr = { pull_request: { url: 'https://example.com/pulls/7' } }
+    const of = (epic: unknown) =>
+      lines([{ name: 'micelio', repo: MICELIO, milestone: 18, epic: 7 }], {
+        ...ANSWERS,
+        [epicOf(MICELIO, 7)]: epic,
+      })
+    const line = [`micelio: #7 of ${MICELIO} is not an open epic`]
+    // An open pull request that is titled and labelled as an epic is still not one.
+    expect(await of({ ...issue, ...pr, title: 'Epic: x', labels: [{ name: 'épica' }] })).toEqual(
+      line
+    )
+    expect(await of({ ...issue, state: 'closed', title: 'Epic: x' })).toEqual(line)
+    expect(await of({ ...issue, labels: [{ name: 'micelio' }] })).toEqual(line)
+    // The title or the label alone makes an open issue an epic.
+    expect(await of({ ...issue, title: 'Epic: x' })).toBeNull()
+    expect(await of({ ...issue, labels: [{ name: 'épica' }] })).toBeNull()
+  })
+
+  it('the installed spaces of 2026-11-26 give the lines of milestone 15 and of #62 of bogd3v/micelio, and the fixed ones give no banner', async () => {
+    expect(await lines([WRONG, FOLLOWING])).toEqual([
+      `micelio: milestone 15 of ${MICELIO} is closed`,
+      `micelio: #62 of ${MICELIO} is not an open epic`,
+    ])
+    const fixed = await check([FOLLOWING])
+    expect(fixed.panel.banners.spaces).toBeNull()
+    expect(fixed.calls).toContain(epicOf(CORE, 62))
+    expect(bannersView(viewContext(), fixed.panel.banners)).toEqual([])
+  })
+
+  it('the epic of a tagged pair is not checked', async () => {
+    // `#62` of bogd3v/micelio, a pull request, as the epic of a tagged pair.
+    const first = { name: 'micelio', repo: CORE, milestone: 4, epic: 62 }
+    const tagged = { name: 'micelio', repo: MICELIO, milestone: 18, epic: 62, tag: 'm' }
+    const { panel, calls } = await check([first, tagged])
+    expect(panel.banners.spaces).toBeNull()
+    expect(calls).not.toContain(epicOf(MICELIO, 62))
+    // A first pair with no epic: the tagged pair's is not asked for in its place.
+    const none = await check([{ ...first, epic: null }, tagged])
+    expect(none.panel.banners.spaces).toBeNull()
+    expect(none.calls.filter((c) => c.includes('/issues/'))).toEqual([])
+  })
+
+  it('a failed read of the milestones or of an epic gives no line', async () => {
+    const noMilestones = await check([WRONG], {
+      [epicOf(MICELIO, 62)]: ANSWERS[epicOf(MICELIO, 62)],
+    })
+    expect(noMilestones.panel.banners.spaces).toEqual([
+      `micelio: #62 of ${MICELIO} is not an open epic`,
+    ])
+    const noEpic = await check([WRONG], {
+      [milestonesOf(MICELIO)]: ANSWERS[milestonesOf(MICELIO)],
+    })
+    expect(noEpic.panel.banners.spaces).toEqual([`micelio: milestone 15 of ${MICELIO} is closed`])
+    const neither = await check([WRONG], {})
+    expect(neither.calls).toHaveLength(2)
+    expect(neither.panel.banners.spaces).toBeNull()
   })
 })

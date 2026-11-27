@@ -1,4 +1,4 @@
-/** An issue as `lint-issue` reads it: from `gh issue view --json` or from a Markdown file. */
+/** An issue as `lint-issue` reads it: from `gh api repos/<repo>/issues/<n>` or from a Markdown file. */
 export interface Issue {
   /** The title, with its conventional prefix. */
   title: string
@@ -138,14 +138,15 @@ export function issueFromMarkdown(text: string, repo: string | null): Issue {
 }
 
 /**
- * Narrows the JSON printed by `gh issue view --json title,body` to an `Issue`.
+ * Narrows the JSON printed by `gh api repos/<repo>/issues/<n>` to an `Issue`. The REST API gives an
+ * empty body as `null`, which is read as an empty string.
  *
  * @throws `Error` when `title` or `body` is missing or not a string.
  */
 export function issueFromGh(json: unknown, repo: string): Issue {
   if (typeof json !== 'object' || json === null) throw new Error('gh did not print an object')
   const title = 'title' in json ? json.title : undefined
-  const body = 'body' in json ? json.body : undefined
+  const body = 'body' in json ? (json.body ?? '') : undefined
   if (typeof title !== 'string' || typeof body !== 'string') {
     throw new Error('gh printed no title or body')
   }

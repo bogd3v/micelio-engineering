@@ -5,7 +5,7 @@ import { promisify } from 'node:util'
 import { errorLine } from './errors.js'
 import { OWNER_REPO, issueFromGh, issueFromMarkdown, parseTarget } from './issue.js'
 import type { Issue, IssueRef } from './issue.js'
-import { issueLane, parseLanes, readRepoLanes } from './lane.js'
+import { issueLane, parseLanes, readRepoLanes, readRestIssue } from './lane.js'
 import type { LaneGlobs } from './lane.js'
 import { metrics } from './metrics.js'
 import { renderMetrics } from './render.js'
@@ -17,7 +17,7 @@ import type { Source } from './source.js'
 
 /** What `run` needs from the outside world, so that tests can replace the network and the clock. */
 export interface RunDeps {
-  /** Reads an issue with `gh issue view --json`. */
+  /** Reads an issue with `gh api repos/<repo>/issues/<n>`. */
   readIssue: (ref: IssueRef) => Promise<Issue>
   isClosed: IssueClosed
   /** Reads a file given with `--file`, relative to the working directory. */
@@ -155,11 +155,11 @@ function parseMetricsArgs(args: string[]): MetricsOptions | string {
 
 const exec = promisify(execFile)
 
-async function gh(ref: IssueRef, fields: string): Promise<unknown> {
-  const args = ['issue', 'view', String(ref.number), `--repo=${ref.repo}`, '--json', fields]
-  const { stdout } = await exec('gh', args)
-  return JSON.parse(stdout) as unknown
-}
+/** The property `name` of `json`, `undefined` when `json` is no object or has none. */
+const field = (json: unknown, name: string): unknown =>
+  typeof json === 'object' && json !== null
+    ? Object.getOwnPropertyDescriptor(json, name)?.value
+    : undefined
 
 const defaultMetricsSource = (repo: string, fixtures: string | null): Source =>
   fixtures === null ? ghSource(repo) : fixtureSource(fixtures)
@@ -205,12 +205,14 @@ async function defaultReadLanes(repo: string | null): Promise<LaneGlobs | null> 
 
 const defaultDeps = {
   repoRoot: () => repoRoot(process.cwd()),
-  readIssue: async (ref) => issueFromGh(await gh(ref, 'title,body'), ref.repo),
+  readIssue: async (ref) => issueFromGh(await readRestIssue(ref), ref.repo),
   isClosed: async (ref) => {
-    const json = await gh(ref, 'state')
-    const state = typeof json === 'object' && json !== null && 'state' in json ? json.state : null
+    const json = await readRestIssue(ref)
+    const state = field(json, 'state')
     if (typeof state !== 'string') throw new Error('gh printed no state')
-    return state === 'CLOSED'
+    // The number may be a pull request's. A merged one is `closed` over REST and does not count: its
+    // GraphQL state, read before, is `MERGED`. One closed without merging was `CLOSED` and counts.
+    return state === 'closed' && !field(field(json, 'pull_request'), 'merged_at')
   },
   readText: (path) => readFile(path, 'utf8'),
   today: () => new Date().toISOString().slice(0, 10),

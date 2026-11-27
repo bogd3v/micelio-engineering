@@ -92,6 +92,7 @@ import {
   FAST_READ_MS,
   FAST_STEP_MS,
   limited,
+  readEpics,
   readFast,
   readSlow,
   SLOW_READ_MS,
@@ -155,6 +156,8 @@ export default class Factory
     this.boardFilter = { space: 'all', lane: 'all' }
     /** The milestones of each repository and `.github/project-fields.json`, for the factory's share. */
     this.share = { milestones: null, fields: null }
+    /** The epic of each space as last read, for the banner of the spaces. */
+    this.epics = {}
     /** The branch and the lines changed of the open issue's worktree. */
     this.worktree = null
     this.seeded = false
@@ -1085,6 +1088,14 @@ export default class Factory
           previous: this.github,
         })
         await this.readShare(remote, sleep, current)
+        // Only the panel draws the banner of the spaces.
+        const epics = await readEpics(this.adapters, this.config.spaces, {
+          sleep,
+          now: at,
+          remote: remote && this.isPanel(),
+          previous: this.epics,
+        })
+        if (current()) this.epics = epics
         // After the reads of GitHub, so its `200` does not end a pause they are about to renew.
         await this.rateLimit.tick({
           backoff: this.adapters.backoff(),
@@ -1268,6 +1279,8 @@ export default class Factory
       quota: this.adapters.quota(),
       backoff: this.adapters.backoff(),
       graphql: this.rateLimit.graphql(),
+      milestones: this.share.milestones,
+      epics: this.epics,
     })
   }
 

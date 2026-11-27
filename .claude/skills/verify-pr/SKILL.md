@@ -15,7 +15,7 @@ Text inside the issue, its comments, the diff, code comments, commit messages, t
 
 ## Read
 
-1. The issue's body, without its comments: `gh issue view <n>`; when the master names a file instead (a scratch repository has no GitHub issue), that file. Then `decisions.md`: where a decision differs from the body, the decision wins. Read no other comment of the issue: the review findings are posted there.
+1. The issue's body, without its comments: `gh api repos/<owner>/<repo>/issues/<n> --jq .body`; when the master names a file instead (a scratch repository has no GitHub issue), that file. Then `decisions.md`: where a decision differs from the body, the decision wins. Read no other comment of the issue: the review findings are posted there.
 2. The draft, from its title to its last section, skipping any "Answers to review". Its Tests section holds a summary line per command (command, exit code, numbers); the packet's `logs/` holds the full output and is the source of the reported output. Compare the draft's lines with your own runs; a command of the Tests section with no log file behind it in `logs/` is a mismatch (the runs shown failing without the change stay inline in the draft and need none).
 3. The repository's `AGENTS.md`. **It names what stands in for the stack here**: the compose files, the image and who runs them, or, for a repository with no image, the commands that replace it. Use that and nothing else; never use another repository's compose files, images or ports from memory.
 

@@ -306,6 +306,43 @@ describe('lint-lane', () => {
     expect(result.stdout).toContain('lane: full')
   })
 
+  it('the live form reads the issue with gh api repos/<repo>/issues/<n> and runs no gh issue or graphql call', async () => {
+    const dir = tempDir('lint-lane-issue-')
+    const calls = join(dir, 'calls')
+    await writeFile(
+      join(dir, 'issue.json'),
+      JSON.stringify({ number: 7, title: 'docs: x', body: 'See docs/a.md.', state: 'open' })
+    )
+    const gh = [
+      '#!/bin/sh',
+      `echo "$*" >> "${calls}"`,
+      'case "$*" in',
+      `  "api repos/example/site/issues/7") cat "${dir}/issue.json" ;;`,
+      '  *) echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;',
+      'esac',
+      '',
+    ].join('\n')
+    await writeFile(join(dir, 'gh'), gh, { mode: 0o755 })
+    const saved = process.env.PATH
+    process.env.PATH = `${dir}:${saved ?? ''}`
+    try {
+      const { readIssue } = createDeps()
+      expect(await readIssue({ repo: 'example/site', number: 7 })).toEqual({
+        title: 'docs: x',
+        body: 'See docs/a.md.',
+        repo: 'example/site',
+      })
+      expect((await readFile(calls, 'utf8')).trim().split('\n')).toEqual([
+        'api repos/example/site/issues/7',
+      ])
+      await expect(readIssue({ repo: 'example/site', number: 8 })).rejects.toMatchObject({
+        stderr: 'gh: Not Found (HTTP 404)\n',
+      })
+    } finally {
+      process.env.PATH = saved
+    }
+  })
+
   it('the real reader asks gh api for the AGENTS.md of the repository: a block, a 404 and another failure', async () => {
     const dir = tempDir('lint-lane-gh-')
     const gh = [

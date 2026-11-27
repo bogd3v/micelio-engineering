@@ -371,7 +371,7 @@ export async function versionFiles(
 
 /** What `runLintLane` needs from the outside world, so that tests can replace `gh`, git and the disk. */
 export interface LintLaneDeps {
-  /** Reads an issue with `gh issue view --json`. */
+  /** Reads an issue with `gh api repos/<repo>/issues/<n>`. */
   readIssue: (ref: IssueRef) => Promise<Issue>
   /** Reads a file, relative to the working directory; rejects with `ENOENT` when it is missing. */
   readText: (path: string) => Promise<string>
@@ -421,21 +421,21 @@ export async function readRepoLanes(repo: string): Promise<LaneGlobs | null> {
   }
 }
 
-/** The real dependencies: `gh issue view`, `gh api` for the lanes, the disk and git in the working directory. */
+/**
+ * An issue as the REST API returns it, read with `gh api repos/<repo>/issues/<n>`. `lint-lane` and
+ * `lint-issue` both read issues and the state of their dependencies through it.
+ *
+ * @throws `Error` when `gh` fails, a 404 included.
+ */
+export async function readRestIssue(ref: IssueRef): Promise<unknown> {
+  const { stdout } = await exec('gh', ['api', `repos/${ref.repo}/issues/${ref.number}`])
+  return JSON.parse(stdout) as unknown
+}
+
+/** The real dependencies: `gh api` for the issue and the lanes, the disk and git in the working directory. */
 export function createDeps(cwd: string = process.cwd()): LintLaneDeps {
   return {
-    readIssue: async (ref) => {
-      const { stdout } = await exec('gh', [
-        'issue',
-        'view',
-        String(ref.number),
-        '--repo',
-        ref.repo,
-        '--json',
-        'title,body',
-      ])
-      return issueFromGh(JSON.parse(stdout), ref.repo)
-    },
+    readIssue: async (ref) => issueFromGh(await readRestIssue(ref), ref.repo),
     readLanes: readRepoLanes,
     readText: (path) => readFile(resolve(cwd, path), 'utf8'),
     readBaseText: async (base, path) => {

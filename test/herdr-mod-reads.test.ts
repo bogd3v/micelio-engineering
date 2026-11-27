@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { createAdapters, readConfig } from '../herdr/mod/factory/adapters.js'
 import {
   createGate,
+  EPIC_EVERY_MS,
   FAST_READ_MS,
   FAST_STEP_MS,
+  readEpics,
   readFast,
   readSlow,
   SLOW_READ_MS,
@@ -214,5 +216,84 @@ describe('the time limits of the reads', () => {
       { name: 'hidpp_battery_0', temp1_input: null },
       { name: 'k10temp', temp1_input: '42000\n' },
     ])
+  })
+})
+
+describe('the read of the epics', () => {
+  const REPO = 'bogd3v/micelio'
+  const SPACES_OF_EPICS = readConfig({
+    spaces: [
+      { name: 'micelio', repo: REPO, milestone: 18, epic: 872 },
+      { name: 'fediverse', repo: 'bogd3v/fediverse', milestone: 3 },
+    ],
+  }).spaces
+  const EPIC = { state: 'open', title: 'Epic: x', labels: [] }
+
+  it('the epic of each space is read when the panel starts and at most once an hour after', async () => {
+    const time = clock()
+    const calls: string[][] = []
+    let answer: 'ok' | 'fail' | 'silent' = 'ok'
+    const a = createAdapters({
+      exec: async (cmd: string, args: string[]) => {
+        calls.push([cmd, ...args])
+        if (answer === 'silent') return NEVER
+        return answer === 'ok'
+          ? ok(`HTTP/2.0 200 OK\r\n\r\n${JSON.stringify(EPIC)}`)
+          : {
+              code: 1,
+              stdout: 'HTTP/2.0 404 Not Found\r\n\r\n{"message":"Not Found"}',
+              stderr: 'gh: Not Found (HTTP 404)\n',
+            }
+      },
+      readTextFile: async () => null,
+      terminals: () => [],
+      config: readConfig({ spaces: SPACES_OF_EPICS }),
+    })
+    const read = (now: number, previous: Awaited<ReturnType<typeof readEpics>>, remote = true) =>
+      readEpics(a, SPACES_OF_EPICS, {
+        sleep: time.sleep,
+        now,
+        remote,
+        previous,
+      })
+    // The pace of the quota or a hidden window says no: nothing is read and nothing counts.
+    expect(await read(0, {}, false)).toEqual({})
+    expect(calls).toEqual([])
+    const first = await read(0, {})
+    expect(calls).toEqual([['gh', 'api', `repos/${REPO}/issues/872`, '--include']])
+    expect(first).toEqual({ micelio: { at: 0, issue: EPIC } })
+    expect(await read(EPIC_EVERY_MS - 1, first)).toEqual(first)
+    expect(calls).toHaveLength(1)
+    expect(EPIC_EVERY_MS).toBe(3_600_000)
+    // A try that fails counts, and keeps the last good answer.
+    answer = 'fail'
+    const second = await read(EPIC_EVERY_MS, first)
+    expect(calls).toHaveLength(2)
+    expect(second).toEqual({ micelio: { at: EPIC_EVERY_MS, issue: EPIC } })
+    await read(EPIC_EVERY_MS + 60_000, second)
+    expect(calls).toHaveLength(2)
+    // A read that never answers is cut at the limit of a GitHub step.
+    answer = 'silent'
+    const pending = read(2 * EPIC_EVERY_MS, {})
+    await time.advance(SLOW_STEP_MS)
+    expect(await pending).toEqual({ micelio: { at: 2 * EPIC_EVERY_MS, issue: null } })
+  })
+
+  it('with fixture the epic comes from epic-<space>.json and no gh runs', async () => {
+    const calls: string[] = []
+    const real = createAdapters({
+      exec: async (cmd: string) => {
+        calls.push(cmd)
+        return ok('')
+      },
+      readTextFile: async (path: string) =>
+        path === '/checkout/recorded/epic-micelio.json' ? JSON.stringify(EPIC) : null,
+      terminals: () => [],
+      config: readConfig({ checkout: '/checkout', fixture: 'recorded', spaces: SPACES_OF_EPICS }),
+    })
+    expect(await real.readEpic(SPACES_OF_EPICS[0]!)).toEqual({ issue: EPIC })
+    // No recording is a failed read.
+    expect(await real.readEpic(SPACES_OF_EPICS[1]!)).toEqual({ error: 'no epic of fediverse' })
+    expect(calls).toEqual([])
   })
 })

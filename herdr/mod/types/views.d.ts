@@ -9,6 +9,7 @@ import type { createAdapters, readConfig } from '../factory/adapters.js'
 import type { createActions, createRetries } from '../factory/lib/actions.js'
 import type { createRateLimitWatch } from '../factory/lib/quota.js'
 import type { createGate } from '../factory/lib/reads.js'
+import type { EpicReads } from '../factory/lib/spaces.js'
 import type {
   createCustomize,
   createLook,
@@ -196,6 +197,7 @@ export interface FactoryState {
   board: boolean
   boardFilter: { space: string; lane: string }
   share: { milestones: ShareInput['milestones'] | null; fields: ShareInput['fields'] | null }
+  epics: EpicReads
   worktree: { branch?: string; added?: number; removed?: number; error?: string } | null
   seeded: boolean
   now: number

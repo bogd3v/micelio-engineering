@@ -9,6 +9,7 @@ import { issueOfName } from './agents.js'
 import { catFile } from './cat.js'
 import { buildIssues } from './issues.js'
 import { isPaused, paceOf } from './quota.js'
+import { spaceProblems } from './spaces.js'
 import { ageMs, toMs } from './time.js'
 
 /** @typedef {'machine' | 'slots' | 'workers' | 'milestones' | 'stacks' | 'orphans'} SectionName a collapsible section */
@@ -559,6 +560,8 @@ function catsOf(row, onIt, master, theme) {
  * @param {import('./quota.js').Quota | null} [input.quota] the last quota GitHub reported: the header says so while the pace is not `normal`
  * @param {import('./quota.js').Backoff | null} [input.backoff] the pause of a secondary limit: the header says so while it runs
  * @param {import('./quota.js').Graphql | null} [input.graphql] the GraphQL points last read: the header names them while they are low
+ * @param {Record<string, import('./board.js').RepoMilestone[]> | null} [input.milestones] each repository's milestones, for the banner of the spaces
+ * @param {import('./spaces.js').EpicReads} [input.epics] the epic of each space as last read, for the same banner
  */
 export function buildPanel({
   now,
@@ -573,6 +576,8 @@ export function buildPanel({
   quota = null,
   backoff = null,
   graphql = null,
+  milestones = null,
+  epics = {},
 }) {
   const slots = /** @type {import('./slots.js').Slots | null} */ (
     orEmpty(state.sources['slots']).value
@@ -702,7 +707,9 @@ export function buildPanel({
   }
 
   // The banners.
+  const problems = spaceProblems({ spaces: config.spaces, milestones, epics })
   const banners = {
+    spaces: problems.length === 0 ? null : problems,
     maintainer:
       config.maintainer === ''
         ? {
