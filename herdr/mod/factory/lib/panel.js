@@ -9,6 +9,7 @@ import { issueOfName } from './agents.js'
 import { catFile } from './cat.js'
 import { buildIssues } from './issues.js'
 import { paceOf } from './quota.js'
+import { spaceProblems } from './spaces.js'
 import { ageMs, toMs } from './time.js'
 
 /** @typedef {'machine' | 'slots' | 'workers' | 'milestones' | 'stacks' | 'orphans'} SectionName a collapsible section */
@@ -535,6 +536,8 @@ function catsOf(row, onIt, master, theme) {
  * @param {'dark' | 'light'} [input.theme] the theme the cat files are named for
  * @param {Record<string, boolean>} [input.open] the sections the maintainer opened or closed
  * @param {import('./quota.js').Quota | null} [input.quota] the last quota GitHub reported: the header says so while the pace is not `normal`
+ * @param {Record<string, import('./board.js').RepoMilestone[]> | null} [input.milestones] each repository's milestones, for the banner of the spaces
+ * @param {import('./spaces.js').EpicReads} [input.epics] the epic of each space as last read, for the same banner
  */
 export function buildPanel({
   now,
@@ -547,6 +550,8 @@ export function buildPanel({
   theme = 'dark',
   open = {},
   quota = null,
+  milestones = null,
+  epics = {},
 }) {
   const slots = /** @type {import('./slots.js').Slots | null} */ (
     orEmpty(state.sources['slots']).value
@@ -675,7 +680,9 @@ export function buildPanel({
   }
 
   // The banners.
+  const problems = spaceProblems({ spaces: config.spaces, milestones, epics })
   const banners = {
+    spaces: problems.length === 0 ? null : problems,
     maintainer:
       config.maintainer === ''
         ? {

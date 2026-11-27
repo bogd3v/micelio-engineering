@@ -76,6 +76,35 @@ async function round(filter = { space: 'all', lane: 'all' }) {
 
 const ids = (column: Column) => column.cards.map((c) => `${c.space}#${c.id.slice(1)}`)
 
+describe('the milestones read', () => {
+  it("readMilestones gives each milestone's state, and one with none reads as open", async () => {
+    const config = readConfig({
+      checkout: '/checkout',
+      spaces: [{ name: 'fixture-space', repo: 'bogd3v/fixture', milestone: 1 }],
+    })
+    const list = [{ number: 1, state: 'closed' }, { number: 2, state: 'open' }, { number: 3 }]
+    const a = createAdapters({
+      exec: async () => ({
+        code: 0,
+        stdout: `HTTP/2.0 200 OK\r\n\r\n${JSON.stringify(list)}`,
+        stderr: '',
+      }),
+      readTextFile,
+      terminals: () => [],
+      config,
+    })
+    expect(await a.readMilestones(config.spaces)).toMatchObject({
+      byRepo: {
+        'bogd3v/fixture': [
+          { number: 1, state: 'closed' },
+          { number: 2, state: 'open' },
+          { number: 3, state: 'open' },
+        ],
+      },
+    })
+  })
+})
+
 describe('the board', () => {
   it("the Board's note names the stale machine, slots or agents source and the time of its last good read", async () => {
     const { board: live, github, config } = await round()

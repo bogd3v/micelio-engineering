@@ -249,7 +249,9 @@ describe('the repository template', () => {
     expect(skill).toContain('git commit -s -F <message file>')
     expect(skill).toContain('--force-with-lease=<branch>:<sha>')
     expect(skill).toContain('time: <minutes>m diff|report')
-    expect(skill).toContain('gh pr review <n> --comment -b "time: 10m diff"')
+    expect(skill).toContain(
+      'gh api repos/<owner>/<repo>/pulls/<n>/reviews -f event=COMMENT -f body="time: 10m diff"'
+    )
   })
 
   it('only creates a new repository, and rejects names and descriptions it cannot use', () => {

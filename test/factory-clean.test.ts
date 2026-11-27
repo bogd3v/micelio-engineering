@@ -43,6 +43,7 @@ const TOOLS = [
   'mkdir',
   'cat',
   'id',
+  'jq',
 ]
 
 /** The real `rm`, which the stubs call by its path. */
@@ -79,28 +80,41 @@ function script(path: string, body: string): void {
 }
 
 /**
- * `gh` as gh 2.97.0 answers: `issue view … --json state -q .state` prints the
- * state and exits 0, `pr list … --json number -q '.[].number'` prints one number per merged pull
- * request (nothing when none); one it cannot read is a message on stderr and exit 1
- * (`GH_STATE=fail`, `GH_PR=fail`).
+ * `gh` as gh 2.97.0 answers `gh api`: with `--jq` it prints the filter's result and exits 0 (here
+ * run by `jq` over the REST objects: `merged_at` is set for each number of `GH_MERGED` and `null`
+ * for each of `GH_CLOSED`); a request GitHub refuses prints the error body on stdout and
+ * `gh: <message> (HTTP <code>)` on stderr and exits 1 (`GH_STATE=fail`, `GH_PR=fail`).
  */
 function stubGh(bin: string): void {
   script(
     join(bin, 'gh'),
     `echo "$*" >> "${calls}/gh"
-case "$1 $2" in
-  "issue view")
-    [ "$*" = "issue view 77 --repo example/repo --json state -q .state" ] || exit 64
-    [ "$GH_STATE" = fail ] && { echo "GraphQL: Could not resolve to an issue" >&2; exit 1; }
+refused() {
+  echo '{"message":"Not Found","status":"404"}'
+  echo "gh: Not Found (HTTP 404)" >&2
+  exit 1
+}
+[ "$1" = api ] && [ "$3" = --jq ] && [ $# -eq 4 ] || exit 64
+case "$2" in
+  "repos/example/repo/issues/77")
+    [ "$4" = .state ] || exit 64
+    [ "$GH_STATE" = fail ] && refused
     echo "$GH_STATE" ;;
-  "pr list")
-    [ "$GH_PR" = fail ] && { echo "GraphQL: Could not resolve to a Repository" >&2; exit 1; }
-    for n in $GH_MERGED; do echo "$n"; done ;;
+  "repos/example/repo/pulls?head=example:${BRANCH}&state=closed&per_page=100")
+    [ "$GH_PR" = fail ] && refused
+    {
+      for n in $GH_MERGED; do echo "{\\"number\\":$n,\\"merged_at\\":\\"2026-01-01T00:00:00Z\\"}"; done
+      for n in $GH_CLOSED; do echo "{\\"number\\":$n,\\"merged_at\\":null}"; done
+    } | jq -s . | jq -r "$4" ;;
   *) exit 64 ;;
 esac
 `
   )
 }
+
+/** The two calls the script makes, as the stub records them. */
+const STATE_CALL = 'api repos/example/repo/issues/77 --jq .state'
+const MERGED_CALL = `api repos/example/repo/pulls?head=example:${BRANCH}&state=closed&per_page=100 --jq .[] | select(.merged_at != null) | .number`
 
 /**
  * `docker` 29.10.0: records each call in `docker` and the `DOCKER_HOST` it got in `docker-host`;
@@ -192,6 +206,7 @@ function clean(
   opts: {
     state?: string
     merged?: string
+    closed?: string
     pr?: string
     name?: string
     dry?: boolean
@@ -208,8 +223,9 @@ function clean(
       FACTORY_TMP: scratch,
       FACTORY_RUN_TMP: runTmp,
       FACTORY_SLOT_DIR: slots,
-      GH_STATE: opts.state ?? 'CLOSED',
+      GH_STATE: opts.state ?? 'closed',
       GH_MERGED: opts.merged ?? '12',
+      GH_CLOSED: opts.closed ?? '',
       GH_PR: opts.pr ?? '',
       ...opts.env,
     },
@@ -287,7 +303,7 @@ afterEach(() => {
 
 describe('factory-clean.sh', () => {
   it('removes nothing and exits 1 while the issue is open', () => {
-    for (const state of ['OPEN', 'fail']) {
+    for (const state of ['open', 'fail']) {
       const r = clean({ state, docker: ['example-app:77'], podman: true })
       expect(r.code, state).toBe(1)
       expect(r.out, state).toBe('')
@@ -295,12 +311,30 @@ describe('factory-clean.sh', () => {
     }
     for (const path of everything()) expect(existsSync(path), path).toBe(true)
     expect(hasBranch()).toBe(true)
-    expect(callsOf('gh')).toEqual([
-      'issue view 77 --repo example/repo --json state -q .state',
-      'issue view 77 --repo example/repo --json state -q .state',
-    ])
+    expect(callsOf('gh')).toEqual([STATE_CALL, STATE_CALL])
     expect(callsOf('docker')).toEqual([])
     expect(callsOf('podman')).toEqual([])
+  })
+
+  it("reads the issue's state and the merged pull requests of its branch with gh api GET calls only", () => {
+    const r = clean({ closed: '11' })
+    expect(r.err).toBe('')
+    expect(r.out).toContain(`removed ${worktree}\n`)
+    expect(callsOf('gh')).toEqual([STATE_CALL, MERGED_CALL])
+    // `gh api` sends GET unless a method, a field or a body is given.
+    for (const call of callsOf('gh')) {
+      expect(call).not.toMatch(/(^| )(-X|--method|-f|-F|--field|--raw-field|--input)([ =]|$)/)
+    }
+  })
+
+  it('a refused REST read of the issue removes nothing and prints state: unknown', () => {
+    const r = clean({ state: 'fail', docker: ['example-app:77'], podman: true })
+    expect(r.code).toBe(1)
+    expect(r.out).toBe('')
+    expect(r.err).toBe('factory-clean: example/repo#77 is not closed (state: unknown)\n')
+    for (const path of everything()) expect(existsSync(path), path).toBe(true)
+    expect(hasBranch()).toBe(true)
+    expect(callsOf('docker')).toEqual([])
   })
 
   it('removes nothing and exits 1 while an agent of the issue holds a lease or a slot', () => {
@@ -348,9 +382,9 @@ describe('factory-clean.sh', () => {
       expect(r.err, name).toContain('the name must match [a-z0-9]{1,16}')
     }
     // The longest name that passes reaches the next guard.
-    expect(clean({ name: 'a'.repeat(16), state: 'OPEN' }).err).toContain('is not closed')
+    expect(clean({ name: 'a'.repeat(16), state: 'open' }).err).toContain('is not closed')
     for (const path of everything()) expect(existsSync(path), path).toBe(true)
-    expect(callsOf('gh')).toEqual(['issue view 77 --repo example/repo --json state -q .state'])
+    expect(callsOf('gh')).toEqual([STATE_CALL])
     expect(callsOf('docker')).toEqual([])
   })
 
@@ -373,10 +407,7 @@ describe('factory-clean.sh', () => {
     expect(existsSync(join(packets, '770'))).toBe(true)
     for (const s of SCRATCH) expect(existsSync(join(scratch, s)), s).toBe(false)
     for (const s of OTHER_SCRATCH) expect(existsSync(join(scratch, s)), s).toBe(true)
-    expect(callsOf('gh')).toEqual([
-      'issue view 77 --repo example/repo --json state -q .state',
-      `pr list --repo example/repo --head ${BRANCH} --state merged --json number -q .[].number`,
-    ])
+    expect(callsOf('gh')).toEqual([STATE_CALL, MERGED_CALL])
     expect(callsOf('hc')).toEqual([])
 
     // Once the worktree is gone, a second run removes nothing more and still succeeds.
@@ -403,7 +434,7 @@ describe('factory-clean.sh', () => {
     expect(existsSync(worktree)).toBe(true)
     expect(hasBranch()).toBe(true)
     // No pull request is asked about while the worktree has uncommitted work.
-    expect(callsOf('gh').filter((c) => c.startsWith('pr list'))).toEqual([])
+    expect(callsOf('gh').filter((c) => c.includes('/pulls?'))).toEqual([])
   })
 
   it('keeps the worktree of a branch whose pull request is not merged', () => {
@@ -417,10 +448,15 @@ describe('factory-clean.sh', () => {
     expect(existsSync(worktree)).toBe(true)
     expect(existsSync(join(packets, NAME, 'logs/check.log'))).toBe(true)
     expect(hasBranch()).toBe(true)
-    expect(callsOf('gh').filter((c) => c.startsWith('pr list'))).toEqual([
-      `pr list --repo example/repo --head ${BRANCH} --state merged --json number -q .[].number`,
-      `pr list --repo example/repo --head ${BRANCH} --state merged --json number -q .[].number`,
-    ])
+    expect(callsOf('gh').filter((c) => c.includes('/pulls?'))).toEqual([MERGED_CALL, MERGED_CALL])
+  })
+
+  it('keeps the worktree of a branch whose pull request was closed without merging', () => {
+    // The REST list of closed pull requests holds the unmerged ones too.
+    const r = clean({ merged: '', closed: '13' })
+    expect(r.out).toContain(`kept ${worktree}: the pull request of ${BRANCH} is not merged\n`)
+    expect(existsSync(worktree)).toBe(true)
+    expect(hasBranch()).toBe(true)
   })
 
   it('keeps a wt-name that is no worktree of the checkout, or one with no branch, and its packet', () => {

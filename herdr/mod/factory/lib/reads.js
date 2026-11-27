@@ -1,7 +1,8 @@
-// The time limits of the mod's reads. A step that never settles ends as an error of its own source, and a
-// read that never ends (its task cancelled, its `finally` never run) does not keep the next one from
-// starting. No `herdr` or `gpui` import: the sleep is an argument (`cx.sleep` in `main.js`, a stub in the
-// tests). ADR-0004 still holds: no command and no `exec` option is added here.
+// The time limits of the mod's reads, and when the epics are read again (`readEpics`). A step that never
+// settles ends as an error of its own source, and a read that never ends (its task cancelled, its
+// `finally` never run) does not keep the next one from starting. No `herdr` or `gpui` import: the sleep
+// is an argument (`cx.sleep` in `main.js`, a stub in the tests). ADR-0004 still holds: no command and no
+// `exec` option is added here.
 
 /** One step of the fast read: more than the longest `exec` timeout of that read (`docker`, 15 s). */
 export const FAST_STEP_MS = 20_000
@@ -11,6 +12,8 @@ export const FAST_READ_MS = 60_000
 export const SLOW_READ_MS = 600_000
 /** One GitHub step of the slow read: more than `gh api`'s 30 s. */
 export const SLOW_STEP_MS = 45_000
+/** The epic of a space is asked for at most once in this time. */
+export const EPIC_EVERY_MS = 60 * 60_000
 
 /**
  * Waits for a promise for at most `ms`.
@@ -119,6 +122,35 @@ export async function readSlow(adapters, spaces, { sleep }) {
   }
   const now = await step('now', () => adapters.now())
   return { now: typeof now === 'number' ? now : null, reads }
+}
+
+/**
+ * The epic of each space that has one, each read under `SLOW_STEP_MS`: when it was never tried, or the
+ * last try is `EPIC_EVERY_MS` old. A try that fails counts too, and keeps the last good answer. Nothing
+ * is read, and nothing counts, while `remote` is false (the pace of `lib/quota.js`, a hidden window, or
+ * a copy of the mod that shows no banner).
+ *
+ * @template {{ name: string, epic?: number | null }} P
+ * @param {{ readEpic: (space: P) => Promise<{ issue: import('./spaces.js').EpicIssue } | { error: string }> }} adapters
+ * @param {P[]} spaces
+ * @param {object} options
+ * @param {(ms: number) => Promise<unknown>} options.sleep
+ * @param {number} options.now milliseconds since the epoch
+ * @param {boolean} options.remote
+ * @param {import('./spaces.js').EpicReads} options.previous
+ * @returns {Promise<import('./spaces.js').EpicReads>}
+ */
+export async function readEpics(adapters, spaces, { sleep, now, remote, previous }) {
+  if (!remote) return previous
+  const epics = { ...previous }
+  for (const space of spaces) {
+    if (space.epic == null) continue
+    const last = previous[space.name]
+    if (last !== undefined && now - last.at < EPIC_EVERY_MS) continue
+    const read = await limited(SLOW_STEP_MS, 'readEpic', () => adapters.readEpic(space), sleep)
+    epics[space.name] = { at: now, issue: 'issue' in read ? read.issue : (last?.issue ?? null) }
+  }
+  return epics
 }
 
 /**

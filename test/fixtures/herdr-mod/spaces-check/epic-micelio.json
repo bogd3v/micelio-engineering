@@ -1,0 +1,1 @@
+{"labels":[{"name":"security"}],"pull_request":{"url":"https://api.github.com/repos/bogd3v/micelio/pulls/62"},"state":"closed","title":"fix: add author verification to comment delete/update endpoints"}

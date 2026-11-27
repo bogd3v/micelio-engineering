@@ -60,9 +60,10 @@ export function columnOf(gates) {
 }
 
 /**
- * A milestone as REST returns it, the fields the share reads.
+ * A milestone as REST returns it, the fields the share and the banner of the spaces read; one with no
+ * `state` is open.
  *
- * @typedef {{ number: number, title: string, open_issues: number, closed_issues: number }} RepoMilestone
+ * @typedef {{ number: number, title: string, open_issues: number, closed_issues: number, state?: 'open' | 'closed' }} RepoMilestone
  */
 
 /**

@@ -52,14 +52,14 @@
     }
   },
   "files": {
-    ".claude/agents/master.md": "483d4ed1e57b51f4a6cb88b37e1f576aa18fdaf5d4cf8c95c0a21dc0dd2db35a",
+    ".claude/agents/master.md": "c90e66a2ca4b97d07fc640f7bf86f719d4d619b5b1e932d57164db130b62cfa3",
     ".claude/agents/planner.md": "f61a276d61794332b0f3b3c93a4bfc9deb0dfdfc528a5a5ada286e427c62e88a",
-    ".claude/agents/reviewer.md": "34cf7fb633a6c6301a68d33e40982462aa9c8aeeb2ccec35ba78f1bf62b0d7ef",
-    ".claude/agents/verifier.md": "e70127caf1e066ed839f9f9a269dd9d85db5f3a994c621df98d75da2b09833bf",
-    ".claude/agents/worker.md": "cfaeb5931158595fdcb2e3443820aa419e5eb9f29598162f89ea600112faef76",
-    ".claude/skills/ship-pr/SKILL.md": "275cdd710ebdbe6723f692a95a75ea6d22862c49822002c248878e33dbde5324",
-    ".claude/skills/blind-review/SKILL.md": "60eb713ec54d42ba914fe7c93597efc0d30105acf5fc24ae9634b1b06af17a4e",
-    ".claude/skills/verify-pr/SKILL.md": "a2c64e177ca7c89a227f902892bda74052c38b746612e2b5c406f85971de465f",
+    ".claude/agents/reviewer.md": "67bc009cd322d733469951353353b3c278dd05c7e3332b10704c2add63b6f30a",
+    ".claude/agents/verifier.md": "c175666706f9d74a68467200c2010ea07b64ef21ace00968ebb5153f39192bf0",
+    ".claude/agents/worker.md": "5c4c8f5ea1c524af4a3fb4f7bfdfad0de50bc057e77feffd9a3ff158b631c206",
+    ".claude/skills/ship-pr/SKILL.md": "ead4b44a22d5bcad241a2eb598e0630ef1db8f00f7eb6f3c83fdb8d2ddc5c1d4",
+    ".claude/skills/blind-review/SKILL.md": "8a09b3e79bc7f0856b624903957ad392d772e4c132977c24605aa301b8dc2fed",
+    ".claude/skills/verify-pr/SKILL.md": "58d93725d7af70ad051662c26e6eb5d137c635ea4a4b65f52da169ecf06a5fa8",
     ".github/pull_request_template.md": "a61095d88c22206255c089905df9d455e37c9ac3428eafd841a98fa9db272256",
     "CLAUDE.md": "2fe9efbc0c4a6e0cbd446afb506911ba28b0068a42f8686676635986d968cefd"
   }

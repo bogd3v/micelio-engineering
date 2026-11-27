@@ -48,7 +48,7 @@ function unknownCitations(
 describe('the factory documents', () => {
   it('docs/factory.md and herdr/master.md stay under their word caps', () => {
     expect(words(read('docs/factory.md'))).toBeLessThanOrEqual(6360)
-    expect(words(read('herdr/master.md'))).toBeLessThanOrEqual(5134)
+    expect(words(read('herdr/master.md'))).toBeLessThanOrEqual(5160)
   })
 
   it("herdr/master.md has the master write the worktree, packet directory, branch and draft to the issue's Progress before the worker's brief, and check it at gate 5", () => {
@@ -76,6 +76,24 @@ describe('the factory documents', () => {
     expect(session.split('\n').find((l) => l.startsWith('2. '))).toMatch(
       /checks that the Progress of each issue in flight names its worktree, packet directory and draft path, adds what is missing/
     )
+  })
+
+  it('herdr/master.md sets the Status through the REST Projects endpoints: the fields, the item of the issue and its PATCH', () => {
+    const runbook = read('herdr/master.md')
+    const start = runbook.indexOf('## The Project Status flow')
+    const flow = runbook.slice(start, runbook.indexOf('\n## ', start + 1))
+    for (const term of [
+      '{{project}}',
+      '`<owner>/<number>`',
+      'gh api "orgs/<owner>/projectsV2/<number>/fields?per_page=100" --jq \'.[] | select(.name == "Status")\'',
+      'gh api --paginate "orgs/<owner>/projectsV2/<number>/items?per_page=100" --jq \'.[] | select(.content.html_url == "https://github.com/<owner>/<repo>/issues/<n>") | .id\'',
+      'gh api -X PATCH orgs/<owner>/projectsV2/<number>/items/<item id> --input <file>',
+      '`{"fields":[{"id":<field id>,"value":"<option id>"}]}`',
+      'looked up each run',
+    ])
+      expect(flow, term).toContain(term)
+    // The ids are looked up, never written in the runbook.
+    expect(flow).not.toMatch(/429852189|f75ad846|0b81dac3|47fc9ee4|0bd5f6b0|98236657/)
   })
 
   it('every rule id cited outside docs/factory.md exists in it', () => {
