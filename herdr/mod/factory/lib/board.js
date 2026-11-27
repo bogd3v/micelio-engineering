@@ -5,7 +5,7 @@
 // Colours are the names of `herdr/mod/design/tokens.json`, as in `lib/panel.js`.
 
 import { catFile } from './cat.js'
-import { dependsOn } from './issues.js'
+import { dependsOn, fromIssue } from './issues.js'
 import { parseGates } from './gates.js'
 import {
   catState,
@@ -273,7 +273,9 @@ export function buildBoard({
           onIt.find((a) => a.role === wanted) ??
           (wanted === 'master' ? master : null) ??
           (column === 'ready' ? null : (onIt[0] ?? null))
-        const blockedBy = dependsOn(issue.body).filter((n) => open.has(n) && n !== issue.number)
+        const blockedBy = fromIssue(issue, pair.repo, dependsOn).filter(
+          (n) => open.has(n) && n !== issue.number
+        )
         const needs = gates.marks.includes('needs') || onIt.some((a) => a.needsYou)
         const held = gates.marks.includes('held')
         const red = gates.marks.includes('red') || (column === 'ready' && gates.rounds.length > 0)

@@ -6,6 +6,16 @@ import { buildBoard, columnOf, factoryShare } from '../herdr/mod/factory/lib/boa
 import { parseGates } from '../herdr/mod/factory/lib/gates.js'
 import { buildGithub } from '../herdr/mod/factory/lib/panel.js'
 import { buildState } from '../herdr/mod/factory/lib/state.js'
+import {
+  counting,
+  fresh,
+  largeSet,
+  MAINTAINER,
+  NOW,
+  readsOf,
+  SPACES as LARGE_SPACES,
+  type Make,
+} from './support/herdr-mod-large-set.js'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const FIXTURES = ['test/fixtures/herdr-mod/board', 'test/fixtures/herdr-mod']
@@ -421,5 +431,39 @@ describe('the board of a space of two repositories', () => {
       'ALL SPACES',
       'FIXTURE-SPACE · 0/4',
     ])
+  })
+})
+
+describe('what is kept over the frames of the Board', () => {
+  it('twelve Board frames over the large set read each issue body and each comment body once', () => {
+    const set = largeSet(11)
+    const counted = counting()
+    const frame = (now: number, github: ReturnType<typeof buildGithub>) =>
+      buildBoard({
+        now,
+        state: buildState({ now, fetched: {} }),
+        github,
+        config: { spaces: LARGE_SPACES, maintainer: MAINTAINER },
+      })
+    const githubOf = (make: Make) =>
+      buildGithub({ now: NOW, spaces: LARGE_SPACES, reads: readsOf(set, make) })
+    let github = githubOf(counted.make)
+    let last = frame(NOW, github)
+    for (let i = 1; i < 12; i += 1) {
+      // Each fourth frame has the new objects of a new read.
+      if (i % 4 === 0) {
+        counted.again()
+        github = githubOf(counted.make)
+      }
+      last = frame(NOW + i * 1000, github)
+    }
+    // The body of a closed issue is never read.
+    expect(counted.issueReads.size).toBe(39)
+    expect([...new Set(counted.issueReads.values())]).toEqual([1])
+    expect(counted.commentReads.size).toBe(1500)
+    expect([...new Set(counted.commentReads.values())]).toEqual([1])
+    expect(last).toEqual(frame(NOW + 11_000, githubOf(fresh)))
+    const blocked = last.columns.flatMap((c) => c.cards)
+    expect(blocked.length).toBeGreaterThan(39)
   })
 })

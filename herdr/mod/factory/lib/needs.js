@@ -10,6 +10,7 @@ import { catFile } from './cat.js'
 import { fromBody, parseGates, saidOf } from './gates.js'
 import { parseDecision } from './decision.js'
 import { parseProgress } from './detail.js'
+import { fromIssue } from './issues.js'
 import { issueAt, issueKey, milestoneRows, onPair, pairReads, refOf } from './panel.js'
 import {
   SEND_DELAY_MS,
@@ -487,7 +488,12 @@ export function buildNeeds({
           read: opened !== undefined,
           at: now - (row.waitMs ?? 0),
           label: where(row.number),
-          worktree: parseProgress(issue?.body).worktree,
+          // The rows are those of the pair's issues, so the issue of a row is there.
+          worktree: fromIssue(
+            /** @type {NonNullable<typeof issue>} */ (issue),
+            pair.repo,
+            parseProgress
+          ).worktree,
         }
         if (row.lane === 'express') {
           express.push(item)

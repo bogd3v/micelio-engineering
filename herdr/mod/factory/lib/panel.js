@@ -223,6 +223,13 @@ export function pullIssue(body) {
  *
  * @typedef {{ issues: Parameters<typeof buildIssues>[0]['issues'], comments: Parameters<typeof buildIssues>[0]['comments'] }} PairRaw the issues and comments of one pair
  *
+ * @typedef {object} PairRead one pair of the last good read, as `pairReads` gives it
+ * @property {PairRaw['issues']} issues
+ * @property {PairRaw['comments']} comments
+ * @property {string} maintainer
+ * @property {OpenPull[]} pulls the open pull requests of the pair's repository
+ * @property {string} repo the pair's repository
+ *
  * @typedef {object} SpaceMilestone
  * @property {{ issues: Parameters<typeof buildIssues>[0]['issues'], comments: Parameters<typeof buildIssues>[0]['comments'], maintainer: string, pulls: OpenPull[], others?: PairRaw[] } | null} raw the last good read, the epics and the pull requests left out: the first pair's issues and comments, `others` those of the next pairs, and the pull requests of every pair's repository; turned into rows by `milestoneRows` with the agents of the moment
  * @property {string | null} at when the last good read was made
@@ -301,7 +308,7 @@ export function issueAt(space, pair, number) {
  *
  * @param {SpaceConfig} space
  * @param {SpaceMilestone | undefined} read
- * @returns {{ pair: Pair, raw: { issues: PairRaw['issues'], comments: PairRaw['comments'], maintainer: string, pulls: OpenPull[] } }[]}
+ * @returns {{ pair: Pair, raw: PairRead }[]}
  */
 export function pairReads(space, read) {
   const raw = read?.raw
@@ -318,6 +325,7 @@ export function pairReads(space, read) {
           comments: part.comments,
           maintainer: raw.maintainer,
           pulls,
+          repo: pair.repo,
         },
       },
     ]
@@ -390,20 +398,51 @@ export function buildGithub({ now, spaces, reads, previous = null }) {
   return { spaces: out }
 }
 
+/** @typedef {{ rows: import('./issues.js').IssueRow[], counts: { closed: number, total: number } }} MilestoneRows */
+
+/**
+ * The rows last built of a read's list of issues, with what else they were built from. A read gives a
+ * new list, and its rows are dropped with it: at most one entry for each list a read still holds, in
+ * memory only.
+ *
+ * @type {WeakMap<PairRaw['issues'], { comments: PairRaw['comments'], maintainer: string, now: number, waiting: string, result: MilestoneRows }>}
+ */
+const built = new WeakMap()
+
 /**
  * The rows of a space's milestone from its last good read and the agents of this moment, so a worker
- * that starts, stops or is blocked shows at once and not at the next read of GitHub.
+ * that starts, stops or is blocked shows at once and not at the next read of GitHub. "Needs you",
+ * Milestones, the strip and the cards ask for the same rows in a frame: they are built once, and a
+ * later call with the same read, the same `now` and the same issues with a blocked agent (all the rows
+ * take from the agents) gets the same object, so a caller must not change it.
  *
- * @param {Pick<SpaceMilestone, 'raw'> | undefined} read
+ * @param {{ raw: (PairRaw & { maintainer: string, repo?: string }) | null } | undefined} read
  * @param {number} now
  * @param {import('./agents.js').Agent[]} agents the agents of the space
- * @returns {{ rows: import('./issues.js').IssueRow[], counts: { closed: number, total: number } }}
+ * @returns {MilestoneRows}
  */
 export function milestoneRows(read, now, agents) {
   if (read?.raw == null) return { rows: [], counts: { closed: 0, total: 0 } }
+  const { issues, comments, maintainer } = read.raw
+  const waiting = agents
+    .filter((a) => a.needsYou)
+    .map((a) => a.issue)
+    .toSorted()
+    .join()
+  const last = built.get(issues)
+  if (
+    last?.comments === comments &&
+    last.maintainer === maintainer &&
+    last.now === now &&
+    last.waiting === waiting
+  ) {
+    return last.result
+  }
   const all = buildIssues({ ...read.raw, now, agents })
   const rows = all.filter((r) => r.waitMs !== null)
-  return { rows, counts: { closed: all.length - rows.length, total: all.length } }
+  const result = { rows, counts: { closed: all.length - rows.length, total: all.length } }
+  built.set(issues, { comments, maintainer, now, waiting, result })
+  return result
 }
 
 /**

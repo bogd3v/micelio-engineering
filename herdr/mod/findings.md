@@ -1,6 +1,6 @@
 # What a mod of the Herdr desktop app can read and do on the factory host
 
-Findings of issue #296, part of the epic #294 (the factory mod). Everything below was run on the factory host on 2026-11-23, with `herdr-app` 0.1.17 and `hc` 0.1.22, in a Linux session (KDE, Wayland), from the worker's terminal, which runs inside its own slice (`factory-worker_296.slice`). The mod was a throwaway folder `~/.config/herdr-app/mods/factory-spike/` (`mod.json` `{"place":"none"}`, opened with `herdr-app do mod.open --name factory-spike`); it is removed. A helper `out(name, value)` of the spike wrote each result as JSON to a results folder under the worker's scratchpad, outside the maintainer's configuration and outside the repository (copied to the packet's `logs/spike/`; an `exec` of `sh -c 'printf %s "$1" > "$2"'`). The app's own reference is `~/.config/herdr-app/AGENTS.md` and the type files `herdr.d.ts` and `gpui-kit.d.ts` beside it (read on 2026-11-23).
+Findings of issue #296, part of the epic #294 (the factory mod). Questions 1 to 14 were run on the factory host on 2026-11-23, with `herdr-app` 0.1.17 and `hc` 0.1.22, in a Linux session (KDE, Wayland), from the worker's terminal, which runs inside its own slice (`factory-worker_296.slice`). The mod was a throwaway folder `~/.config/herdr-app/mods/factory-spike/` (`mod.json` `{"place":"none"}`, opened with `herdr-app do mod.open --name factory-spike`); it is removed. A helper `out(name, value)` of the spike wrote each result as JSON to a results folder under the worker's scratchpad, outside the maintainer's configuration and outside the repository (copied to the packet's `logs/spike/`; an `exec` of `sh -c 'printf %s "$1" > "$2"'`). The app's own reference is `~/.config/herdr-app/AGENTS.md` and the type files `herdr.d.ts` and `gpui-kit.d.ts` beside it (read on 2026-11-23). Question 15 was run later, for issue #512; its section says when, with what and what it changed.
 
 The findings state what was run and what came out. They recommend nothing. What could not be run, and why, is written in the section that asks it.
 
@@ -455,6 +455,68 @@ hc run <cmd> --bg --name <name> --cwd <dir> --label k=v --no-notify ; hc send <t
 
 On the host that runs the desktop app there is no program named `herdr`: `herdr agent start`, `herdr agent prompt` and `herdr pane split` of `herdr/master.md` do not exist here. The programs are `herdr-app` (the window: `do pane.split`, `do tab.new`, `ls`, `status`, `commands`, `check`, `shot`) and `hc`/`herdr-core` (terminals and agents). The nearest calls on the host: starting a named agent is `hc run --bg --name <name> -- <command>` (or `herdr-app do tab.new --argv … --name …`); a prompt is `hc send <name> <text>` (`--wait`, with `--timeout` in seconds); a read is `hc read <name> --lines <n>`; a split is `herdr-app do pane.split --direction right|down [--pane <id>] [--argv …]`, whose arguments are `direction`, `pane`, `argv`, `mod` and `props` (no working directory, no `--no-focus`; `terminal.open` has `folder`). Not run: those equivalents with the runbook's flags, and a Herdr installed on another host.
 
+## 15. What interrupts a mod's script, after how long, and what the view shows
+
+Run for issue #512 on 2026-11-27 with `herdr-app` 0.1.18 and `hc` 0.1.22, from the worker's terminal, on a host with 12 threads (`nproc --all`; AMD Ryzen 5 5600X). Two throwaway mods, `~/.config/herdr-app/mods/factory-spike15/` and `factory-spike15b/` (`mod.json` `{"place":"none"}`, opened with `herdr-app do mod.open --name <mod>`, closed with `herdr-app do overlay.close`); both are removed. The first reads a command from a file under the worker's scratchpad (`{"id", "where", "ms"}`) and spins for `ms` in the place asked: in `render()` after a `cx.notify()`, in a `cx.timer.every` callback, in a `cx.spawn` task, or in such a task after an `await`. A `cx.timer.every` of 200 ms writes, with an `exec`, how far the loop got. Their sources and the whole record (`out.jsonl`) are in the packet's `logs/spike15/`.
+
+```js
+busy(ms, rec) {
+  const t0 = Date.now()
+  rec.started = true
+  let spent = 0
+  while (spent < ms) {
+    spent = Date.now() - t0
+    rec.reached = spent // an interrupt leaves the last value
+  }
+  rec.ended = true
+}
+```
+
+The load was 11 loops, each `timeout <seconds> bash -c 'while :; do :; done'`, started through `herdr/factory-slot.sh run`; they ran in the worker's slice (`cpu.max` 800000 100000, so at most 8 of the 12 threads) while the app runs in `app.slice`. The 1-minute load was 1.27 to 2.35 during the runs marked idle and 10.79 to 12.40 during those marked loaded.
+
+```text
+              place              runs  completed (longest)  interrupted (`reached`)
+idle          render              28    12 (50 ms)           16 (50 to 51 ms)
+idle          timer callback      17    11 (500 ms)           6 (500 ms)
+idle          task                17    11 (500 ms)           6 (500 to 501 ms)
+idle          task after await    17    11 (500 ms)           6 (500 to 501 ms)
+loaded        render              23     9 (50 ms)           14 (50 to 51 ms)
+loaded        timer callback       6     2 (500 ms)           4 (500 to 501 ms)
+loaded        task                 6     2 (500 ms)           4 (500 to 501 ms)
+loaded        task after await     6     2 (500 ms)           4 (500 to 501 ms)
+```
+
+The first interrupted `render` (`i100`, a run of 100 ms), the state after it, the `cx.notify()` that followed and the state after that:
+
+```text
+{"event":"result","id":"i100","where":"render","ms":100,"started":true,"reached":51,"ended":false,"after":false,"renders":4,"ticks":{"driver":32,"probe":25}}
+{"event":"state","id":"s1","renders":4,"ticks":{"driver":48,"probe":38}}
+{"event":"notify","id":"n1","renders":4}
+{"event":"state","id":"s2","renders":5,"ticks":{"driver":74,"probe":59}}
+```
+
+What the window showed (`herdr-app shot`):
+
+```text
+after an interrupted render:   a red rule and "This view could not be re-rendered; showing the last version that worked",
+                               "interrupted" and "Copy details", above the last view that was drawn; `herdr-app status`: errors []
+after the next cx.notify():    the view drawn again (render #5), the notice gone (loaded: the counter of renders went from 107 to 108; no shot)
+after interrupted callbacks and tasks:  no notice; the view as before, and the interrupted timer fired again at its next time
+```
+
+`factory-spike15b` spins for 200 ms in its first `render` only and calls `cx.notify()` every 4 s. Two runs (1-minute load 6.17 and 4.94), a shot 2 s and 11 s after opening:
+
+```text
+at 2 s:   "This view could not be rendered", "interrupted", "at render (…/mods/factory-spike15b/main.js?v=16:23:19)",
+          "Fix the script and save; the view re-renders on the next change." and "Copy details"
+at 11 s:  "first-render spike: drawn by render #3"
+herdr-app check <the same mod, an earlier copy>:  "interrupted / at render (…/factory-spike15b/main.js?v=1:22:32)", "check failed"
+```
+
+So the app interrupts a script that runs too long: a `render` at 50 ms, the shortest interrupted time measured (runs of 50 ms completed, runs asked for 52 ms or more stopped at 50 or 51 ms), and a `cx.timer.every` callback or a `cx.spawn` task at 500 ms. The times were the same idle and loaded; whether they count wall-clock or CPU time was not told apart, since the loads left threads free. Not run: the limit of `init`, of an event handler (a click, a key, `nextCommand`) and of a mod docked in a layout or in a tab, loads above 12.4, a load that takes all 12 threads, and another version of the app.
+
+Changed outside the two mods' folders: the app made the empty folders `data/factory-spike15/` and `data/factory-spike15b/` (removed) and listed both names in `seen.json`, which the app owns: the entries stay, as does that of `factory-spike15c`, a third throwaway mod of the same issue that only timed `lib/` (removed, with its data folder). `settings.json`, `shared.json`, `view.json` and the files of `layouts/` have the same `sha256sum` after as before. The overlays opened and closed in the maintainer's window, and the loads ended with their commands. Nothing was sent to a terminal.
+
 ## What the epic assumes
 
 | Assumption (epic #294)                                                                                      | Result        | Where it was shown                                                                                                                           |
@@ -481,3 +543,4 @@ On the host that runs the desktop app there is no program named `herdr`: `herdr 
 | D13: the mod's own settings survive a restart of the app                                                    | not answered  | 12: both files are written at once and survived a mod reload and reopening; the app was not restarted                                        |
 | #300, #301: a worker inside its slice runs `herdr-app check` (no window needed) and `herdr-app shot`        | holds         | 13: both from the slice; `check` with no display and an empty home; `shot` needs the window                                                  |
 | Runbook: `herdr agent start`, `herdr agent prompt` and `herdr pane split` exist on the host                 | does not hold | 14: no `herdr` program; `hc` and `herdr-app do` are the programs                                                                             |
+| #512: a mod's `render` may run for as long as its view takes to build                                       | does not hold | 15: cut at 50 ms, idle and loaded (a callback or a task at 500 ms); the next `cx.notify()` draws it again                                    |

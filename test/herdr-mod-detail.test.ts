@@ -11,6 +11,8 @@ import {
   sumTokens,
 } from '../herdr/mod/factory/lib/detail.js'
 import { modelOf, parseAgents } from '../herdr/mod/factory/lib/agents.js'
+import { buildNeeds } from '../herdr/mod/factory/lib/needs.js'
+import { buildGithub } from '../herdr/mod/factory/lib/panel.js'
 import { summaryOf } from '../herdr/mod/factory/lib/gates.js'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
@@ -456,5 +458,54 @@ describe('an issue of another repository of the space', () => {
     })
     expect(await a.readCommit(5, '/x', 'tw')).toBe('feat(two): the issue of the other repository')
     expect(await a.readCommit(5, '/x')).toBeNull()
+  })
+})
+
+describe('what is kept of the Progress of an issue', () => {
+  it('the Progress of an issue of the same number and updated_at is read once, and again after its updated_at changes', () => {
+    const spaces = [{ name: 'kept', repo: 'bogd3v/kept', milestone: 1 }]
+    const now = Date.parse('2026-11-24T16:00:00Z')
+    let reads = 0
+    /** The worktree of the sign-off of a new read whose issue says this one. */
+    const worktreeOf = (updatedAt: string, worktree: string) => {
+      const github = buildGithub({
+        now,
+        spaces,
+        reads: {
+          kept: {
+            at: '2026-11-24T16:00:00Z',
+            maintainer: 'ale9420',
+            issues: [
+              {
+                number: 5,
+                title: 'a title',
+                state: 'open',
+                updated_at: updatedAt,
+                get body() {
+                  reads += 1
+                  return `### Progress\n\n- worktree \`${worktree}\`\n`
+                },
+              },
+            ],
+            comments: {
+              5: [
+                comment('**Gate 1 (master): pass**\n\nlane: normal', 1),
+                comment('**Gate 2, round 1 (worker)** · pass', 2),
+                comment('**Gate 3, round 1 (reviewer)** · 0 Blocking', 3),
+                comment('**Gate 4, round 1 (verifier)** · 0 mismatches', 4),
+              ],
+            },
+          },
+        },
+      })
+      const { cards } = buildNeeds({ now, config: { spaces }, github, agents: [] })
+      return cards.find((c) => c.kind === 'signoff')?.worktree
+    }
+    expect(worktreeOf('a', '~/Git/wt-5')).toBe('~/Git/wt-5')
+    expect(worktreeOf('a', '~/Git/wt-5')).toBe('~/Git/wt-5')
+    expect(reads).toBe(1)
+    expect(worktreeOf('b', '~/Git/wt-5b')).toBe('~/Git/wt-5b')
+    expect(worktreeOf('b', '~/Git/wt-5b')).toBe('~/Git/wt-5b')
+    expect(reads).toBe(2)
   })
 })
