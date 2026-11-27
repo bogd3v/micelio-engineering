@@ -64,6 +64,12 @@ lane: full
 | `depends-on`   | Every issue listed after "Depends on" (up to the end of that sentence) or in a "Depends on" section, is closed (the `state` of `gh api repos/<owner>/<repo>/issues/<n>`; a merged pull request does not count, one closed without merging does). A bare `#n` belongs to the issue's repository |
 | `lane`         | Exactly one item of "Acceptance criteria" starts "Verified by the maintainer", and it reads "by reading the diff" in `express` and `normal`, or "on the stack" (or "on the run `AGENTS.md` names") in `full`. The report names the lane and the sentence it expected                           |
 
+The `lane` rule checks that sentence against the lane `lint-lane` prints, so a lane raised with a
+`Lane raised: <normal|full> (<comment URL>)` line ([`lint-lane`](#lint-lane)) asks for the sentence
+of the raised lane. The rule also fails on more than one such line, on a line with no lane or no
+comment URL, and on a line whose lane is not above the lane the title and paths set. `lint-issue`
+does not read the comment.
+
 Headings are matched at any level, ignoring case, emphasis and a trailing colon, by their name or
 a name that starts with it as a whole word (`## Why this matters`, `## Out of scope (see #40)`).
 A section runs to the next heading of the same or a higher level, so a part may have
@@ -703,6 +709,22 @@ express: docs/**/*.md, README.md, .github/project-fields.json
 A glob matches the whole path, written with `/`: `*` is any run of characters but `/`, `**` is any
 run including `/` (`**/` also matches nothing), `?` is one character but `/`, and a glob that ends
 in `/` is a folder and matches everything under it.
+
+**A raised lane.** The maintainer may raise a lane (`L.3`), and the issue says so with one line of
+its body:
+
+```text
+Lane raised: full (https://github.com/<owner>/<repo>/issues/<n>#issuecomment-<id>)
+```
+
+The line starts with `Lane raised:`, after an optional list bullet, then `normal` or `full`, then
+the URL of the comment that records the decision, bare or in parentheses; HTML comments, fenced
+blocks and inline code are not read. The comment is not read either. With one such line, the issue
+form prints the higher of that lane and the one the title and paths set, with the reason
+`raised by the maintainer: <lane> (<URL>)`. A line that is not above that lane changes nothing,
+and its reason says `the raise to <lane> is not above <lane>: not applied`. A line with no lane or
+URL, and two lines or more, change nothing. `--diff` reads no issue, so the line does not change
+it.
 
 There is no option to force a lane: nobody lowers one with this command. Exit codes: 0 when the lane
 is printed or the diff fits, 1 when the diff does not fit, 2 on a usage error or a file or `gh` that

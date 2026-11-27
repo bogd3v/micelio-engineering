@@ -2,7 +2,7 @@ import { errorLine } from './errors.js'
 import { OWNER_REPO, nameMatches, proseOnly, sections, stripComments } from './issue.js'
 import type { Issue, IssueRef, Section } from './issue.js'
 import { issueLane } from './lane.js'
-import type { Lane, LaneGlobs } from './lane.js'
+import type { IssueLaneResult, LaneGlobs } from './lane.js'
 
 /** The identifiers of the rules, in the order the report lists them. */
 export const RULE_IDS = [
@@ -86,7 +86,7 @@ export async function lintIssue(
     outOfScope(prose, parts),
     delivery(parts),
     await dependsOn(issue.repo, prose, parts, isClosed),
-    laneCriterion(parts, issueLane(issue.title, issue.body, globs).lane),
+    laneCriterion(parts, issueLane(issue.title, issue.body, globs)),
   ]
 }
 
@@ -200,8 +200,9 @@ const STACK = /^verified by the maintainer\s+on (?:the stack|the run `?AGENTS\.m
  * The fixed last criterion of the issue's lane: exactly one item of "Acceptance criteria" starts
  * "Verified by the maintainer", and it reads "by reading the diff" in `express` and `normal`, or
  * "on the stack" (or "on the run `AGENTS.md` names") in `full`.
+ * The rule also fails on what `issueLane` finds wrong with the `Lane raised:` lines.
  */
-function laneCriterion(parts: Section[], lane: Lane): RuleResult {
+function laneCriterion(parts: Section[], { lane, raiseProblem }: IssueLaneResult): RuleResult {
   const part = section(parts, 'acceptance criteria')
   const items = (part?.content ?? '')
     .split('\n')
@@ -219,14 +220,13 @@ function laneCriterion(parts: Section[], lane: Lane): RuleResult {
       ? `"${MAINTAINER} on the stack" (or "on the run \`AGENTS.md\` names")`
       : `"${MAINTAINER} by reading the diff"`
   const where = `the lane is ${lane}`
+  let problem = ''
   if (items.length !== 1) {
-    return result(
-      'lane',
-      `${where} and the acceptance criteria have ${items.length} items that start "${MAINTAINER}"; exactly one is needed, and it reads ${expected}`
-    )
+    problem = `${where} and the acceptance criteria have ${items.length} items that start "${MAINTAINER}"; exactly one is needed, and it reads ${expected}`
+  } else if (!(lane === 'full' ? STACK : READING).test(items[0] ?? '')) {
+    problem = `${where} and the maintainer criterion does not read ${expected}`
   }
-  const ok = (lane === 'full' ? STACK : READING).test(items[0] ?? '')
-  return result('lane', ok ? '' : `${where} and the maintainer criterion does not read ${expected}`)
+  return result('lane', [raiseProblem, problem].filter((text) => text !== '').join('; '))
 }
 
 /** The issues listed right after "Depends on", up to the end of that sentence, or in its section. */

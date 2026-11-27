@@ -8,7 +8,7 @@ import { issueFromGh, issueFromMarkdown, sections } from '../src/issue.js'
 import type { Issue, IssueRef } from '../src/issue.js'
 import { RULE_IDS, lintIssue } from '../src/rules.js'
 import type { RuleId } from '../src/rules.js'
-import { parseLanes } from '../src/lane.js'
+import { issueLane, parseLanes } from '../src/lane.js'
 import { run } from '../src/run.js'
 import type { RunDeps } from '../src/run.js'
 
@@ -634,6 +634,76 @@ describe('the lane rule', () => {
     const two = await laneResult(await laneIssue([READING, READING]))
     expect(two.ok).toBe(false)
     expect(two.detail).toContain('have 2 items')
+  })
+
+  /** An issue of `test/fixtures/lane/`, read against the globs of its `agents.md`. */
+  async function raised(name: string): Promise<{ ok: boolean; detail: string }> {
+    const issue = issueFromMarkdown(await fixture(`lane/${name}`), 'example/site')
+    const results = await lintIssue(
+      issue,
+      async () => true,
+      parseLanes(await fixture('lane/agents.md'))
+    )
+    const found = results.find((item) => item.rule === 'lane')
+    if (!found) throw new Error('no lane result')
+    return { ok: found.ok, detail: found.detail }
+  }
+
+  const FULL_EXPECTED =
+    'the lane is full and the maintainer criterion does not read "Verified by the maintainer on the stack" (or "on the run `AGENTS.md` names")'
+
+  it('the lane rule asks for the full criterion of a lane raised to full', async () => {
+    expect(await raised('issue-raised-full.md')).toEqual({ ok: true, detail: '' })
+    const text = (await fixture('lane/issue-raised-full.md')).replace(
+      'on the stack',
+      'by reading the diff'
+    )
+    const results = await lintIssue(
+      issueFromMarkdown(text, 'example/site'),
+      async () => true,
+      parseLanes(await fixture('lane/agents.md'))
+    )
+    expect(results.find((item) => item.rule === 'lane')?.detail).toBe(FULL_EXPECTED)
+  })
+
+  it('the lane rule fails a Lane raised: line that does not raise, has no comment URL, or is not the only one', async () => {
+    // Each fixture has the criterion of the lane it gets, so only the line can fail it.
+    expect(await raised('issue-raised-equal.md')).toEqual({
+      ok: false,
+      detail: 'the raise to normal is not above normal: not applied',
+    })
+    expect(await raised('issue-raised-below.md')).toEqual({
+      ok: false,
+      detail: 'the raise to normal is not above full: not applied',
+    })
+    const unusable =
+      'the `Lane raised:` line does not give a lane (`normal` or `full`) and then the URL of an issue comment'
+    for (const name of [
+      'issue-raised-no-url.md',
+      'issue-raised-no-lane.md',
+      'issue-raised-long-url.md',
+    ]) {
+      expect(await raised(name), name).toEqual({ ok: false, detail: unusable })
+    }
+    expect(await raised('issue-raised-twice.md')).toEqual({
+      ok: false,
+      detail: 'the body has 2 `Lane raised:` lines; at most one is allowed',
+    })
+  })
+
+  it('an issue with no Lane raised: line gets the lane and the lane rule result it got before', async () => {
+    const issue = await laneIssue([STACK])
+    expect(issueLane(issue.title, issue.body, globs)).toEqual({
+      lane: 'express',
+      reasons: ['`docs/widgets.md` matches express: `docs/**/*.md`'],
+      raiseProblem: '',
+    })
+    expect(await laneResult(issue)).toMatchObject({
+      ok: false,
+      detail:
+        'the lane is express and the maintainer criterion does not read "Verified by the maintainer by reading the diff"',
+    })
+    expect(await raised('issue-raised-quoted.md')).toEqual({ ok: true, detail: '' })
   })
 
   it('the report starts with the lane', async () => {

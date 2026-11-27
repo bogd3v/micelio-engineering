@@ -265,6 +265,48 @@ describe('lint-lane', () => {
     expect(missing.stderr).toContain('error:')
   })
 
+  const RAISED = 'https://github.com/example/site/issues/7#issuecomment-1234567'
+
+  it('a Lane raised: line sets the lane above the one the paths set and prints the comment as its reason', async () => {
+    const expected = `lane: full\n- \`docs/guide.md\` matches express: \`docs/**/*.md\`\n- raised by the maintainer: full (${RAISED})\n`
+    expect((await lane('issue-raised-full.md')).stdout).toBe(expected)
+    const target = await runLintLane(
+      ['lint-lane', 'example/site#7'],
+      deps('agents.md', [], { 'example/site#7': 'issue-raised-full.md' })
+    )
+    expect(target).toEqual({ code: 0, stdout: expected, stderr: '' })
+    for (const file of ['issue-raised-bare-url.md', 'issue-raised-after-backtick.md']) {
+      const result = await lane(file)
+      expect(result.stdout, file).toContain('lane: full\n')
+      expect(result.stdout, file).toContain(`- raised by the maintainer: full (${RAISED})\n`)
+    }
+  })
+
+  it('a Lane raised: line that is not above the lane of the paths changes nothing and says so', async () => {
+    const equal = await lane('issue-raised-equal.md')
+    expect(equal.stdout).toBe(
+      'lane: normal\n- `scripts/run.sh` matches no glob\n- the raise to normal is not above normal: not applied\n'
+    )
+    const below = await lane('issue-raised-below.md')
+    expect(below.stdout).toBe(
+      'lane: full\n- `api/routes.ts` matches contract: `api/**`\n- the raise to normal is not above full: not applied\n'
+    )
+  })
+
+  it('reads no Lane raised: line from code, a comment or the middle of a line, nor one it cannot use', async () => {
+    for (const file of [
+      'issue-raised-quoted.md',
+      'issue-raised-no-url.md',
+      'issue-raised-no-lane.md',
+      'issue-raised-twice.md',
+    ]) {
+      const result = await lane(file)
+      expect(result.stdout, file).toBe(
+        'lane: express\n- `docs/guide.md` matches express: `docs/**/*.md`\n'
+      )
+    }
+  })
+
   it('reads the block in both forms and ignores other sections', () => {
     expect(parseLanes(readFileSync('agents.md'))).toEqual({
       stack: ['compose.yaml', 'images/**', '**/Dockerfile'],

@@ -4,7 +4,7 @@ import { dirname, posix, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { errorLine } from './errors.js'
 import { isRecord } from './narrow.js'
-import { issueFromGh, issueFromMarkdown, parseTarget, proseOnly } from './issue.js'
+import { OWNER_REPO, issueFromGh, issueFromMarkdown, parseTarget, proseOnly } from './issue.js'
 import type { Issue, IssueRef } from './issue.js'
 
 /** The lanes of ADR-0003, from the lightest to the heaviest. */
@@ -35,6 +35,12 @@ export interface LaneResult {
   reasons: string[]
 }
 
+/** The lane of an issue, and what is wrong with its `Lane raised:` lines. */
+export interface IssueLaneResult extends LaneResult {
+  /** Empty when the body has no such line, or one that raises the lane. */
+  raiseProblem: string
+}
+
 /**
  * The paths that are normative and never `express`, whatever `express:` says. A name that ends in
  * `/` is a folder.
@@ -51,6 +57,19 @@ export const NORMATIVE = [
 ] as const
 
 const rank = (lane: Lane): number => LANES.indexOf(lane)
+
+/** A line that raises, or tries to raise, the lane of an issue. */
+const RAISE_LINE = /^\s*(?:[-*+]\s+)?Lane raised:(.*)$/
+
+const COMMENT_URL = `https://github\\.com/${OWNER_REPO}/issues/\\d+#issuecomment-\\d+`
+
+/** What follows `Lane raised:`: a lane, then the comment's URL, bare or in parentheses. */
+const RAISE = new RegExp(
+  `^\\s*(normal|full)\\s+(?:\\((${COMMENT_URL})\\)|(${COMMENT_URL})(?![\\w/-]))`
+)
+
+/** Where an inline code span cannot go on: a blank line, a list item, a heading, a quote, a table. */
+const BLOCK_BREAK = /\n(?=[ \t]*(?:\n|[-*+]\s|\d+[.)]\s|#{1,6}\s|>|\|))/
 
 /**
  * Reads the `## Lanes` block of an `AGENTS.md`: the lines `stack:`, `contract:` and `express:`, each
@@ -150,8 +169,48 @@ function pathLane(path: string, globs: LaneGlobs | null): LaneResult {
   return { lane: 'normal', reasons: [`\`${path}\` matches no glob`] }
 }
 
-/** The lane of an issue: its title and the paths it names, against the globs. */
-export function issueLane(title: string, body: string, globs: LaneGlobs | null): LaneResult {
+/** A block of Markdown with each character of its inline code spans, but line breaks, as a backtick. */
+function maskCode(block: string): string {
+  const runs = [...block.matchAll(/`+/g)]
+  // For each run, the next one of the same length: the one that closes a span it opens.
+  const closer: (RegExpExecArray | undefined)[] = []
+  const seen = new Map<number, RegExpExecArray>()
+  for (let i = runs.length - 1; i >= 0; i--) {
+    const run = runs[i]
+    if (run === undefined) continue
+    closer[i] = seen.get(run[0].length)
+    seen.set(run[0].length, run)
+  }
+  let masked = ''
+  let done = 0
+  runs.forEach((run, i) => {
+    const close = closer[i]
+    if (run.index < done || close === undefined) return
+    const end = close.index + close[0].length
+    masked += block.slice(done, run.index) + block.slice(run.index, end).replace(/[^\n]/g, '`')
+    done = end
+  })
+  return masked + block.slice(done)
+}
+
+/**
+ * The `Lane raised:` lines of a body, outside HTML comments, fenced blocks and inline code: what
+ * each one says, or `null` when it has no lane followed by a comment URL.
+ */
+function raiseLines(body: string): ({ lane: Lane; url: string } | null)[] {
+  const text = proseOnly(body).split(BLOCK_BREAK).map(maskCode).join('\n')
+  return text.split('\n').flatMap((line) => {
+    const rest = RAISE_LINE.exec(line)?.[1]
+    if (rest === undefined) return []
+    const match = RAISE.exec(rest)
+    const lane = match?.[1]
+    const url = match?.[2] ?? match?.[3]
+    return [lane !== undefined && isLane(lane) && url !== undefined ? { lane, url } : null]
+  })
+}
+
+/** The lane the title and the paths an issue names set, against the globs. */
+function titleAndPathsLane(title: string, body: string, globs: LaneGlobs | null): LaneResult {
   const reasons: string[] = []
   if (/^\s*\w+(?:\([^)]*\))?!:/.test(title)) reasons.push('the title has `!`')
   const paths = issuePaths(body).map((path) => pathLane(path, globs))
@@ -165,6 +224,41 @@ export function issueLane(title: string, body: string, globs: LaneGlobs | null):
   else if (paths.length === 0) reasons.push('the issue names no path')
   else for (const path of paths) reasons.push(...path.reasons)
   return { lane, reasons }
+}
+
+/**
+ * The lane of an issue: its title and the paths it names, against the globs, or the higher lane its
+ * one `Lane raised:` line names.
+ *
+ * @remarks
+ * The line reads `Lane raised: <normal|full> (<URL>)`, with the URL of the issue comment that records
+ * the maintainer's decision; the comment is not read. A line that does not raise the lane, one
+ * without a lane and a URL, and two lines or more leave the lane as the title and paths set it.
+ */
+export function issueLane(title: string, body: string, globs: LaneGlobs | null): IssueLaneResult {
+  const set = titleAndPathsLane(title, body, globs)
+  const lines = raiseLines(body)
+  const [raise = null] = lines
+  if (lines.length === 0) return { ...set, raiseProblem: '' }
+  if (lines.length > 1) {
+    return {
+      ...set,
+      raiseProblem: `the body has ${lines.length} \`Lane raised:\` lines; at most one is allowed`,
+    }
+  }
+  if (raise === null) {
+    return {
+      ...set,
+      raiseProblem:
+        'the `Lane raised:` line does not give a lane (`normal` or `full`) and then the URL of an issue comment',
+    }
+  }
+  if (rank(raise.lane) <= rank(set.lane)) {
+    const reason = `the raise to ${raise.lane} is not above ${set.lane}: not applied`
+    return { lane: set.lane, reasons: [...set.reasons, reason], raiseProblem: reason }
+  }
+  const reason = `raised by the maintainer: ${raise.lane} (${raise.url})`
+  return { lane: raise.lane, reasons: [...set.reasons, reason], raiseProblem: '' }
 }
 
 /**
@@ -495,6 +589,7 @@ async function readGlobs(deps: LintLaneDeps): Promise<LaneGlobs | null> {
  * `factory-tools lint-lane`: sets an issue's lane, or checks a diff against a lane. The target
  * form reads the `## Lanes` block of the issue's repository with `gh api`; `--file` and `--diff`
  * read the `AGENTS.md` of the working directory. It has no option to force a lane.
+ * A `Lane raised:` line of the issue raises one (`issueLane`), and nothing lowers one.
  *
  * @param argv - The arguments after the program name, starting with `lint-lane`.
  */

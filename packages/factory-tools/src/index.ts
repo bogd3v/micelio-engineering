@@ -56,7 +56,14 @@ export type { Source } from './source.js'
 export { SECTION, checkCommandOf, createDeps, lintDraft, runLintDraft } from './lint-draft.js'
 export type { DraftContext, DraftProblem, LintDraftDeps, LintDraftResult } from './lint-draft.js'
 export { LANES, NORMATIVE, issueLane, diffLane, parseLanes, runLintLane } from './lane.js'
-export type { Lane, LaneGlobs, LaneResult, LintLaneDeps, LintLaneResult } from './lane.js'
+export type {
+  IssueLaneResult,
+  Lane,
+  LaneGlobs,
+  LaneResult,
+  LintLaneDeps,
+  LintLaneResult,
+} from './lane.js'
 export {
   TESTS_SECTION,
   agentsCommands,
