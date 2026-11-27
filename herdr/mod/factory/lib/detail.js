@@ -5,7 +5,7 @@
 
 import { issueOfName, modelOf } from './agents.js'
 import { catFile } from './cat.js'
-import { parseGates } from './gates.js'
+import { fromBody, parseGates } from './gates.js'
 import { parseDecision } from './decision.js'
 import { catState, formatAge } from './panel.js'
 
@@ -92,7 +92,7 @@ export function formatTokens(n) {
  * The `tokens |` lines of an issue's comments, summed by role: input plus output, as `factory-tools
  * metrics` does. Only the maintainer's login counts.
  *
- * @param {{ user?: { login?: string }, body?: string }[]} comments
+ * @param {import('./gates.js').Comment[]} comments
  * @param {string} maintainer
  * @param {number} issue
  * @returns {Map<string, number>}
@@ -101,18 +101,37 @@ export function sumTokens(comments, maintainer, issue) {
   /** @type {Map<string, number>} */
   const sums = new Map()
   for (const comment of comments) {
-    if (comment.user?.login !== maintainer || typeof comment.body !== 'string') continue
-    for (const line of comment.body.split(/\r?\n/)) {
-      if (!line.startsWith('tokens | ')) continue
-      const f = line.split(' | ').map((part) => part.trim())
-      if (f.length !== 8) continue
-      const [, , number = '', role = '', , input = '', output = ''] = f
-      if (!/^#?\d+$/.test(number) || Number(number.replace('#', '')) !== issue) continue
-      if (role === '' || !/^\d{1,15}$/.test(input) || !/^\d{1,15}$/.test(output)) continue
-      sums.set(role, (sums.get(role) ?? 0) + Number(input) + Number(output))
+    if (comment.user?.login !== maintainer) continue
+    for (const line of fromBody(comment, tokensOf) ?? []) {
+      if (line.issue !== issue) continue
+      sums.set(line.role, (sums.get(line.role) ?? 0) + line.tokens)
     }
   }
   return sums
+}
+
+/**
+ * The `tokens |` lines of a comment that name an issue, a role and two counts.
+ *
+ * @param {string} body
+ * @returns {{ issue: number, role: string, tokens: number }[]}
+ */
+function tokensOf(body) {
+  const found = []
+  for (const line of body.split(/\r?\n/)) {
+    if (!line.startsWith('tokens | ')) continue
+    const f = line.split(' | ').map((part) => part.trim())
+    if (f.length !== 8) continue
+    const [, , number = '', role = '', , input = '', output = ''] = f
+    if (!/^#?\d+$/.test(number)) continue
+    if (role === '' || !/^\d{1,15}$/.test(input) || !/^\d{1,15}$/.test(output)) continue
+    found.push({
+      issue: Number(number.replace('#', '')),
+      role,
+      tokens: Number(input) + Number(output),
+    })
+  }
+  return found
 }
 
 /** @param {string} word @returns {string} */
@@ -137,7 +156,7 @@ function stateOf(status) {
  *
  * @param {object} input
  * @param {{ number: number, title?: string, body?: string | null, state?: string }} input.issue
- * @param {{ user?: { login?: string }, body?: string, created_at?: string, id?: number }[]} input.comments
+ * @param {import('./gates.js').Comment[]} input.comments
  * @param {string} input.maintainer
  * @param {{ repo: string, letter: string, colour: string, name?: string, tag?: string, ref?: string, tags?: string[] }} input.space the repository of the issue's pair (the header names it), its tag, the issue's reference (`#N` with none) and the tags of the spaces' pairs
  * @param {import('./agents.js').Agent[]} input.agents the agents of the space: those of the issue are the ones with its pair's tag

@@ -7,6 +7,13 @@
 // gate's last comment posted after the last comment of every earlier gate (G3 and G4 run together, so
 // G4 counts from after gates 1 and 2), and G5 is passed only by a pull request opened after the last
 // gate comment.
+//
+// What a comment says is worked out once and kept, with its body, by the comment's `id` and
+// `updated_at` (`fromBody`): a render parses the same comments many times, and each 10 minutes a read
+// gives new objects of the same comments. A comment with no `id` or no `updated_at` is worked out at
+// each call. Bound of what is kept: one version of each comment asked for during the current and the
+// previous run of `KEPT_CALLS` calls of `parseGates`; a comment that no read returns any more is
+// dropped after at most twice that many calls. It is memory only.
 
 import { toMs } from './time.js'
 
@@ -26,9 +33,21 @@ const LANES = ['express', 'normal', 'full']
 const OMITTED = { express: [3, 4], normal: [], full: [] }
 
 /**
+ * The calls of `parseGates` that make one run of the kept parse: what was not asked for during a
+ * whole run is dropped. A render calls it a few times for each issue read, well under one run.
+ */
+export const KEPT_CALLS = 2000
+
+/**
  * A comment as REST returns it, the fields the model reads.
  *
- * @typedef {{ user?: { login?: string }, body?: string, created_at?: string, id?: number }} Comment
+ * @typedef {{ user?: { login?: string }, body?: string, created_at?: string, id?: number, updated_at?: string }} Comment
+ */
+
+/**
+ * A comment's body and what was worked out from it, by the function that did.
+ *
+ * @typedef {{ updatedAt: string | undefined, body: string, said: Map<(body: string) => unknown, unknown> }} Kept
  */
 
 /**
@@ -43,6 +62,15 @@ const OMITTED = { express: [3, 4], normal: [], full: [] }
  */
 
 /**
+ * @typedef {object} Said what one comment says, whoever reads it
+ * @property {string} line its first line without markup
+ * @property {number | null} gate the digit of a first line that starts `Gate N`
+ * @property {{ lane: Gates['lane'], calibration: boolean } | null} lane the lane line of a Gate 1 comment
+ * @property {boolean} opened a `Progress updated` comment with `pull request #N opened`
+ * @property {Omit<Round, 'at'> | null} round the round of a Gate 1 to 4 comment
+ */
+
+/**
  * @typedef {object} Gates
  * @property {'express' | 'normal' | 'full'} lane `full` when no Gate 1 comment has a lane line
  * @property {boolean} calibration the lane line reads `(calibration: full)`
@@ -54,14 +82,54 @@ const OMITTED = { express: [3, 4], normal: [], full: [] }
  * @property {number | null} since milliseconds since the epoch of the last gate comment
  */
 
+/** What was asked for in this run, and in the run before it, by comment id. */
+let kept = /** @type {Map<number, Kept>} */ (new Map())
+let before = /** @type {Map<number, Kept>} */ (new Map())
+let calls = 0
+
 /**
- * The first line of a comment without its markup.
+ * What `work` says of a comment's body, `null` when the comment has no body. For a comment with an
+ * `id` and an `updated_at` the body is read and `work` run once: a later call of the same two, from
+ * another object too, gives the same value without reading the body, so a caller must not change it.
+ *
+ * @template T
+ * @param {{ id?: number | undefined, updated_at?: string | undefined, body?: string | null | undefined }} comment
+ * @param {(body: string) => T} work a function declared once, not made at each call: the value is kept by it
+ * @returns {T | null}
+ */
+export function fromBody(comment, work) {
+  const { id, updated_at: updatedAt } = comment
+  const keyed = typeof id === 'number' && typeof updatedAt === 'string'
+  let entry = keyed ? (kept.get(id) ?? before.get(id)) : undefined
+  if (entry === undefined || entry.updatedAt !== updatedAt) {
+    const body = comment.body
+    if (typeof body !== 'string') return null
+    entry = { updatedAt, body, said: new Map() }
+  }
+  if (keyed) kept.set(id, entry)
+  if (!entry.said.has(work)) entry.said.set(work, work(entry.body))
+  return /** @type {T} */ (entry.said.get(work))
+}
+
+/** Counts a call of `parseGates`, and starts a new run after `KEPT_CALLS` of them. */
+function countCall() {
+  calls += 1
+  if (calls < KEPT_CALLS) return
+  before = kept
+  kept = new Map()
+  calls = 0
+}
+
+/**
+ * The first line of a comment without its markup. Nothing after the first line break is read.
  *
  * @param {string} body
  * @returns {string}
  */
 function firstLine(body) {
-  return (body.split(/\r?\n/, 1)[0] ?? '')
+  const end = body.indexOf('\n')
+  const line = end === -1 ? body : body.slice(0, body[end - 1] === '\r' ? end - 1 : end)
+  return line
     .replaceAll(/<[^>]*>/g, '')
     .replaceAll('*', '')
     .replace(/^\s*#+\s*/, '')
@@ -88,10 +156,10 @@ export function summaryOf(line) {
  * The lane of a Gate 1 comment: the last `lane: <lane>` line, with or without `(calibration: full)`.
  *
  * @param {string} body
+ * @param {string} first its first line without markup
  * @returns {{ lane: 'express' | 'normal' | 'full', calibration: boolean } | null}
  */
-function laneOf(body) {
-  if (!/^gate 1\b/i.test(firstLine(body))) return null
+function laneOf(body, first) {
   /** @type {{ lane: 'express' | 'normal' | 'full', calibration: boolean } | null} */
   let found = null
   /** @param {string | undefined} word @param {string | undefined} mark */
@@ -100,7 +168,7 @@ function laneOf(body) {
     if (lane !== undefined) found = { lane, calibration: mark !== undefined && lane !== 'full' }
   }
   // The first line may carry it (`**Gate 1 (master)** · pass · lane: normal`).
-  const inline = /\blane:\s*`?([a-z]+)`?(\s*\(calibration:\s*full\))?/i.exec(firstLine(body))
+  const inline = /\blane:\s*`?([a-z]+)`?(\s*\(calibration:\s*full\))?/i.exec(first)
   take(inline?.[1], inline?.[2])
   // A later line of its own wins; a fenced block is a tool's output (`lint-lane` prints `lane:`), not the master's.
   let fenced = false
@@ -143,6 +211,36 @@ function outcomeOf(gate, line) {
 }
 
 /**
+ * What a comment says to the gates and to the other readers of its first line. The body is read past
+ * its first line only for a Gate 1 comment (its lane line) and a `Progress updated` comment (its
+ * `pull request #N opened`).
+ *
+ * @param {string} body
+ * @returns {Said}
+ */
+export function saidOf(body) {
+  const line = firstLine(body)
+  const number = /^gate (\d)\b/i.exec(line)
+  const gate = number === null ? null : Number(number[1])
+  const round = /round (\d+)/i.exec(line)
+  return {
+    line,
+    gate,
+    lane: gate === 1 ? laneOf(body, line) : null,
+    opened: /^progress updated/i.test(line) && /pull request #\d+ opened/i.test(body),
+    round:
+      gate === null || gate < 1 || gate > 4
+        ? null
+        : {
+            gate,
+            round: round === null ? null : Number(round[1]),
+            summary: summaryOf(line),
+            ...outcomeOf(gate, line),
+          },
+  }
+}
+
+/**
  * Reads an issue's comments. The mark of each of G2 to G4 is that of the gate's last comment, a
  * `sent back` one included (it runs), among those posted after the last comment of every earlier
  * gate, except that G4 counts from after the last comment of gates 1 and 2, not of gate 3; a gate
@@ -157,8 +255,9 @@ function outcomeOf(gate, line) {
  * @returns {Gates}
  */
 export function parseGates({ comments, maintainer, closed = false, needsYou = false }) {
+  countCall()
   const own = comments
-    .filter((c) => c.user?.login === maintainer && typeof c.body === 'string')
+    .filter((c) => c.user?.login === maintainer)
     .toSorted(
       (a, b) => (toMs(a.created_at) ?? 0) - (toMs(b.created_at) ?? 0) || (a.id ?? 0) - (b.id ?? 0)
     )
@@ -170,27 +269,16 @@ export function parseGates({ comments, maintainer, closed = false, needsYou = fa
   /** @type {Round[]} */
   const rounds = []
   for (const comment of own) {
-    const body = comment.body ?? ''
-    const at = toMs(comment.created_at) ?? 0
-    const line = firstLine(body)
-    const laneLine = laneOf(body)
-    if (laneLine !== null) {
-      lane = laneLine.lane
-      calibration = laneLine.calibration
+    const said = fromBody(comment, saidOf)
+    if (said === null) continue
+    if (said.lane !== null) {
+      lane = said.lane.lane
+      calibration = said.lane.calibration
     }
-    if (/pull request #\d+ opened/i.test(body) && /^progress updated/i.test(line)) opened = true
-    const gate = /^gate (\d)\b/i.exec(line)
-    if (gate === null) continue
-    const n = Number(gate[1])
-    if (n < 1 || n > 4) continue
-    const round = /round (\d+)/i.exec(line)
-    rounds.push({
-      gate: n,
-      round: round === null ? null : Number(round[1]),
-      at,
-      summary: summaryOf(line),
-      ...outcomeOf(n, line),
-    })
+    if (said.opened) opened = true
+    if (said.round === null) continue
+    const at = toMs(comment.created_at) ?? 0
+    rounds.push({ ...said.round, at })
     since = at
     opened = false
   }

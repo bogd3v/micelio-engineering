@@ -7,7 +7,7 @@
 
 import { armedNote, retryLabel } from './actions.js'
 import { catFile } from './cat.js'
-import { parseGates } from './gates.js'
+import { fromBody, parseGates, saidOf } from './gates.js'
 import { parseDecision } from './decision.js'
 import { parseProgress } from './detail.js'
 import { issueAt, issueKey, milestoneRows, onPair, pairReads, refOf } from './panel.js'
@@ -118,20 +118,6 @@ export const NO_WORKTREE_NOTE = "Open diff needs the worktree in the issue's Pro
  * @property {Message[]} [messages] `batch`
  */
 
-/**
- * The first line of a comment without its markup.
- *
- * @param {string} body
- * @returns {string}
- */
-function firstLine(body) {
-  return (body.split(/\r?\n/, 1)[0] ?? '')
-    .replaceAll(/<[^>]*>/g, '')
-    .replaceAll('*', '')
-    .replace(/^\s*#+\s*/, '')
-    .trim()
-}
-
 /** @param {string} text @returns {string} */
 const oneLine = (text) => text.replaceAll(/\s+/g, ' ').trim()
 
@@ -139,18 +125,27 @@ const oneLine = (text) => text.replaceAll(/\s+/g, ' ').trim()
  * Why the master chose the lane: the lines of its last Gate 1 comment that are not the headline or the
  * `lane:` line.
  *
- * @param {{ user?: { login?: string }, body?: string, created_at?: string, id?: number }[]} comments
+ * @param {import('./gates.js').Comment[]} comments
  * @param {string} maintainer
  * @returns {string}
  */
 function laneWhy(comments, maintainer) {
   const gate1 = comments
-    .filter((c) => c.user?.login === maintainer && /^gate 1\b/i.test(firstLine(c.body ?? '')))
+    .filter((c) => c.user?.login === maintainer && fromBody(c, saidOf)?.gate === 1)
     .toSorted((a, b) => (toMs(a.created_at) ?? 0) - (toMs(b.created_at) ?? 0))
     .at(-1)
-  if (gate1 === undefined) return ''
+  return gate1 === undefined ? '' : (fromBody(gate1, whyOf) ?? '')
+}
+
+/**
+ * The lines of a Gate 1 comment under its headline, but for the `lane:` line, as one line.
+ *
+ * @param {string} body
+ * @returns {string}
+ */
+function whyOf(body) {
   return oneLine(
-    (gate1.body ?? '')
+    body
       .split(/\r?\n/)
       .slice(1)
       .filter((l) => l.trim() !== '' && !/^\s*(?:[-*]\s+)?lane:/i.test(l))
@@ -163,34 +158,48 @@ function laneWhy(comments, maintainer) {
  * (`herdr/master.md`, "A held check"; `owner/repo#N` for an issue of another repository of the space),
  * unless a later gate comment of the same gate reports the rerun.
  *
- * @param {{ user?: { login?: string }, body?: string, created_at?: string, id?: number }[]} comments
+ * @param {import('./gates.js').Comment[]} comments
  * @param {string} maintainer
  * @param {number} number the issue's number: a line that names another one is not this issue's
  * @returns {{ gate: number, reason: string, at: number } | null}
  */
 export function parseHeld(comments, maintainer, number) {
   const own = comments
-    .filter((c) => c.user?.login === maintainer && typeof c.body === 'string')
+    .filter((c) => c.user?.login === maintainer)
     .toSorted(
       (a, b) => (toMs(a.created_at) ?? 0) - (toMs(b.created_at) ?? 0) || (a.id ?? 0) - (b.id ?? 0)
     )
   /** @type {{ gate: number, reason: string, at: number } | null} */
   let held = null
   for (const comment of own) {
-    const body = comment.body ?? ''
-    const at = toMs(comment.created_at) ?? 0
-    const line = /^held \| [^|]*\| (?:[\w.-]+\/[\w.-]+)?#(\d+) \| G([2-6]) \| (.+)$/m.exec(body)
+    const line = fromBody(comment, heldLineOf)
     if (line !== null) {
       held =
-        Number(line[1]) === number
-          ? { gate: Number(line[2]), reason: /** @type {string} */ (line[3]).trim(), at }
+        line.number === number
+          ? { gate: line.gate, reason: line.reason, at: toMs(comment.created_at) ?? 0 }
           : null
       continue
     }
-    const gate = /^gate (\d)\b/i.exec(firstLine(body))
-    if (held !== null && gate !== null && Number(gate[1]) === held.gate) held = null
+    if (held !== null && fromBody(comment, saidOf)?.gate === held.gate) held = null
   }
   return held
+}
+
+/**
+ * The first `held |` line of a comment, wherever it is in the body.
+ *
+ * @param {string} body
+ * @returns {{ number: number, gate: number, reason: string } | null}
+ */
+function heldLineOf(body) {
+  const line = /^held \| [^|]*\| (?:[\w.-]+\/[\w.-]+)?#(\d+) \| G([2-6]) \| (.+)$/m.exec(body)
+  return line === null
+    ? null
+    : {
+        number: Number(line[1]),
+        gate: Number(line[2]),
+        reason: /** @type {string} */ (line[3]).trim(),
+      }
 }
 
 /**
@@ -374,7 +383,7 @@ export function buildNeeds({
         const row = number === null ? undefined : rows.find((r) => r.number === number)
         if (number === null || row === undefined) continue
         const noted = [...pull.comments, ...pull.reviews].some(
-          (c) => c.user?.login === raw.maintainer && hasTimeNote(c.body)
+          (c) => c.user?.login === raw.maintainer && fromBody(c, hasTimeNote) === true
         )
         const id = ids(number)
         if (noted || carded.has(id.issue)) continue
