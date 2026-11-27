@@ -1087,3 +1087,17 @@ describe('the tools of issue-ready.yml and verify-draft.yml come from the workfl
     }
   })
 })
+
+describe('ci.yml', () => {
+  it('ci.yml cancels the superseded runs of a pull request and of nothing else', () => {
+    const ci = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8')
+    // one top-level block: a pull request shares its group with its own runs only, every other
+    // event falls back to its run id, a group of its own (D4 of #477)
+    expect(ci.match(/^concurrency:.*$/gm)).toEqual(['concurrency:'])
+    expect(ci).toContain(
+      '\nconcurrency:\n' +
+        '  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}\n' +
+        '  cancel-in-progress: true\n'
+    )
+  })
+})
