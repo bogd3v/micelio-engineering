@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import { writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -13,6 +14,7 @@ import {
   loadBars,
   parseStacks,
 } from '../herdr/mod/factory/lib/panel.js'
+import { reportsArgs } from '../herdr/mod/factory/lib/reports.js'
 import { parseAgents } from '../herdr/mod/factory/lib/agents.js'
 import { readEpics } from '../herdr/mod/factory/lib/reads.js'
 import { stackOwned } from '../herdr/mod/factory/lib/actions.js'
@@ -990,6 +992,78 @@ describe('the adapters', () => {
     expect(panel.banners.stale!.text).toContain('gh: network error')
     expect(panel.sections.machine.load).toBe('0.5')
     expect(panel.sections.slots.rows).toHaveLength(3)
+  })
+
+  it('the REPORTS pane reads the issue and its comments with gh api GET calls, passes the number and the repository as arguments, and runs no gh issue, gh pr or graphql', () => {
+    const [shell, flag, script, name, ...positional] = reportsArgs(4321, 'example/neutral')
+    expect([shell, flag, name, positional]).toEqual([
+      'sh',
+      '-c',
+      'reports',
+      ['4321', 'example/neutral'],
+    ])
+    expect(script).not.toMatch(/4321|example|neutral/)
+    expect(script).not.toMatch(/gh (issue|pr|project)\b|graphql/)
+
+    // The script as the pane runs it, with a `gh` that records its arguments and applies `--jq` to
+    // each page with `jq -r` (`gh --jq` prints a string raw, one page after another), and a `less`
+    // that prints what it is given.
+    const dir = mkdtempSync(join(tmpdir(), 'reports-'))
+    try {
+      const comment = (login: string, day: number, body: string) => ({
+        user: { login },
+        created_at: `2026-11-0${day}T10:00:00Z`,
+        body,
+      })
+      writeFileSync(join(dir, 'issue.json'), JSON.stringify({ title: 'The title', body: 'Why.' }))
+      writeFileSync(join(dir, 'page1.json'), JSON.stringify([comment('ana', 1, 'First.')]))
+      writeFileSync(join(dir, 'page2.json'), JSON.stringify([comment('ben', 2, 'Second.')]))
+      writeFileSync(
+        join(dir, 'gh'),
+        `#!/bin/sh
+for a in "$@"; do printf '%s\\n' "$a"; filter=$a; done >> "${dir}/calls"
+echo -- >> "${dir}/calls"
+case "$*" in
+  *comments*) jq -r "$filter" "${dir}/page1.json"; jq -r "$filter" "${dir}/page2.json" ;;
+  *) jq -r "$filter" "${dir}/issue.json" ;;
+esac
+`,
+        { mode: 0o755 }
+      )
+      writeFileSync(join(dir, 'less'), '#!/bin/sh\necho "less $*"\ncat\n', { mode: 0o755 })
+      const [command, ...args] = reportsArgs(7, 'example/neutral')
+      const shown = execFileSync(command!, args, {
+        encoding: 'utf8',
+        env: { ...process.env, PATH: `${dir}:${process.env['PATH']}` },
+      })
+      expect(shown).toBe(
+        'less -R\nThe title\n\nWhy.\n' +
+          '\n--- ana · 2026-11-01T10:00:00Z\n\nFirst.\n' +
+          '\n--- ben · 2026-11-02T10:00:00Z\n\nSecond.\n'
+      )
+      const calls = readFileSync(join(dir, 'calls'), 'utf8')
+        .split('--\n')
+        .filter((c) => c !== '')
+      // Each call is `gh api`, the endpoint and `--jq`: a GET, with no method, field or input.
+      expect(calls).toHaveLength(2)
+      expect(calls[0]).toMatch(/^api\nrepos\/example\/neutral\/issues\/7\n--jq\n[^\n]+\n$/)
+      expect(calls[1]).toMatch(
+        /^api\n--paginate\nrepos\/example\/neutral\/issues\/7\/comments\n--jq\n[^\n]+\n$/
+      )
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+    // The button opens that command, and nothing of the mod runs a GraphQL one.
+    const main = readFileSync(join(MOD, 'main.js'), 'utf8')
+    expect(main).toContain(
+      'this.pane(reportsArgs(card.number, card.repo), `reports-${card.issue}`)'
+    )
+    for (const file of readdirSync(MOD, { recursive: true, encoding: 'utf8' })) {
+      if (file.endsWith('.js'))
+        expect(readFileSync(join(MOD, file), 'utf8'), file).not.toMatch(
+          /gh (issue|pr|project) |api graphql/
+        )
+    }
   })
 
   it('no token is read or stored', () => {

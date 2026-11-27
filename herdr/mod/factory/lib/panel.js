@@ -8,7 +8,7 @@
 import { issueOfName } from './agents.js'
 import { catFile } from './cat.js'
 import { buildIssues } from './issues.js'
-import { paceOf } from './quota.js'
+import { isPaused, paceOf } from './quota.js'
 import { spaceProblems } from './spaces.js'
 import { ageMs, toMs } from './time.js'
 
@@ -19,6 +19,9 @@ export const SECTIONS = ['machine', 'slots', 'workers', 'milestones', 'stacks', 
 
 /** How far back the load of the Machine section goes. */
 const HISTORY_MS = 15 * 60_000
+
+/** The header names the GraphQL points while fewer than this remain. */
+const GRAPHQL_LOW = 500
 
 /** How much of an orphan's command line "Show process" shows, in characters. */
 const BRIEF_LENGTH = 120
@@ -65,6 +68,25 @@ function paceNote(quota, now) {
   return pace === 'stopped'
     ? ` · quota 0 · paused ${left}`
     : ` · quota ${quota.remaining} · slow ${left}`
+}
+
+/**
+ * What the header's sync label adds for the limits the core quota does not tell: ` · secondary · paused
+ * <time left>` while a secondary limit pauses the reads, and ` · graphql <remaining> · reset <time to
+ * reset>` while fewer than 500 GraphQL points remain before their reset; else nothing.
+ *
+ * @param {import('./quota.js').Backoff | null} backoff
+ * @param {import('./quota.js').Graphql | null} graphql
+ * @param {number} now milliseconds since the epoch
+ * @returns {string}
+ */
+function limitNote(backoff, graphql, now) {
+  const secondary = isPaused(backoff, now)
+    ? ` · secondary · paused ${formatAge(backoff.until - now)}`
+    : ''
+  if (graphql === null || graphql.remaining >= GRAPHQL_LOW || graphql.reset * 1000 <= now)
+    return secondary
+  return `${secondary} · graphql ${graphql.remaining} · reset ${formatAge(graphql.reset * 1000 - now)}`
 }
 
 /**
@@ -536,6 +558,8 @@ function catsOf(row, onIt, master, theme) {
  * @param {'dark' | 'light'} [input.theme] the theme the cat files are named for
  * @param {Record<string, boolean>} [input.open] the sections the maintainer opened or closed
  * @param {import('./quota.js').Quota | null} [input.quota] the last quota GitHub reported: the header says so while the pace is not `normal`
+ * @param {import('./quota.js').Backoff | null} [input.backoff] the pause of a secondary limit: the header says so while it runs
+ * @param {import('./quota.js').Graphql | null} [input.graphql] the GraphQL points last read: the header names them while they are low
  * @param {Record<string, import('./board.js').RepoMilestone[]> | null} [input.milestones] each repository's milestones, for the banner of the spaces
  * @param {import('./spaces.js').EpicReads} [input.epics] the epic of each space as last read, for the same banner
  */
@@ -550,6 +574,8 @@ export function buildPanel({
   theme = 'dark',
   open = {},
   quota = null,
+  backoff = null,
+  graphql = null,
   milestones = null,
   epics = {},
 }) {
@@ -665,16 +691,17 @@ export function buildPanel({
     .map((s) => ageMs(now, s.at))
     .filter((n) => n !== null)
   const reserved = slots?.heavy.slots.some((s) => s.held) === true
+  const limits = `${paceNote(quota, now)}${limitNote(backoff, graphql, now)}`
   const header = {
     pause: { on: paused, label: paused ? 'Resume workers' : 'Pause new workers' },
     reserve: { on: reserved, label: reserved ? 'Release my slot' : 'Reserve a slot' },
     sync: githubStale
       ? {
-          text: `GH STALE ${formatAge(staleAge).toUpperCase()}${paceNote(quota, now)}`,
+          text: `GH STALE ${formatAge(staleAge).toUpperCase()}${limits}`,
           stale: true,
         }
       : {
-          text: `sync ${formatAge(fresh.length === 0 ? null : Math.min(...fresh))}${paceNote(quota, now)}`,
+          text: `sync ${formatAge(fresh.length === 0 ? null : Math.min(...fresh))}${limits}`,
           stale: false,
         },
   }

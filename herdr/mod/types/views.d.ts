@@ -7,6 +7,7 @@ import type { Context, ClickHandler, FocusHandle } from 'gpui-kit'
 import type { InputState, ScrollHandle, TextareaState } from 'gpui-base'
 import type { createAdapters, readConfig } from '../factory/adapters.js'
 import type { createActions, createRetries } from '../factory/lib/actions.js'
+import type { createRateLimitWatch } from '../factory/lib/quota.js'
 import type { createGate } from '../factory/lib/reads.js'
 import type { EpicReads } from '../factory/lib/spaces.js'
 import type {
@@ -201,6 +202,7 @@ export interface FactoryState {
   seeded: boolean
   now: number
   githubAt: number | null
+  rateLimit: ReturnType<typeof createRateLimitWatch>
   gates: { fast: ReturnType<typeof createGate>; slow: ReturnType<typeof createGate> }
   scroll: ScrollHandle
   order: string[]

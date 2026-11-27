@@ -1,5 +1,5 @@
 // The calls the model is kept free of. Each read gives the shape `lib/state.js` and `lib/panel.js`
-// take: `{ at, … }` when it worked, `{ error }` when it did not. Nothing here writes: the commands are
+// take: `{ at, … }` when it worked (`readRateLimit`: `{ graphql }`), `{ error }` when it did not. Nothing here writes: the commands are
 // `herdr/factory-slot.sh status`, `nproc`, `gh api` of a GET endpoint (`--include`, and at most one `--header If-None-Match: <etag>`: the only flags it takes), `docker -H <dockerHost> compose ls` and `docker -H <dockerHost> ps -a`, `ps -o etimes=,pcpu= -p <pid>` (every `docker` call goes through `dockerArgs`), Herdr's
 // `terminals()` and files of `/proc`, `/sys` and the fixture folder.
 //
@@ -16,7 +16,7 @@
 
 import { parseNumstat } from './lib/detail.js'
 import { pairsOf, pullIssue } from './lib/panel.js'
-import { commentsDue, parseReply } from './lib/quota.js'
+import { backoffOf, commentsDue, isPaused, parseReply } from './lib/quota.js'
 
 /**
  * A pull request as GitHub gives it, and as a recording keeps it: the fields `readPulls` reads.
@@ -304,31 +304,64 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
   const replies = new Map()
   /** The last `X-Ratelimit-Remaining` and `X-Ratelimit-Reset` any reply gave. @type {import('./lib/quota.js').Quota | null} */
   let quota = null
+  /** The pause of the last secondary rate limit, `null` after the `200` or `304` that ends it; in memory. @type {import('./lib/quota.js').Backoff | null} */
+  let backoff = null
   /** When the comments of each issue or pull request were last read, and its `updated_at` then. @type {Map<string, { updatedAt: unknown, at: number, value: unknown }>} */
   const seenComments = new Map()
 
   /**
    * One `gh api` GET: the JSON it printed. The call is `gh api <endpoint> --include`, with the `Etag` of
    * the endpoint's last `200` as `--header If-None-Match: <etag>`; a `304` (for which `gh` exits 1 with
-   * `gh: HTTP 304`) gives the body of that `200`. Any other non-zero exit is a failure.
+   * `gh: HTTP 304`) gives the body of that `200`. Any other non-zero exit is a failure. A `200` or `304`
+   * ends the pause of a secondary rate limit only when no secondary reply arrived while its call ran.
    *
    * @param {string} endpoint
    * @returns {Promise<unknown>}
+   * @throws while the pause of a secondary rate limit runs, without running `gh`
    */
   async function gh(endpoint) {
+    if (isPaused(backoff, clock())) {
+      const until = new Date(backoff.until).toISOString().slice(11, 16)
+      throw new Error(`secondary rate limit: paused until ${until}`)
+    }
     const kept = replies.get(endpoint)
     const args = ['api', endpoint, '--include']
     if (kept !== undefined) args.push('--header', `If-None-Match: ${kept.etag}`)
+    const atStart = backoff
     const run = await exec('gh', args, { timeout: 30_000 })
     const reply = parseReply(run.stdout)
     if (reply.remaining !== null && reply.reset !== null) {
       quota = { remaining: reply.remaining, reset: reply.reset }
     }
+    const next = backoffOf(backoff, reply, clock())
+    // Calls run up to `GH_AT_ONCE` at once: a success of one sent before the pause says nothing about it.
+    if (next !== null || backoff === atStart) backoff = next
     if (reply.status === 304 && kept !== undefined) return kept.body
     if (run.code !== 0) throw new Error(run.stderr.trim() || `gh exit ${run.code}`)
     const body = JSON.parse(reply.body)
     if (reply.etag !== null) replies.set(endpoint, { etag: reply.etag, body })
     return body
+  }
+
+  /**
+   * The GraphQL points left: `gh api rate_limit`, a GET that does not count against the REST quota.
+   * A fixture records none.
+   *
+   * @returns {Promise<{ graphql: import('./lib/quota.js').Graphql } | { error: string }>}
+   */
+  async function readRateLimit() {
+    try {
+      if (dirs !== null) return { error: 'no rate_limit in a fixture' }
+      const body = /** @type {{ resources?: { graphql?: Record<string, unknown> } } | null} */ (
+        await gh('rate_limit')
+      )
+      const { remaining, reset } = body?.resources?.graphql ?? {}
+      return typeof remaining === 'number' && typeof reset === 'number'
+        ? { graphql: { remaining, reset } }
+        : { error: 'gh api rate_limit: no graphql resource' }
+    } catch (error) {
+      return { error: reason(error) }
+    }
   }
 
   /**
@@ -757,6 +790,9 @@ export function createAdapters({ exec, readTextFile, terminals, config, clock = 
     now,
     /** The last quota any reply gave, `null` before the first. */
     quota: () => quota,
+    /** The pause of the last secondary rate limit, past or running; `null` when none is. */
+    backoff: () => backoff,
+    readRateLimit,
     readCommit,
     readDiffs,
     readForms,
