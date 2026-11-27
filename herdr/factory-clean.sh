@@ -6,7 +6,7 @@
 # <name> is the issue's name in herdr/master.md (<N>, or <tag><N>), [a-z0-9]{1,16}; --checkout is the
 # repository's checkout whose sibling is wt-<name>; --packets holds <name>/. In this order it removes:
 #   1. nothing, exit 1, while the issue is not closed or `factory-slot.sh status` lists an agent of it
-#   2. the worktree wt-<name> and its branch, when clean and its pull request is MERGED (else `kept`)
+#   2. the worktree wt-<name> and its branch, when clean, at the head of its merged pull request (else `kept`)
 #   3. the packet <packets>/<name>/, when the worktree was removed or did not exist
 #   4. the scratch of worker-<name>, reviewer-<name>[-r<K>] and verifier-<name>[-r<K>] under FACTORY_TMP
 #   5. the stacks <name> and <name>v, their volumes and local images, and the images tagged <name>[v]
@@ -107,10 +107,13 @@ if [[ -e "$wt" ]]; then
   elif [[ -z "$branch" ]]; then
     echo "kept $wt: no branch checked out"
   elif ! merged=$(gh api "repos/$repo/pulls?head=${repo%/*}:$branch&state=closed&per_page=100" \
-    --jq '.[] | select(.merged_at != null) | .number' 2>/dev/null); then
+    --jq '.[] | select(.merged_at != null) | .head.sha' 2>/dev/null); then
     echo "kept $wt: cannot read the pull requests of $branch"
   elif [[ -z "$merged" ]]; then
     echo "kept $wt: the pull request of $branch is not merged"
+  # A commit the pull request does not hold would go with the branch; HEAD must be one of its heads.
+  elif [[ $'\n'"$merged"$'\n' != *$'\n'"$(git -C "$wt" rev-parse HEAD 2>/dev/null)"$'\n'* ]]; then
+    echo "kept $wt: commits after the pull request"
   elif ((dry)); then
     echo "would remove $wt"
     echo "would remove branch $branch"
