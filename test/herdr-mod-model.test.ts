@@ -1,13 +1,17 @@
 import { readFileSync } from 'node:fs'
+import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { readConfig } from '../herdr/mod/factory/adapters.js'
 import { parseAgents } from '../herdr/mod/factory/lib/agents.js'
 import { onPair, pairsOf } from '../herdr/mod/factory/lib/panel.js'
+import { sumTokens } from '../herdr/mod/factory/lib/detail.js'
 import { parseGates } from '../herdr/mod/factory/lib/gates.js'
+import { KEPT_CALLS } from '../herdr/mod/factory/lib/gates.js'
 import { buildIssues, dependsOn } from '../herdr/mod/factory/lib/issues.js'
 import { parseMachine } from '../herdr/mod/factory/lib/machine.js'
+import { parseDecision, parseHeld } from '../herdr/mod/factory/lib/needs.js'
 import { parseSlots } from '../herdr/mod/factory/lib/slots.js'
 import { buildState } from '../herdr/mod/factory/lib/state.js'
 
@@ -301,6 +305,213 @@ describe('a new round of an earlier gate', () => {
     expect(gates(thread(...passed, opened, g2(2))).track).toBe('pprrtt')
     expect(gates(thread(...passed, opened, g2(2), g3(2), g4(2))).track).toBe('ppppnt')
     expect(gates(thread(...passed, opened, g2(2), g3(2), g4(2), opened)).track).toBe('pppppr')
+  })
+})
+
+describe('the kept parse', () => {
+  // The parse is kept for the whole file: each of these comments has an id no other test uses.
+  let nextId = 900_000
+  const AT = '2026-11-24T10:00:00Z'
+
+  /** A comment whose `body` counts its reads; `copy` is the same comment in a new object. */
+  const counted = (body: string, minute: number, keys: { id?: number; updated_at?: string }) => {
+    let reads = 0
+    const make = () => ({
+      ...keys,
+      user: { login: MAINTAINER },
+      created_at: new Date(Date.parse(AT) + minute * 60_000).toISOString(),
+      get body() {
+        reads += 1
+        return body
+      },
+    })
+    return { comment: make(), copy: make, reads: () => reads }
+  }
+  const keyed = (body: string, minute: number, updatedAt = AT) =>
+    counted(body, minute, { id: (nextId += 1), updated_at: updatedAt })
+  const marksOf = (comments: object[]) =>
+    parseGates({ comments: comments, maintainer: MAINTAINER }).marks
+  /**
+   * The first lines of the bodies that a regex or a `split` got whole while `run` ran: `test`, `exec`
+   * and a regex `split` all go through `RegExp.prototype.exec`.
+   */
+  const scansOf = (bodies: readonly string[], run: () => void): string[] => {
+    const scanned = new Set<string>()
+    const see = (text: string) => {
+      if (bodies.includes(text)) scanned.add(text.slice(0, text.indexOf('\n')))
+    }
+
+    const exec = RegExp.prototype.exec
+
+    const split = String.prototype.split
+    RegExp.prototype.exec = function (this: RegExp, text: string) {
+      see(text)
+      return exec.call(this, text)
+    }
+    String.prototype.split = function (this: string, ...args: unknown[]) {
+      see(String(this))
+      return Reflect.apply(split, this, args) as string[]
+    }
+    try {
+      run()
+    } finally {
+      RegExp.prototype.exec = exec
+      String.prototype.split = split
+    }
+    return [...scanned].sort()
+  }
+
+  it('a second parse of comments of the same id and updated_at reads no body, from new objects too', () => {
+    const bodies = [
+      `${GATE1('normal')}the reason`,
+      '**Gate 2, round 1 (master)** · pass\n\ntokens | 2026-11-24 | #7 | worker | sonnet | 1 | 2 | 1',
+      '**Decision needed** · #7\nWhich?\n- A: one',
+      'held | 2026-11-24 | #7 | G4 | 3 tests timed out\n',
+      'Progress updated by the master:\n\npull request #12 opened',
+    ]
+    const set = bodies.map((body, i) => keyed(body, i * 10))
+    const everyReader = (comments: object[]) => {
+      const own = comments as Comment[]
+      return [
+        parseGates({ comments: own, maintainer: MAINTAINER }),
+        parseDecision(own, MAINTAINER),
+        parseHeld(own, MAINTAINER, 7),
+        [...sumTokens(own, MAINTAINER, 7)],
+      ]
+    }
+    const first = everyReader(set.map((c) => c.comment))
+    expect(set.map((c) => c.reads())).toEqual([1, 1, 1, 1, 1])
+    // Neither the same objects nor new ones are read or parsed again.
+    const scans = scansOf(bodies, () => {
+      expect(everyReader(set.map((c) => c.comment))).toEqual(first)
+      expect(everyReader(set.map((c) => c.copy()))).toEqual(first)
+    })
+    expect(scans).toEqual([])
+    expect(set.map((c) => c.reads())).toEqual([1, 1, 1, 1, 1])
+  })
+
+  it('a comment whose updated_at changed is parsed again and its new first line counts', () => {
+    const lane = keyed(GATE1('normal'), 0)
+    const red = keyed('**Gate 2, round 1 (master)** · red: the check', 10)
+    expect(marksOf([lane.comment, red.comment])[1]).toBe('red')
+    expect(marksOf([lane.comment, red.copy()])[1]).toBe('red')
+    expect(red.reads()).toBe(1)
+    const edited = counted('**Gate 2, round 1 (master)** · pass', 10, {
+      id: nextId,
+      updated_at: '2026-11-24T11:00:00Z',
+    })
+    expect(marksOf([lane.comment, edited.comment])[1]).toBe('passed')
+    expect(marksOf([lane.comment, edited.copy()])[1]).toBe('passed')
+    expect(edited.reads()).toBe(1)
+  })
+
+  it('a comment with no id or no updated_at is parsed at every call and gives the marks it gave', () => {
+    // Two comments of each kind, so one kept under a missing key would show as the other.
+    const sets = [
+      [{ id: (nextId += 1) }, { id: (nextId += 1) }],
+      [{ updated_at: AT }, { updated_at: AT }],
+      [{}, {}],
+    ]
+    for (const [a, b] of sets) {
+      const lane = counted(GATE1('express'), 0, a!)
+      const gate = counted('**Gate 2, round 1 (master)** · pass', 10, b!)
+      expect(marksOf([lane.comment, gate.comment])).toEqual([
+        'passed',
+        'passed',
+        'omitted',
+        'omitted',
+        'needs',
+        'notReached',
+      ])
+      const before = [lane.reads(), gate.reads()]
+      expect(marksOf([lane.comment, gate.comment])[4]).toBe('needs')
+      expect(lane.reads()).toBeGreaterThan(before[0]!)
+      expect(gate.reads()).toBeGreaterThan(before[1]!)
+    }
+    // A body that changes under the same id, with no updated_at to say so, is seen.
+    const id = (nextId += 1)
+    const said = (body: string) => marksOf([{ ...comment(body, 0), id }])[0]
+    expect(said('**Gate 1 (master)** · not ready')).toBe('red')
+    expect(said('**Gate 1 (master): pass**')).toBe('passed')
+    // A comment with no body says nothing, with the two keys or without them.
+    const empty = { user: { login: MAINTAINER }, created_at: AT }
+    expect(marksOf([empty, { ...empty, id: (nextId += 1), updated_at: AT, body: null }])).toEqual(
+      new Array(6).fill('notReached')
+    )
+  })
+
+  it('a comment no read returns any more is not kept', () => {
+    const stays = keyed(GATE1('normal'), 0)
+    const gone = keyed('**Gate 2, round 1 (master)** · pass', 10)
+    marksOf([stays.comment, gone.comment])
+    for (let call = 0; call < 2 * KEPT_CALLS; call += 1) marksOf([stays.copy()])
+    expect(stays.reads()).toBe(1)
+    expect(gone.reads()).toBe(1)
+    marksOf([stays.copy(), gone.copy()])
+    expect(stays.reads()).toBe(1)
+    expect(gone.reads()).toBe(2)
+  })
+
+  it('a Progress updated comment whose pull request #N opened is past its first line still passes G5', () => {
+    const comments = [
+      keyed(GATE1('express'), 0),
+      keyed('**Gate 2, round 1 (master)** · pass', 10),
+      keyed(
+        'Progress updated by the master:\r\n\r\n```diff\r\n+ - pull request #12 opened\r\n```',
+        20
+      ),
+    ].map((c) => c.comment)
+    expect(marksOf(comments)[4]).toBe('passed')
+    expect(marksOf(comments)[4]).toBe('passed')
+  })
+
+  it('a body past its first line is read only for a Gate 1 or Progress updated comment', () => {
+    // Every regex (`test`, `exec`, a regex `split`) goes through `exec`: it records the whole bodies it gets.
+    const rest = '\n\nlane: normal\n\npull request #12 opened\n'
+    const heads = [
+      '**Gate 1 (master): pass**',
+      'Progress updated by the master:',
+      '**Gate 2, round 1 (master)** · pass',
+      '**Gate 3, round 1 (reviewer-1)** · 0 Blocking',
+      '**Decision needed** · #1',
+      'tokens | 2026-11-24 | #1 | worker | sonnet | 1 | 1 | 1',
+      'A note with no gate',
+    ]
+    const bodies = heads.map((head) => `${head}${rest}`)
+    const comments = bodies.map((body, i) => keyed(body, i))
+    const scans = scansOf(bodies, () => {
+      marksOf(comments.map((c) => c.comment))
+    })
+    expect(scans).toEqual([heads[0], heads[1]].sort())
+  })
+
+  it('every recorded comments fixture gives the same gates with the kept parse as with a fresh one', () => {
+    const files = readdirSync(FIXTURES, { recursive: true, encoding: 'utf8' })
+      .filter((f) => /(^|\/)comments[^/]*\.json$/.test(f))
+      .sort()
+    expect(files.length).toBeGreaterThan(30)
+    for (const file of files) {
+      const recorded = json<(Partial<Comment> & { updated_at?: string })[]>(file)
+      // Fresh: no `updated_at`, so nothing is kept. Kept: every comment has both keys, the file in its
+      // `updated_at` so that two recordings that share an id do not share a parse.
+      const fresh = recorded.map(({ updated_at: _, ...c }) => c as Comment)
+      const kept = () =>
+        recorded.map((c, i) => ({ ...c, id: c.id ?? i + 1, updated_at: file }) as Comment)
+      const logins = new Set(recorded.map((c) => c.user?.login ?? ''))
+      for (const maintainer of logins) {
+        const all = (comments: Comment[]) => [
+          parseGates({ comments, maintainer }),
+          parseGates({ comments, maintainer, closed: true }),
+          parseGates({ comments, maintainer, needsYou: true }),
+          parseDecision(comments, maintainer),
+          parseHeld(comments, maintainer, Number(/(\d+)\.json$/.exec(file)?.[1])),
+          [...sumTokens(comments, maintainer, Number(/(\d+)\.json$/.exec(file)?.[1]))],
+        ]
+        const expected = all(fresh)
+        expect(all(kept()), file).toEqual(expected)
+        expect(all(kept()), file).toEqual(expected)
+      }
+    }
   })
 })
 
