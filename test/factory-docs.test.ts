@@ -51,6 +51,13 @@ describe('the factory documents', () => {
     expect(words(read('herdr/master.md'))).toBeLessThanOrEqual(5160)
   })
 
+  it('herdr/master.md checks HC_TERMINAL_ID before the master starts and never HERDR_ENV', () => {
+    const runbook = read('herdr/master.md')
+    const intro = runbook.slice(0, runbook.indexOf('\n## '))
+    expect(intro).toContain('test -n "${HC_TERMINAL_ID:-}"')
+    expect(runbook).not.toContain('HERDR_ENV')
+  })
+
   it("herdr/master.md has the master write the worktree, packet directory, branch and draft to the issue's Progress before the worker's brief, and check it at gate 5", () => {
     const runbook = read('herdr/master.md')
     const start = runbook.indexOf('## Starting an agent')
