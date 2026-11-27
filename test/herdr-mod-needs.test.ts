@@ -12,12 +12,23 @@ import {
   LOCKED_NOTE,
   NO_WORKTREE_NOTE,
 } from '../herdr/mod/factory/lib/needs.js'
-import { buildGithub } from '../herdr/mod/factory/lib/panel.js'
+import { buildGithub, milestoneRows } from '../herdr/mod/factory/lib/panel.js'
 import { buildPanel } from '../herdr/mod/factory/lib/panel.js'
 import { createAdapters, readConfig } from '../herdr/mod/factory/adapters.js'
 import { buildState } from '../herdr/mod/factory/lib/state.js'
 import { parseAgents } from '../herdr/mod/factory/lib/agents.js'
 import { timeLine } from '../herdr/mod/factory/lib/time.js'
+import {
+  counting,
+  fresh,
+  largeSet,
+  MAINTAINER,
+  NOW as LARGE_NOW,
+  readsOf,
+  SPACES,
+  totals,
+  type Make,
+} from './support/herdr-mod-large-set.js'
 
 const NOW = Date.parse('2026-11-24T16:00:00Z')
 const MIN = 60_000
@@ -854,5 +865,164 @@ describe('the kept parse over the renders of the panel', () => {
     }))
     expect(last.cards.length).toBeGreaterThan(0)
     expect(last).toEqual(fresh)
+  })
+})
+
+describe('one frame of the panel', () => {
+  const spaces = SPACES
+  const githubOf = (reads: Record<string, unknown>) =>
+    buildGithub({ now: LARGE_NOW, spaces, reads })
+  type Github = ReturnType<typeof buildGithub>
+
+  /** What `render()` builds in one frame: the panel's sections and the cards of "Needs you". */
+  function frame(github: Github, now: number, agents: ReturnType<typeof parseAgents> = []) {
+    const panel = buildPanel({
+      now,
+      state: buildState({ now, fetched: {} }),
+      github,
+      config: { spaces, maintainer: MAINTAINER },
+    })
+    const needs = buildNeeds({ now, config: { spaces }, github, agents })
+    return { needs, milestones: panel.sections.milestones, strip: panel.strip }
+  }
+  /** The same frame with the panel's agents, which `buildPanel` takes from its state. */
+  function frameWith(github: Github, now: number, status: string) {
+    const space = { id: 's', name: 'cms' }
+    const agents = parseAgents([]).concat({
+      address: 't1',
+      name: 'worker-1',
+      role: 'worker',
+      issue: 1,
+      tag: '',
+      status,
+      needsYou: status === 'blocked',
+      space,
+    } as ReturnType<typeof parseAgents>[number])
+    const state = buildState({ now, fetched: {} })
+    state.sources['agents'] = { value: agents, at: null, ageMs: null, stale: false, error: null }
+    const panel = buildPanel({ now, state, github, config: { spaces, maintainer: MAINTAINER } })
+    const needs = buildNeeds({ now, config: { spaces }, github, agents })
+    return { needs, milestones: panel.sections.milestones, strip: panel.strip }
+  }
+
+  it('one frame of Needs you and the panel builds the rows of each pair once', () => {
+    const set = largeSet(21)
+    const builds = new Map<string, number>()
+    // `buildIssues` asks each item once whether it is a pull request.
+    const make: Make = {
+      comment: fresh.comment,
+      issue: (issue, repo) => {
+        const key = `${repo}#${issue.number}`
+        return Object.defineProperty(fresh.issue(issue, repo), 'pull_request', {
+          get: () => {
+            builds.set(key, (builds.get(key) ?? 0) + 1)
+            return undefined
+          },
+        })
+      },
+    }
+    const github = githubOf(readsOf(set, make))
+    builds.clear()
+    frame(github, LARGE_NOW)
+    expect(builds.size).toBe(83)
+    expect([...new Set(builds.values())]).toEqual([1])
+    // The same read, agents and now: the next frame reuses them.
+    frame(github, LARGE_NOW)
+    expect([...new Set(builds.values())]).toEqual([1])
+    frame(github, LARGE_NOW + 1000)
+    expect([...new Set(builds.values())]).toEqual([2])
+  })
+
+  it('twelve frames over 83 issues of 728793 characters and 1500 comments read each issue body and each comment body once', () => {
+    const set = largeSet(22)
+    expect(totals(set)).toEqual({
+      issues: 83,
+      open: 39,
+      chars: 728_793,
+      largest: 21_997,
+      comments: 1500,
+      commentChars: 1_900_000,
+    })
+    const counted = counting()
+    let github = githubOf(readsOf(set, counted.make))
+    let last = frame(github, LARGE_NOW)
+    for (let i = 1; i < 12; i += 1) {
+      // Each fourth frame has the new objects of a new read.
+      if (i % 4 === 0) {
+        counted.again()
+        github = githubOf(readsOf(set, counted.make))
+      }
+      last = frame(github, LARGE_NOW + i * 1000)
+    }
+    // The body of a closed issue is never read: neither its Depends on nor its Progress is asked for.
+    expect(counted.issueReads.size).toBe(39)
+    expect([...new Set(counted.issueReads.values())]).toEqual([1])
+    expect(counted.commentReads.size).toBe(1500)
+    expect([...new Set(counted.commentReads.values())]).toEqual([1])
+    expect(new Set(last.needs.cards.map((c) => c.kind))).toEqual(
+      new Set(['signoff', 'decision', 'held'])
+    )
+    expect(last).toEqual(frame(githubOf(readsOf(set, fresh)), LARGE_NOW + 11_000))
+  })
+
+  it('the kept rows give the cards and rows of a fresh build, and an agent that starts or blocks shows at the next frame', () => {
+    const set = largeSet(23)
+    const github = githubOf(readsOf(set, counting().make))
+    const rebuilt = () => githubOf(readsOf(set, fresh))
+    const rowOf = (made: ReturnType<typeof frame>, id: string) =>
+      made.milestones.spaces.flatMap((s) => s.issues).find((i) => i.id === id)!
+
+    const first = frame(github, LARGE_NOW)
+    expect(frame(github, LARGE_NOW)).toEqual(first)
+    expect(first).toEqual(frame(rebuilt(), LARGE_NOW))
+
+    // Issue #1 runs its gate 4 or later: a worker starts on it, then blocks.
+    const quiet = frameWith(github, LARGE_NOW, 'idle')
+    const started = frameWith(github, LARGE_NOW, 'working')
+    expect(rowOf(started, '#1').cats.map((c) => c.name)).toEqual(['worker-1'])
+    expect(rowOf(started, '#1').note).not.toBe(rowOf(quiet, '#1').note)
+    expect(started).toEqual(frameWith(rebuilt(), LARGE_NOW, 'working'))
+    const blocked = frameWith(github, LARGE_NOW, 'blocked')
+    expect(rowOf(started, '#1').needsYou).toBe(false)
+    expect(rowOf(blocked, '#1').needsYou).toBe(true)
+    expect(blocked).toEqual(frameWith(rebuilt(), LARGE_NOW, 'blocked'))
+    // And stops being blocked.
+    expect(frameWith(github, LARGE_NOW, 'working')).toEqual(started)
+
+    // A later `now` ages the rows.
+    const later = frame(github, LARGE_NOW + 3_600_000)
+    expect(later).toEqual(frame(rebuilt(), LARGE_NOW + 3_600_000))
+    expect(later).not.toEqual(first)
+
+    // A new read of the same list, and then its comments or its maintainer alone, are another read.
+    const pair = github.spaces['cms']!.raw!
+    const rows = () => milestoneRows({ raw: pair }, LARGE_NOW, [])
+    const kept = rows()
+    expect(rows()).toBe(kept)
+    pair.comments = {}
+    expect(rows()).not.toEqual(kept)
+    const bare = rows()
+    pair.maintainer = 'another'
+    expect(rows()).not.toBe(bare)
+  })
+
+  it('a frame after the first over the large set takes, at the median of twelve, under the bound question 15 sets', () => {
+    // Question 15 of `herdr/mod/findings.md`: the app interrupted a `render` at 50 ms of run time, the
+    // shortest interrupted time measured, idle and under load. The bound is a fifth of it: this runs in
+    // Node, where a tenth failed on a host at a load near 11 with nothing wrong in the code. It guards
+    // against a frame that grows; it is not the time the app's engine takes.
+    const BOUND_MS = 50 / 5
+    const set = largeSet(24)
+    const github = githubOf(readsOf(set, counting().make))
+    frame(github, LARGE_NOW)
+    const times = Array.from({ length: 12 }, (_, i) => {
+      const start = performance.now()
+      // A second later each time, as the panel's clock goes: the rows are built again.
+      frame(github, LARGE_NOW + (i + 1) * 1000)
+      return performance.now() - start
+    }).toSorted((a, b) => a - b)
+    const median = (times[5]! + times[6]!) / 2
+    process.stdout.write(`median frame over the large set: ${median.toFixed(2)} ms\n`)
+    expect(median).toBeLessThan(BOUND_MS)
   })
 })

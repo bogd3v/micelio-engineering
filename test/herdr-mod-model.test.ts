@@ -9,7 +9,12 @@ import { onPair, pairsOf } from '../herdr/mod/factory/lib/panel.js'
 import { sumTokens } from '../herdr/mod/factory/lib/detail.js'
 import { parseGates } from '../herdr/mod/factory/lib/gates.js'
 import { KEPT_CALLS } from '../herdr/mod/factory/lib/gates.js'
-import { buildIssues, dependsOn } from '../herdr/mod/factory/lib/issues.js'
+import {
+  buildIssues,
+  dependsOn,
+  fromIssue,
+  KEPT_ISSUE_CALLS,
+} from '../herdr/mod/factory/lib/issues.js'
 import { parseMachine } from '../herdr/mod/factory/lib/machine.js'
 import { parseDecision, parseHeld } from '../herdr/mod/factory/lib/needs.js'
 import { parseSlots } from '../herdr/mod/factory/lib/slots.js'
@@ -570,6 +575,85 @@ describe('issues', () => {
     ])
     expect(dependsOn('no section')).toEqual([])
     expect(dependsOn(null)).toEqual([])
+  })
+
+  const DEPENDS = (...numbers: number[]) =>
+    `## Depends on\n\n${numbers.map((n) => `- #${n} (x)\n`).join('')}`
+  /** A new object of an issue, as a later read gives it, that counts the reads of its body. */
+  const counted = () => {
+    const reads = { body: 0 }
+    const make = (number: number, updatedAt: string | undefined, body: string) => ({
+      number,
+      state: 'open',
+      ...(updatedAt === undefined ? {} : { updated_at: updatedAt }),
+      get body() {
+        reads.body += 1
+        return body
+      },
+    })
+    return { reads, make }
+  }
+  /** What blocks issue 1 in a milestone with the issues 2 and 3 open. */
+  const blocksOf = (first: ReturnType<ReturnType<typeof counted>['make']>, repo: string) =>
+    buildIssues({
+      issues: [first, issue(2, null), issue(3, null)],
+      comments: {},
+      maintainer: MAINTAINER,
+      now: NOW,
+      repo,
+    })[0]?.blockedBy
+
+  it('the Depends on of an issue of the same number and updated_at is read once, from new objects too', () => {
+    const { reads, make } = counted()
+    for (let i = 0; i < 3; i += 1) {
+      expect(blocksOf(make(1, 'a', DEPENDS(2)), 'bogd3v/once')).toEqual([2])
+    }
+    expect(reads.body).toBe(1)
+    // The same number and updated_at in another repository is another issue.
+    expect(blocksOf(make(1, 'a', DEPENDS(3)), 'bogd3v/other')).toEqual([3])
+    expect(reads.body).toBe(2)
+  })
+
+  it('an issue whose updated_at changed has its Depends on read again and its new numbers block it', () => {
+    const { reads, make } = counted()
+    expect(blocksOf(make(1, 'a', DEPENDS(2)), 'bogd3v/changed')).toEqual([2])
+    expect(blocksOf(make(1, 'b', DEPENDS(2, 3)), 'bogd3v/changed')).toEqual([2, 3])
+    expect(blocksOf(make(1, 'b', DEPENDS(2, 3)), 'bogd3v/changed')).toEqual([2, 3])
+    expect(reads.body).toBe(2)
+  })
+
+  it('an issue with no updated_at has its body read at each call and gives the numbers it gave', () => {
+    const { reads, make } = counted()
+    const same = make(1, undefined, DEPENDS(2))
+    expect(blocksOf(same, 'bogd3v/no-date')).toEqual([2])
+    expect(blocksOf(same, 'bogd3v/no-date')).toEqual([2])
+    expect(blocksOf(make(1, undefined, DEPENDS(3)), 'bogd3v/no-date')).toEqual([3])
+    expect(reads.body).toBe(3)
+    // With no repository nothing is kept either: two repositories share the numbers.
+    const rows = (body: string) =>
+      buildIssues({
+        issues: [make(1, 'a', body), issue(2, null), issue(3, null)],
+        comments: {},
+        maintainer: MAINTAINER,
+        now: NOW,
+      })[0]?.blockedBy
+    expect(rows(DEPENDS(2))).toEqual([2])
+    expect(rows(DEPENDS(3))).toEqual([3])
+    expect(reads.body).toBe(5)
+  })
+
+  it('what is kept of an issue no read returns any more is dropped', () => {
+    const { reads, make } = counted()
+    const ask = (number: number) =>
+      fromIssue(make(number, 'a', DEPENDS(9)), 'bogd3v/drop', dependsOn)
+    ask(1)
+    ask(2)
+    for (let call = 0; call < 2 * KEPT_ISSUE_CALLS; call += 1) ask(1)
+    expect(reads.body).toBe(2)
+    ask(2)
+    expect(reads.body).toBe(3)
+    ask(1)
+    expect(reads.body).toBe(3)
   })
 })
 
