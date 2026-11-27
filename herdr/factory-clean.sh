@@ -14,7 +14,8 @@
 # It prints `removed <what>` for each (`would remove <what>` with --dry-run, which removes nothing).
 # A path rm cannot remove goes to `podman unshare rm -rf`; one that stays prints `stuck <path>`, exit 1.
 #
-# Environment: FACTORY_TMP, FACTORY_RUN_TMP, FACTORY_SLOT_DIR (read as factory-slot.sh reads them).
+# Environment: FACTORY_TMP, FACTORY_RUN_TMP, FACTORY_SLOT_DIR (read as factory-slot.sh reads them);
+# DOCKER_HOST (default unix://${XDG_RUNTIME_DIR:-/run/user/<uid>}/podman/podman.sock), for step 5.
 # See docs/factory.md, `B.5`, and herdr/master.md, "After the issue is closed". Needs bash, git, gh
 # and coreutils; docker for step 5 only, podman for a stuck path only.
 set -u
@@ -149,28 +150,40 @@ done
 if ! command -v docker >/dev/null 2>&1; then
   echo "skipped stacks: no docker"
 else
-  for project in "$name" "${name}v"; do
-    if ((dry)); then
-      echo "would remove stack $project"
-    # From / no compose file is found, so the project's own labels say what goes.
-    elif (cd / && docker compose -p "$project" down -v --rmi local) >/dev/null 2>&1; then
-      echo "removed stack $project"
-    else
-      echo "stuck stack $project"
+  # The master's shell sets none: without it `docker` goes to the system socket.
+  [[ -n "${DOCKER_HOST:-}" ]] || export DOCKER_HOST="unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
+  if ! docker version --format '{{.Server.Version}}' >/dev/null 2>&1; then
+    echo "stuck stacks: no engine at $DOCKER_HOST"
+    rc=1
+  else
+    for project in "$name" "${name}v"; do
+      if ((dry)); then
+        echo "would remove stack $project"
+      # From / no compose file is found, so the project's own labels say what goes.
+      elif (cd / && docker compose -p "$project" down -v --rmi local) >/dev/null 2>&1; then
+        echo "removed stack $project"
+      else
+        echo "stuck stack $project"
+        rc=1
+      fi
+    done
+    if ! images=$(docker image ls --format '{{.Repository}}:{{.Tag}}' 2>/dev/null); then
+      echo "stuck images: cannot list them"
       rc=1
-    fi
-  done
-  while IFS= read -r image; do
-    [[ "${image##*:}" == "$name" || "${image##*:}" == "${name}v" ]] || continue
-    if ((dry)); then
-      echo "would remove image $image"
-    elif docker image rm "$image" >/dev/null 2>&1; then
-      echo "removed image $image"
     else
-      echo "stuck image $image"
-      rc=1
+      while IFS= read -r image; do
+        [[ "${image##*:}" == "$name" || "${image##*:}" == "${name}v" ]] || continue
+        if ((dry)); then
+          echo "would remove image $image"
+        elif docker image rm "$image" >/dev/null 2>&1; then
+          echo "removed image $image"
+        else
+          echo "stuck image $image"
+          rc=1
+        fi
+      done <<<"$images"
     fi
-  done < <(docker image ls --format '{{.Repository}}:{{.Tag}}' 2>/dev/null)
+  fi
 fi
 
 # --- step 6: the run folders reap left ---------------------------------------------------

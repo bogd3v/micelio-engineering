@@ -42,6 +42,7 @@ const TOOLS = [
   'rm',
   'mkdir',
   'cat',
+  'id',
   'jq',
 ]
 
@@ -115,13 +116,31 @@ esac
 const STATE_CALL = 'api repos/example/repo/issues/77 --jq .state'
 const MERGED_CALL = `api repos/example/repo/pulls?head=example:${BRANCH}&state=closed&per_page=100 --jq .[] | select(.merged_at != null) | .number`
 
-/** `docker`: records each call; `compose … down` prints nothing and exits 0, and `image ls` prints the lines of `images`, as Docker 29.10.0 does. */
+/**
+ * `docker` 29.10.0: records each call in `docker` and the `DOCKER_HOST` it got in `docker-host`;
+ * `version --format {{.Server.Version}}` prints the engine's version (Podman 5.8.9), `compose … down`
+ * prints nothing and exits 0, and `image ls` prints the lines of `images`. With no engine
+ * (`DOCKER_ENGINE=none`) `version` prints an empty line on stdout, its error on stderr and exits 1; an
+ * `image ls` that fails (`DOCKER_IMAGE_LS=fail`) prints only on stderr and exits 1.
+ */
 function stubDocker(bin: string, images: string[]): void {
   writeFileSync(join(root, 'images'), images.map((i) => `${i}\n`).join(''))
   script(
     join(bin, 'docker'),
     `echo "$*" >> "${calls}/docker"
-[ "$1 $2" = "image ls" ] && cat "${join(root, 'images')}"
+echo "$DOCKER_HOST" >> "${calls}/docker-host"
+unreachable() {
+  echo "failed to connect to the docker API at $DOCKER_HOST; check if the path is correct and if the daemon is running" >&2
+  exit 1
+}
+case "$1 $2" in
+  "version --format")
+    [ "$DOCKER_ENGINE" = none ] && { echo; unreachable; }
+    echo 5.8.9 ;;
+  "image ls")
+    [ "$DOCKER_IMAGE_LS" = fail ] && unreachable
+    cat "${join(root, 'images')}" ;;
+esac
 exit 0
 `
   )
@@ -191,6 +210,7 @@ function clean(
     pr?: string
     name?: string
     dry?: boolean
+    env?: Record<string, string>
   } & Stubs = {}
 ): Run {
   const args = [ISSUE, opts.name ?? NAME, '--checkout', checkout, '--packets', packets]
@@ -207,6 +227,7 @@ function clean(
       GH_MERGED: opts.merged ?? '12',
       GH_CLOSED: opts.closed ?? '',
       GH_PR: opts.pr ?? '',
+      ...opts.env,
     },
     encoding: 'utf8',
   })
@@ -476,6 +497,7 @@ describe('factory-clean.sh', () => {
       ].join('\n')
     )
     expect(callsOf('docker')).toEqual([
+      'version --format {{.Server.Version}}',
       'compose -p 77 down -v --rmi local',
       'compose -p 77v down -v --rmi local',
       'image ls --format {{.Repository}}:{{.Tag}}',
@@ -484,6 +506,61 @@ describe('factory-clean.sh', () => {
       'image rm example-cms:77v',
     ])
     expect(callsOf('docker').join('\n')).not.toContain('buildx_buildkit_default')
+  })
+
+  it('runs docker against the Podman socket of XDG_RUNTIME_DIR when DOCKER_HOST is unset, and keeps a DOCKER_HOST that is set', () => {
+    const runtime = join(root, 'runtime')
+    const socket = `unix://${runtime}/podman/podman.sock`
+    const user = `unix:///run/user/${String(process.getuid?.())}/podman/podman.sock`
+    const set = 'unix:///run/example/engine.sock'
+    const cases: [Record<string, string>, string][] = [
+      [{ XDG_RUNTIME_DIR: runtime }, socket],
+      [{ XDG_RUNTIME_DIR: runtime, DOCKER_HOST: '' }, socket],
+      [{ XDG_RUNTIME_DIR: runtime, DOCKER_HOST: set }, set],
+      [{}, user],
+    ]
+    for (const [env, host] of cases) {
+      rmSync(join(calls, 'docker-host'), { force: true })
+      const r = clean({ env, docker: ['example-app:77'] })
+      expect(r.err, host).toBe('')
+      expect(r.code, host).toBe(0)
+      // The probe, both stacks, the image list and the removal of the image.
+      expect(callsOf('docker-host'), JSON.stringify(env)).toEqual(Array<string>(5).fill(host))
+    }
+  })
+
+  it('prints stuck stacks once and runs no compose or image call when the engine does not answer', () => {
+    const env = { DOCKER_ENGINE: 'none', DOCKER_HOST: 'unix:///run/example/engine.sock' }
+    const stuck = 'stuck stacks: no engine at unix:///run/example/engine.sock'
+    for (const dry of [true, false]) {
+      rmSync(join(calls, 'docker'), { force: true })
+      const dead = join(runTmp, `run-${String(deadPid())}`)
+      mkdirSync(dead, { recursive: true })
+      const r = clean({ dry, env, docker: ['example-app:77'] })
+      expect(r.code, String(dry)).toBe(1)
+      expect(r.err, String(dry)).toBe('')
+      expect(
+        r.out.split('\n').filter((l) => /stack|image/.test(l)),
+        String(dry)
+      ).toEqual([stuck])
+      expect(callsOf('docker'), String(dry)).toEqual(['version --format {{.Server.Version}}'])
+      // The next step still runs.
+      expect(r.out, String(dry)).toContain(`${dry ? 'would remove' : 'removed'} ${dead}\n`)
+    }
+  })
+
+  it('prints stuck images when the image list fails', () => {
+    for (const dry of [true, false]) {
+      rmSync(join(calls, 'docker'), { force: true })
+      const r = clean({ dry, env: { DOCKER_IMAGE_LS: 'fail' }, docker: ['example-app:77'] })
+      expect(r.code, String(dry)).toBe(1)
+      expect(r.err, String(dry)).toBe('')
+      expect(r.out, String(dry)).toContain('stuck images: cannot list them\n')
+      expect(r.out, String(dry)).not.toMatch(/(removed|would remove) image/)
+      expect(callsOf('docker').at(-1), String(dry)).toBe(
+        'image ls --format {{.Repository}}:{{.Tag}}'
+      )
+    }
   })
 
   it("removes a dead wrapper's run folder that rm cannot remove through podman unshare, and prints stuck without podman", () => {
@@ -543,7 +620,10 @@ describe('factory-clean.sh', () => {
     ])
     for (const path of [...everything(), dead]) expect(existsSync(path), path).toBe(true)
     expect(hasBranch()).toBe(true)
-    expect(callsOf('docker')).toEqual(['image ls --format {{.Repository}}:{{.Tag}}'])
+    expect(callsOf('docker')).toEqual([
+      'version --format {{.Server.Version}}',
+      'image ls --format {{.Repository}}:{{.Tag}}',
+    ])
     expect(callsOf('podman')).toEqual([])
   })
 })
