@@ -211,6 +211,7 @@ const STEPS: Record<string, string[]> = {
   'owner/repo#N': [`${AGENTS}master.md`, 'herdr/master.md', 'herdr/mod/README.md'],
   'worker-<tag><N>': ['herdr/master.md', 'herdr/mod/README.md'],
   '(a baseline)': [`${AGENTS}worker.md`],
+  'Lane raised:': ['docs/factory.md', 'packages/factory-tools/README.md'],
 }
 
 /** One line per listed file that does not contain its term, naming the file. */
