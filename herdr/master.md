@@ -4,7 +4,7 @@ This runbook wraps [`template/.claude/agents/master.md`](../template/.claude/age
 
 Placeholders to fill before starting the master: `{{repo}}` (`owner/name`), `{{epic}}` (the epic's issue number), `{{milestone}}` (its title, exactly as GitHub shows it), `{{project}}` (`owner/number` of the organisation project), `{{pairs}}` (the space's other repositories, each `owner/repo` with its milestone and tag, as the mod's layout lists them; empty for a space of one repository), `{{maintainer}}` (the login whose comments `metrics` reads) and `{{maintainer-ident}}` (the `Name <email>` the maintainer signs off with, as they give it at the start of the session).
 
-Start it as the main session in a Herdr pane (`M.1`). Check `test "${HERDR_ENV:-}" = 1` first; outside Herdr, stop.
+Start it as the main session in a Herdr pane (`M.1`). Check `test -n "${HC_TERMINAL_ID:-}"` first; outside Herdr, stop.
 
 ## Canary
 
