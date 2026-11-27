@@ -1,5 +1,5 @@
-// The saturation alarm, the banners of a missing maintainer and of a stale GitHub, and the line of the
-// paused factory.
+// The saturation alarm, the banners of a missing maintainer, of wrong spaces and of a stale GitHub, and
+// the line of the paused factory.
 
 import { div } from 'gpui-kit'
 import { h_flex } from 'gpui-base'
@@ -30,22 +30,28 @@ export function banners(ctx, banners, controls = null) {
         .child(div().child(banners.saturated.text))
     )
   }
-  for (const red of [banners.maintainer, banners.stale]) {
-    if (red === null) continue
-    out.push(
-      div()
-        .mx(16)
-        .mt(12)
-        .p(10)
-        .border_1()
-        .border_color(ctx.c['red'])
-        .bg(ctx.c['red-bg'])
-        .text_size(12)
-        .text_color(ctx.c['fg'])
-        .child(div().font_bold().text_color(ctx.c['red']).child(red.title))
-        .child(div().child(red.text))
-    )
+  const redBox = () =>
+    div()
+      .mx(16)
+      .mt(12)
+      .p(10)
+      .border_1()
+      .border_color(ctx.c['red'])
+      .bg(ctx.c['red-bg'])
+      .text_size(12)
+      .text_color(ctx.c['fg'])
+  /** @param {{ title: string, text: string }} red */
+  const titled = (red) =>
+    redBox()
+      .child(div().font_bold().text_color(ctx.c['red']).child(red.title))
+      .child(div().child(red.text))
+  if (banners.maintainer !== null) out.push(titled(banners.maintainer))
+  if (banners.spaces !== null) {
+    const box = redBox()
+    for (const line of banners.spaces) box.child(div().child(line))
+    out.push(box)
   }
+  if (banners.stale !== null) out.push(titled(banners.stale))
   if (controls !== null) out.push(controls)
   if (banners.paused !== null) {
     out.push(
