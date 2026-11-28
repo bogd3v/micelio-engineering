@@ -72,24 +72,42 @@ function unpinned(workflow: string): string[] {
   return problems
 }
 
+/** The steps that open each `typescript` job: the check of the inputs, the checkout and the install. */
+const SETUP = [
+  'Check the inputs',
+  'Checkout',
+  'Enable pnpm',
+  'Setup Node.js',
+  'Install dependencies',
+]
+
 /**
- * The jobs of `check.yml` on `main` before the profile input, with the names of their steps, and the
- * two steps that run the lint-standard action where there is no package.json (#163).
+ * The jobs of `check.yml`, with the names of their steps: `Checks` for `rust`, the `typescript`
+ * checks side by side (#479), and the two steps that run the lint-standard action where there is no
+ * package.json (#163).
  */
-const MAIN_JOBS: Record<string, { name: string; steps: string[] }> = {
+const JOBS: Record<string, { name: string; steps: string[] }> = {
   checks: {
     name: 'Checks',
     steps: [
       'Check the inputs',
       'Checkout',
-      'Enable pnpm',
-      'Setup Node.js',
       'Install dependencies',
       'Audit dependencies',
-      'Type check',
-      'Lint',
-      'Format',
       'Test',
+      'Copy of the standard',
+      'Checkout the lint-standard action',
+      'Copy of the standard without npm',
+    ],
+  },
+  types: { name: 'Types', steps: [...SETUP, 'Type check'] },
+  lint: { name: 'Lint', steps: [...SETUP, 'Lint', 'Format'] },
+  tests: { name: 'Tests', steps: [...SETUP, 'Test'] },
+  dependencies: {
+    name: 'Dependencies',
+    steps: [
+      ...SETUP,
+      'Audit dependencies',
       'Licences',
       'Copy of the standard',
       'Checkout the lint-standard action',
@@ -104,6 +122,9 @@ const MAIN_JOBS: Record<string, { name: string; steps: string[] }> = {
   check: { name: 'Check', steps: ['All jobs passed'] },
 }
 
+/** The `typescript` jobs that run the checks of the `Checks` job of `rust`. */
+const TYPESCRIPT_JOBS = ['types', 'lint', 'tests', 'dependencies']
+
 /** The ids of the jobs of `check.yml`, in order. */
 function jobIds(): string[] {
   const jobs = CHECK.slice(CHECK.indexOf('\njobs:\n'))
@@ -113,6 +134,23 @@ function jobIds(): string[] {
 /** The names of the steps of a job, in order. */
 function stepNames(id: string): string[] {
   return [...job(id).matchAll(/^ {6}- name: (.*)$/gm)].map((m) => m[1] ?? '')
+}
+
+/** The text of one step of a job, by its name, from its `- name:` line to the next step or job. */
+function stepText(jobId: string, name: string): string {
+  const step = job(jobId)
+    .split(`\n      - name: ${name}\n`)[1]
+    ?.split(/\n {6}- name: /)[0]
+  expect(step, `${jobId}: step ${name}`).toBeDefined()
+  // The comments above the next job are not part of the step.
+  return `- name: ${name}\n${step ?? ''}`.trimEnd().replace(/(\n {2}#.*)+$/, '')
+}
+
+/** The ids of the jobs the `check` job needs, in the order of its `needs:` line. */
+function needs(): string[] {
+  const line = /\n {4}needs: \[(.*)\]\n/.exec(job('check'))?.[1]
+  expect(line, 'needs of check').toBeDefined()
+  return (line ?? '').split(',').map((id) => id.trim())
 }
 
 /**
@@ -160,16 +198,105 @@ describe('run()', () => {
 describe('check.yml', () => {
   it('defaults to the typescript profile and keeps the Check status name', () => {
     expect(CHECK).toMatch(/\n {6}profile:\n(?: {8}.*\n)*? {8}default: typescript\n/)
-    // A caller without profile gets the jobs and steps of main, by name: none added, none skipped.
-    expect(jobIds()).toEqual(Object.keys(MAIN_JOBS))
-    for (const [id, expected] of Object.entries(MAIN_JOBS)) {
+    // The jobs and their steps, by name: Checks for rust, the typescript checks side by side.
+    expect(jobIds()).toEqual(Object.keys(JOBS))
+    for (const [id, expected] of Object.entries(JOBS)) {
       expect(stepNames(id), id).toEqual(expected.steps)
       expect(job(id), id).toMatch(new RegExp(`\\n {4}name: ${expected.name}\\n`))
     }
-    expect(job('check')).toContain('needs: [checks, reuse, build]')
+    expect(job('check')).toContain(
+      'needs: [checks, types, lint, tests, dependencies, reuse, build]'
+    )
+    // Checks runs for any profile but typescript, so an unknown one fails its first step.
+    expect(job('checks')).toContain("\n    if: ${{ inputs.profile != 'typescript' }}\n")
+    for (const id of ['types', 'lint', 'tests']) {
+      expect(job(id), id).toContain("\n    if: ${{ inputs.profile == 'typescript' }}\n")
+    }
     // The jobs of the language run for typescript, and reuse is shared: no profile condition.
     expect(job('build')).toContain("inputs.profile == 'typescript' && inputs.build")
     expect(job('reuse')).toContain('if: ${{ inputs.reuse }}')
+  })
+
+  it('Check needs every other job of check.yml and fails when one of them failed', () => {
+    const others = jobIds().filter((id) => id !== 'check')
+    expect(needs()).toEqual(others)
+    expect(needs()).toEqual(Object.keys(JOBS).filter((id) => id !== 'check'))
+    // It runs whatever the jobs it needs did, and reads the result of each.
+    expect(job('check')).toContain('\n    if: always()\n')
+    expect(stepText('check', 'All jobs passed')).toContain(
+      "RESULTS: ${{ join(needs.*.result, ' ') }}"
+    )
+    const script = stepScript('check', 'All jobs passed')
+    const results = (pick: (index: number) => string): string =>
+      needs()
+        .map((_, i) => pick(i))
+        .join(' ')
+    for (const [index, id] of needs().entries()) {
+      for (const bad of ['failure', 'cancelled']) {
+        const failed = run(script, { RESULTS: results((i) => (i === index ? bad : 'success')) })
+        expect(failed.status, `${id} ${bad}`).toBe(1)
+        const amongSkipped = run(script, {
+          RESULTS: results((i) => (i === index ? bad : 'skipped')),
+        })
+        expect(amongSkipped.status, `${id} ${bad} among skipped`).toBe(1)
+      }
+    }
+    expect(run(script, { RESULTS: results(() => 'success') }).status).toBe(0)
+    expect(run(script, { RESULTS: results(() => 'skipped') }).status).toBe(0)
+    // A rust run: Checks passed, the typescript jobs were skipped on purpose.
+    const rust = results((i) =>
+      needs()[i] === 'checks' || needs()[i] === 'reuse' ? 'success' : 'skipped'
+    )
+    expect(run(script, { RESULTS: rust }).status).toBe(0)
+  })
+
+  it('each typescript job checks the inputs and installs from the npm cache as Build does', () => {
+    for (const id of TYPESCRIPT_JOBS) {
+      expect(stepText(id, 'Check the inputs'), id).toBe(stepText('checks', 'Check the inputs'))
+      for (const name of ['Checkout', 'Enable pnpm', 'Setup Node.js', 'Install dependencies']) {
+        expect(stepText(id, name), `${id}: ${name}`).toBe(stepText('build', name))
+      }
+      expect(job(id), id).toContain('working-directory: ${{ inputs.working-directory }}')
+    }
+    expect(stepText('build', 'Setup Node.js')).toContain('cache: ${{ inputs.package-manager }}')
+    // No job carries node_modules to another.
+    expect(CHECK).not.toMatch(/upload-artifact|download-artifact|actions\/cache@/)
+  })
+
+  it('each check of the typescript profile runs in its job on the inputs that decided it before', () => {
+    const steps: [string, string, string | undefined, string][] = [
+      ['types', 'Type check', undefined, '$PM run typecheck'],
+      ['lint', 'Lint', undefined, '$PM run lint'],
+      ['lint', 'Format', '${{ inputs.format }}', '$PM run format:check'],
+      ['tests', 'Test', undefined, '$PM run "$TEST_SCRIPT"'],
+      [
+        'dependencies',
+        'Audit dependencies',
+        '${{ inputs.audit }}',
+        '$PM audit --audit-level=critical',
+      ],
+      ['dependencies', 'Licences', '${{ inputs.licenses }}', '$PM run lint:licenses'],
+      ['dependencies', 'Copy of the standard', '${{ inputs.standard }}', '$PM run lint:standard'],
+    ]
+    for (const [id, name, condition, command] of steps) {
+      const text = stepText(id, name)
+      expect(text, `${id}: ${name}`).toContain(command)
+      if (condition === undefined) expect(text, `${id}: ${name}`).not.toMatch(/\n {8}if: /)
+      else expect(text, `${id}: ${name}`).toContain(`\n        if: ${condition}\n`)
+    }
+    expect(stepText('tests', 'Test')).toContain('TEST_SCRIPT: ${{ inputs.test-script }}')
+    // Dependencies is skipped only when none of its three checks would run.
+    expect(job('dependencies')).toContain(
+      "\n    if: ${{ inputs.profile == 'typescript' && (inputs.audit || inputs.licenses || inputs.standard) }}\n"
+    )
+    // The copy of the standard is the same three steps in Checks and in Dependencies.
+    for (const name of [
+      'Copy of the standard',
+      'Checkout the lint-standard action',
+      'Copy of the standard without npm',
+    ]) {
+      expect(stepText('dependencies', name), name).toBe(stepText('checks', name))
+    }
   })
 
   it('rejects a profile it does not know', () => {
@@ -344,7 +471,7 @@ describe('check.yml', () => {
   })
 
   it('the typescript profile still runs the test script', () => {
-    const script = stepScript('checks', 'Test')
+    const script = stepScript('tests', 'Test')
     const { status, output } = run(script, {
       PROFILE: 'typescript',
       PM: 'echo',
@@ -402,7 +529,7 @@ describe('check.yml', () => {
       const { dir, env, calls } = installStubs()
       // The file of a rust project changes nothing: the profile alone picks the branch.
       writeFileSync(join(dir, 'rust-toolchain.toml'), '[toolchain]\nchannel = "1.99.1"\n')
-      const script = stepScript('checks', 'Install dependencies')
+      const script = stepScript('tests', 'Install dependencies')
       const result = run(script, { ...env, PROFILE: 'typescript', PM: pm }, dir)
       expect(result.status, result.output).toBe(0)
       expect(calls()).toEqual([expected])

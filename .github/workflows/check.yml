@@ -1,7 +1,6 @@
 name: Check
 
-# The fast checks of section 15 of the standard, in the order `npm run check` runs them.
-# Call it from a repository's own workflow:
+# The fast checks of section 15 of the standard. Call it from a repository's own workflow:
 #
 #   jobs:
 #     ci:
@@ -12,11 +11,13 @@ name: Check
 # typecheck, lint and test always run. The rest is an input, so skipping one is written down in
 # the caller instead of hidden by `--if-present`.
 #
-# `profile` picks the language: `typescript` (the default) or `rust`. Both run the same jobs and
-# steps, by name, and report the same single `Check` status; with `rust` the steps of the `Checks`
-# job install the toolchain, `cargo-deny` and `reuse` (section 15 of docs/standard/rust.md puts both
-# in the check command), run `cargo audit` and the repository's check command instead of the npm
-# ones, and the others are skipped.
+# `profile` picks the language: `typescript` (the default) or `rust`. With `typescript` the checks
+# run side by side, one job each, every one with its own checkout and install: `Types` (typecheck),
+# `Lint` (lint and format:check), `Tests` (the test script) and `Dependencies` (audit,
+# lint:licenses and lint:standard), beside `REUSE` and `Build`. With `rust` one job, `Checks`,
+# installs the toolchain, `cargo-deny` and `reuse` (section 15 of docs/standard/rust.md puts both in
+# the check command), runs `cargo audit` and the repository's check command. Both report the same
+# single `Check` status.
 #
 # `standard: true` runs `lint:standard` where the project has a package.json; where it has none (a
 # repository not on Node), it runs the lint-standard action of this repository at `tools-ref`, with
@@ -90,14 +91,124 @@ env:
   PROFILE: ${{ inputs.profile }}
 
 jobs:
+  # rust, and any profile the first step refuses: the check command is one command, so one job. With
+  # an unknown profile every typescript job below is skipped, so this job runs and fails.
   checks:
     name: Checks
+    if: ${{ inputs.profile != 'typescript' }}
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      # Runs before the checkout, so before working-directory exists: it runs at the root.
+      # Runs before the checkout, so before working-directory exists: it runs at the root. Each
+      # typescript job starts with the same step.
+      - name: Check the inputs
+        working-directory: .
+        run: |
+          case "$PROFILE" in
+            typescript)
+              case "$PM" in
+                npm | pnpm) ;;
+                *) echo "::error::package-manager must be npm or pnpm, not '$PM'"; exit 1 ;;
+              esac
+              ;;
+            rust) ;;
+            *) echo "::error::profile must be typescript or rust, not '$PROFILE'"; exit 1 ;;
+          esac
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # rust: the toolchain that rust-toolchain.toml names (cargo fetches the crates when it builds)
+      # and the two tools the check command calls.
+      - name: Install dependencies
+        run: |
+          if [ ! -f rust-toolchain.toml ]; then
+            echo "::error::rust-toolchain.toml not found in '$PWD'"
+            exit 1
+          fi
+          rustup toolchain install --profile minimal
+          rustc --version
+          cargo install cargo-deny --locked --version 0.21.0
+          pipx install reuse==6.2.0
+
+      - name: Audit dependencies
+        if: ${{ inputs.audit }}
+        run: |
+          cargo install cargo-audit --locked --version 0.22.2
+          cargo audit --deny warnings
+
+      # rust: the repository's check command, the check line of the first Commands block of AGENTS.md
+      # unless check-command is set.
+      - name: Test
+        env:
+          CHECK_COMMAND: ${{ inputs.check-command }}
+        run: |
+          if [ -z "$CHECK_COMMAND" ]; then
+            CHECK_COMMAND=$(awk '/^## Commands/ { seen = 1; next } seen && /^```/ { if (inside) exit; inside = 1; next } inside && /^check:/ { sub(/^check:[ \t]*/, ""); print; exit }' AGENTS.md)
+          fi
+          if [ -z "$CHECK_COMMAND" ]; then
+            echo "::error::no check command: set check-command or add a check: line to the first Commands block of AGENTS.md"
+            exit 1
+          fi
+          echo "Check command: $CHECK_COMMAND"
+          bash -e -c "$CHECK_COMMAND"
+
+      # With a package.json, its lint:standard script; without one, the two steps after this one
+      # run the lint-standard action of this repository at tools-ref.
+      - name: Copy of the standard
+        id: standard
+        if: ${{ inputs.standard }}
+        env:
+          LINT_STANDARD_VERSION: ${{ inputs.lint-standard-version }}
+          TOOLS_REF: ${{ inputs.tools-ref }}
+        run: |
+          if [ -f package.json ]; then
+            $PM run lint:standard
+            exit 0
+          fi
+          if [ -z "$LINT_STANDARD_VERSION" ]; then
+            echo "::error::no package.json in '$PWD': set lint-standard-version, the version of @micelio/eslint-config the lint-standard action runs"
+            exit 1
+          fi
+          if [[ ! "$TOOLS_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::no package.json in '$PWD': set tools-ref to the commit SHA check.yml is pinned at, not '$TOOLS_REF'"
+            exit 1
+          fi
+          echo "No package.json: the lint-standard action runs."
+          echo "action=true" >> "$GITHUB_OUTPUT"
+
+      # Into the workspace, which `uses: ./` needs; the caller's checkout is not touched.
+      - name: Checkout the lint-standard action
+        if: ${{ steps.standard.outputs.action == 'true' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: bogd3v/micelio-engineering
+          ref: ${{ inputs.tools-ref }}
+          path: .micelio-engineering
+          sparse-checkout: .github/actions
+          persist-credentials: false
+
+      - name: Copy of the standard without npm
+        if: ${{ steps.standard.outputs.action == 'true' }}
+        uses: ./.micelio-engineering/.github/actions/lint-standard
+        with:
+          version: ${{ inputs.lint-standard-version }}
+          directory: ${{ inputs.working-directory }}
+
+  # typescript: the checks run side by side, each in a job with its own checkout and an install from
+  # the npm cache of setup-node, the steps of the Build job below.
+  types:
+    name: Types
+    if: ${{ inputs.profile == 'typescript' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
       - name: Check the inputs
         working-directory: .
         run: |
@@ -118,77 +229,170 @@ jobs:
           persist-credentials: false
 
       - name: Enable pnpm
-        if: ${{ inputs.profile == 'typescript' && inputs.package-manager == 'pnpm' }}
+        if: ${{ inputs.package-manager == 'pnpm' }}
         run: corepack enable
 
       - name: Setup Node.js
-        if: ${{ inputs.profile == 'typescript' }}
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: ${{ inputs.node-version-file }}
           cache: ${{ inputs.package-manager }}
           cache-dependency-path: ${{ inputs.working-directory }}/${{ inputs.package-manager == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json' }}
 
-      # rust: the toolchain that rust-toolchain.toml names (cargo fetches the crates when it builds)
-      # and the two tools the check command calls.
       - name: Install dependencies
         run: |
-          if [ "$PROFILE" = rust ]; then
-            if [ ! -f rust-toolchain.toml ]; then
-              echo "::error::rust-toolchain.toml not found in '$PWD'"
-              exit 1
-            fi
-            rustup toolchain install --profile minimal
-            rustc --version
-            cargo install cargo-deny --locked --version 0.21.0
-            pipx install reuse==6.2.0
-          elif [ "$PM" = pnpm ]; then pnpm install --frozen-lockfile; else npm ci; fi
+          if [ "$PM" = pnpm ]; then pnpm install --frozen-lockfile; else npm ci; fi
+
+      - name: Type check
+        run: $PM run typecheck
+
+  lint:
+    name: Lint
+    if: ${{ inputs.profile == 'typescript' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Check the inputs
+        working-directory: .
+        run: |
+          case "$PROFILE" in
+            typescript)
+              case "$PM" in
+                npm | pnpm) ;;
+                *) echo "::error::package-manager must be npm or pnpm, not '$PM'"; exit 1 ;;
+              esac
+              ;;
+            rust) ;;
+            *) echo "::error::profile must be typescript or rust, not '$PROFILE'"; exit 1 ;;
+          esac
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Enable pnpm
+        if: ${{ inputs.package-manager == 'pnpm' }}
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: ${{ inputs.node-version-file }}
+          cache: ${{ inputs.package-manager }}
+          cache-dependency-path: ${{ inputs.working-directory }}/${{ inputs.package-manager == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json' }}
+
+      - name: Install dependencies
+        run: |
+          if [ "$PM" = pnpm ]; then pnpm install --frozen-lockfile; else npm ci; fi
+
+      - name: Lint
+        run: $PM run lint
+
+      - name: Format
+        if: ${{ inputs.format }}
+        run: $PM run format:check
+
+  tests:
+    name: Tests
+    if: ${{ inputs.profile == 'typescript' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Check the inputs
+        working-directory: .
+        run: |
+          case "$PROFILE" in
+            typescript)
+              case "$PM" in
+                npm | pnpm) ;;
+                *) echo "::error::package-manager must be npm or pnpm, not '$PM'"; exit 1 ;;
+              esac
+              ;;
+            rust) ;;
+            *) echo "::error::profile must be typescript or rust, not '$PROFILE'"; exit 1 ;;
+          esac
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Enable pnpm
+        if: ${{ inputs.package-manager == 'pnpm' }}
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: ${{ inputs.node-version-file }}
+          cache: ${{ inputs.package-manager }}
+          cache-dependency-path: ${{ inputs.working-directory }}/${{ inputs.package-manager == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json' }}
+
+      - name: Install dependencies
+        run: |
+          if [ "$PM" = pnpm ]; then pnpm install --frozen-lockfile; else npm ci; fi
+
+      - name: Test
+        env:
+          TEST_SCRIPT: ${{ inputs.test-script }}
+        run: |
+          $PM run "$TEST_SCRIPT"
+
+  # Skipped when audit, licenses and standard are all false: it would only install.
+  dependencies:
+    name: Dependencies
+    if: ${{ inputs.profile == 'typescript' && (inputs.audit || inputs.licenses || inputs.standard) }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Check the inputs
+        working-directory: .
+        run: |
+          case "$PROFILE" in
+            typescript)
+              case "$PM" in
+                npm | pnpm) ;;
+                *) echo "::error::package-manager must be npm or pnpm, not '$PM'"; exit 1 ;;
+              esac
+              ;;
+            rust) ;;
+            *) echo "::error::profile must be typescript or rust, not '$PROFILE'"; exit 1 ;;
+          esac
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Enable pnpm
+        if: ${{ inputs.package-manager == 'pnpm' }}
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: ${{ inputs.node-version-file }}
+          cache: ${{ inputs.package-manager }}
+          cache-dependency-path: ${{ inputs.working-directory }}/${{ inputs.package-manager == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json' }}
+
+      - name: Install dependencies
+        run: |
+          if [ "$PM" = pnpm ]; then pnpm install --frozen-lockfile; else npm ci; fi
 
       - name: Audit dependencies
         if: ${{ inputs.audit }}
         run: |
-          if [ "$PROFILE" = rust ]; then
-            cargo install cargo-audit --locked --version 0.22.2
-            cargo audit --deny warnings
-          else
-            $PM audit --audit-level=critical
-          fi
-
-      - name: Type check
-        if: ${{ inputs.profile == 'typescript' }}
-        run: $PM run typecheck
-
-      - name: Lint
-        if: ${{ inputs.profile == 'typescript' }}
-        run: $PM run lint
-
-      - name: Format
-        if: ${{ inputs.profile == 'typescript' && inputs.format }}
-        run: $PM run format:check
-
-      # rust: the repository's check command, the check line of the first Commands block of AGENTS.md
-      # unless check-command is set.
-      - name: Test
-        env:
-          TEST_SCRIPT: ${{ inputs.test-script }}
-          CHECK_COMMAND: ${{ inputs.check-command }}
-        run: |
-          if [ "$PROFILE" = rust ]; then
-            if [ -z "$CHECK_COMMAND" ]; then
-              CHECK_COMMAND=$(awk '/^## Commands/ { seen = 1; next } seen && /^```/ { if (inside) exit; inside = 1; next } inside && /^check:/ { sub(/^check:[ \t]*/, ""); print; exit }' AGENTS.md)
-            fi
-            if [ -z "$CHECK_COMMAND" ]; then
-              echo "::error::no check command: set check-command or add a check: line to the first Commands block of AGENTS.md"
-              exit 1
-            fi
-            echo "Check command: $CHECK_COMMAND"
-            bash -e -c "$CHECK_COMMAND"
-          else
-            $PM run "$TEST_SCRIPT"
-          fi
+          $PM audit --audit-level=critical
 
       - name: Licences
-        if: ${{ inputs.profile == 'typescript' && inputs.licenses }}
+        if: ${{ inputs.licenses }}
         run: $PM run lint:licenses
 
       # With a package.json, its lint:standard script; without one, the two steps after this one
@@ -282,7 +486,7 @@ jobs:
   check:
     name: Check
     if: always()
-    needs: [checks, reuse, build]
+    needs: [checks, types, lint, tests, dependencies, reuse, build]
     runs-on: ubuntu-latest
     steps:
       - name: All jobs passed
