@@ -61,10 +61,12 @@ on:
 
 permissions: {}
 
-# The latest edit wins; a run that is waiting is replaced, one that is running is finished.
+# The latest edit wins: a new edit of an issue cancels the run of that issue still in progress, and
+# the run that follows writes the label, the comment and the project fields. The group holds one
+# issue of one repository, so runs of different issues never cancel or wait behind each other.
 concurrency:
   group: issue-ready-${{ github.repository }}-${{ github.event.issue.number }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   issue-ready:

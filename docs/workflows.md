@@ -91,6 +91,8 @@ The title and body are read through the API by `lint-issue` and never reach a sh
 
 **One pin.** The tools come from the commit `uses:` pins, so a Dependabot bump of `uses:` moves them with it. `tools-ref` and `tools-repository` are still accepted (`tools-ref` is optional) and ignored: a `tools-ref` that differs from `job.workflow_sha`, or a `tools-repository` that differs from `job.workflow_repository`, prints a `::warning::` naming both and the job goes on. A caller does not need to pass them. They go when `@micelio/factory-tools` is published (#30), which breaks callers that still pass them.
 
+**One run per issue.** The workflow's `concurrency` groups the runs by repository and issue number with `cancel-in-progress: true`: a new edit of an issue cancels the run of that issue still in progress (or waiting), because only the issue's last state matters. A cancelled run may stop between the label and the project fields; the run that follows reads the issue again and writes the label, the comment and the project fields (the Status, and the Release line and Front when they are empty). Runs of different issues are in different groups, so they never cancel or wait behind each other. Every run still installs and builds the tools: an `issues` run has read-only cache access, so it cannot save a cache.
+
 `issues` events run from the default branch, so a change to this workflow is tried on a test issue only after it is merged.
 
 ## The project's auto-close
