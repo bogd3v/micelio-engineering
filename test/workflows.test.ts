@@ -1101,3 +1101,15 @@ describe('ci.yml', () => {
     )
   })
 })
+
+describe('issue-ready.yml runs once per issue', () => {
+  it('issue-ready.yml cancels the earlier run of the same issue and of no other', () => {
+    // one top-level block, grouped by repository and issue number (#480)
+    expect(ISSUE_READY.match(/^concurrency:.*$/gm)).toEqual(['concurrency:'])
+    expect(ISSUE_READY).toContain(
+      '\nconcurrency:\n' +
+        '  group: issue-ready-${{ github.repository }}-${{ github.event.issue.number }}\n' +
+        '  cancel-in-progress: true\n'
+    )
+  })
+})
